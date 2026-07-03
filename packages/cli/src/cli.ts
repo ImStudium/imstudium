@@ -1,13 +1,24 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Command } from "commander";
 import {
+  buildAgentVisualPayload,
+  buildSlideViewer,
   createSdk,
+  detectTools,
   DigicampusError,
   expandPath,
+  extractSlug,
+  toolHints,
   type StudiumExamDate,
   type StudiumWorkspace,
-} from "@digicampus/sdk";
+} from "digicampus-sdk";
+import {
+  formatSetupSummary,
+  getSetupStatus,
+  runSetup,
+  type AgentId,
+} from "./setup.js";
 
 interface GlobalOpts {
   json?: boolean;
@@ -62,25 +73,113 @@ program
   });
 
 program
-  .command("init")
-  .description("Login, full sync, and build Studium workspace")
-  .option("-o, --output <dir>", "Workspace directory")
-  .action(async (opts: { output?: string }) => {
+  .command("onboard")
+  .description("First-time setup: login, sync workspace, wire agents (idempotent)")
+  .option("-o, --output <dir>", "Workspace directory", "~/Studium")
+  .option("-y, --yes", "Non-interactive")
+  .option("--agents-only", "Skip login/sync — only configure Cursor, Claude, Codex, etc.")
+  .option("--skip-sync", "Login + agent setup, no file sync")
+  .option("--force", "Re-install skills/MCP even when unchanged")
+  .option("--all-agents", "Configure every harness path, not only detected ones")
+  .action(async (opts: {
+    output?: string;
+    yes?: boolean;
+    agentsOnly?: boolean;
+    skipSync?: boolean;
+    force?: boolean;
+    allAgents?: boolean;
+  }) => {
     try {
       const sdk = await getSdk();
+      const out = expandPath(opts.output || sdk.workspacePath);
+      await sdk.saveConfig({ workspacePath: out });
+
+      if (!opts.agentsOnly) {
+        const session = await sdk.auth.loadSession();
+        if (!session) {
+          if (!opts.yes) output(null, "Opening browser for login...");
+          await sdk.auth.loginWithBrowser({ instanceOrigin: sdk.config.instanceOrigin });
+        }
+        if (!opts.skipSync) {
+          const report = await sdk.sync.sync({
+            outputDir: out,
+            include: ["wiki", "news", "calendar"],
+          });
+          const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin);
+          const setup = await runSetup("all", {
+            yes: opts.yes,
+            workspace: out,
+            force: opts.force,
+            allAgents: opts.allAgents,
+          });
+          output(
+            { workspace, report, setup, summary: formatSetupSummary(setup) },
+            `Onboarded → ${out}\n${formatSetupSummary(setup)}`,
+          );
+          return;
+        }
+      }
+
+      const setup = await runSetup("all", {
+        yes: opts.yes,
+        workspace: out,
+        force: opts.force,
+        allAgents: opts.allAgents,
+      });
+      output(
+        { setup, summary: formatSetupSummary(setup) },
+        `Agents configured\n${formatSetupSummary(setup)}`,
+      );
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+program
+  .command("init")
+  .description("Login + sync Studium workspace (use onboard for first-time agent setup)")
+  .option("-o, --output <dir>", "Workspace directory")
+  .option("-y, --yes", "Non-interactive (skip prompts)")
+  .option("--browser", "Force browser login")
+  .option("--extract", "Extract text + slide images after sync")
+  .action(async (opts: {
+    output?: string;
+    yes?: boolean;
+    browser?: boolean;
+    extract?: boolean;
+  }) => {
+    try {
+      const sdk = await getSdk();
+      const out = expandPath(opts.output || sdk.workspacePath);
       const session = await sdk.auth.loadSession();
-      if (!session) {
-        output(null, "Opening browser for login...");
+      if (!session || opts.browser) {
+        if (!opts.yes && !opts.browser) output(null, "Opening browser for login...");
         await sdk.auth.loginWithBrowser({ instanceOrigin: sdk.config.instanceOrigin });
       }
-      const out = expandPath(opts.output || sdk.workspacePath);
+
       await sdk.saveConfig({ workspacePath: out });
       const report = await sdk.sync.sync({
         outputDir: out,
         include: ["wiki", "news", "calendar"],
       });
       const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin);
-      output({ workspace, report }, `Studium workspace ready at ${out}`);
+
+      let extracted = 0;
+      if (opts.extract) {
+        for (const course of workspace.courses) {
+          const courseDir = join(out, "current", course.slug);
+          const results = await sdk.extractor.extractDir(
+            join(courseDir, "files"),
+            join(courseDir, "extracted"),
+          );
+          extracted += results.filter((r) => !r.error && !r.skipped).length;
+        }
+      }
+
+      output(
+        { workspace, report, extracted: opts.extract ? extracted : undefined, next: "digicampus onboard --agents-only" },
+        `Studium workspace ready at ${out}${opts.extract ? ` · ${extracted} extracted` : ""}\nRun: digicampus onboard --agents-only  (once, idempotent)`,
+      );
     } catch (e) {
       fail(e);
     }
@@ -290,6 +389,7 @@ program
   .option("--layout <mode>", "flat or tree", "flat")
   .option("--dry-run", "List changes without downloading")
   .option("--include <items>", "Comma-separated: wiki,news,calendar")
+  .option("--extract", "Extract text + page images from new/changed files after sync")
   .action(async (opts: {
     output?: string;
     course?: string;
@@ -297,6 +397,7 @@ program
     layout?: string;
     dryRun?: boolean;
     include?: string;
+    extract?: boolean;
   }) => {
     try {
       const sdk = await getSdk();
@@ -312,10 +413,170 @@ program
           ? (c) => c.title.toLowerCase().includes(opts.course!.toLowerCase()) || c.id === opts.course
           : undefined,
       });
+      let extracted = 0;
       if (!opts.dryRun) {
-        await sdk.studium.build(out, sdk.config.instanceOrigin);
+        const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin);
+        if (opts.extract) {
+          for (const course of workspace.courses) {
+            const courseDir = join(out, "current", course.slug);
+            const results = await sdk.extractor.extractDir(
+              join(courseDir, "files"),
+              join(courseDir, "extracted"),
+            );
+            extracted += results.filter((r) => !r.error && !r.skipped).length;
+          }
+        }
       }
-      output(report, `Sync: ${report.downloaded} downloaded, ${report.skipped} skipped, ${report.failed} failed`);
+      output(
+        { ...report, extracted: opts.extract ? extracted : undefined },
+        `Sync: ${report.downloaded} downloaded, ${report.skipped} skipped, ${report.failed} failed${opts.extract ? `, ${extracted} extracted` : ""}`,
+      );
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+program
+  .command("extract")
+  .description("Extract text + page images from synced materials (PDF, PPTX, DOCX, images, ...)")
+  .option("--course <name>", "Only one course (title substring or slug)")
+  .option("--file <path>", "Extract a single file to <file>-extracted/")
+  .option("--no-images", "Text only, skip page image rendering")
+  .option("--dpi <n>", "Image resolution", "144")
+  .option("--force", "Re-extract even if unchanged")
+  .option("-o, --output <dir>", "Workspace directory")
+  .action(async (opts: {
+    course?: string;
+    file?: string;
+    images?: boolean;
+    dpi?: string;
+    force?: boolean;
+    output?: string;
+  }) => {
+    try {
+      const sdk = await getSdk();
+      const extractOpts = {
+        images: opts.images,
+        dpi: parseInt(opts.dpi || "144", 10),
+        force: opts.force,
+      };
+
+      if (opts.file) {
+        const src = expandPath(opts.file);
+        const outDir = src.replace(/\.[^.]+$/, "") + "-extracted";
+        const result = await sdk.extractor.extractFile(src, outDir, extractOpts);
+        output(result, `Extracted ${result.pages} page(s) → ${result.outDir}${result.hint ? `\nHint: ${result.hint}` : ""}`);
+        return;
+      }
+
+      const ws = expandPath(opts.output || sdk.workspacePath);
+      const workspace = await sdk.studium.loadWorkspace(ws);
+      if (!workspace) fail(new DigicampusError("No workspace. Run digicampus init", "NO_WORKSPACE"));
+
+      const courses = workspace.courses.filter((c) =>
+        !opts.course ||
+        c.title.toLowerCase().includes(opts.course.toLowerCase()) ||
+        c.slug.toLowerCase() === opts.course.toLowerCase(),
+      );
+      if (courses.length === 0) fail(new DigicampusError("Course not found", "NOT_FOUND"));
+
+      const tools = await sdk.extractor.getTools();
+      const results = [];
+      for (const course of courses) {
+        const courseDir = join(ws, "current", course.slug);
+        const courseResults = await sdk.extractor.extractDir(
+          join(courseDir, "files"),
+          join(courseDir, "extracted"),
+          extractOpts,
+        );
+        results.push(...courseResults);
+      }
+
+      const done = results.filter((r) => !r.error && !r.skipped).length;
+      const skipped = results.filter((r) => r.skipped).length;
+      const failed = results.filter((r) => r.error).length;
+      const hints = toolHints(tools);
+      output(
+        { extracted: done, skipped, failed, hints, results },
+        `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${hints.length ? `\n${hints.join("\n")}` : ""}`,
+      );
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+program
+  .command("view")
+  .description("Build viewer.html for slide PNGs — fast path for Playwright / browser agents")
+  .option("--dir <path>", "Already-extracted directory (contains pages/)")
+  .option("--course <name>", "Course title substring")
+  .option("--file <name>", "Material filename substring")
+  .option("-o, --output <dir>", "Workspace directory")
+  .action(async (opts: { dir?: string; course?: string; file?: string; output?: string }) => {
+    try {
+      let outDir = opts.dir ? expandPath(opts.dir) : undefined;
+      let title = outDir ? basename(outDir) : "slides";
+
+      if (!outDir) {
+        if (!opts.course || !opts.file) {
+          fail(new DigicampusError("Provide --dir OR both --course and --file", "MISSING_ARG"));
+        }
+        const sdk = await getSdk();
+        const ws = expandPath(opts.output || sdk.workspacePath);
+        const workspace = await sdk.studium.loadWorkspace(ws);
+        if (!workspace) fail(new DigicampusError("No workspace. Run digicampus init", "NO_WORKSPACE"));
+        const course = workspace.courses.find((c) =>
+          c.title.toLowerCase().includes(opts.course!.toLowerCase()),
+        );
+        if (!course) fail(new DigicampusError("Course not found", "NOT_FOUND"));
+        const filesDir = join(ws, "current", course.slug, "files");
+        const { readdir: rd } = await import("node:fs/promises");
+        const matches: string[] = [];
+        async function walk(d: string) {
+          const entries = await rd(d, { withFileTypes: true }).catch(() => []);
+          for (const e of entries) {
+            const p = join(d, e.name);
+            if (e.isDirectory()) await walk(p);
+            else if (e.name.toLowerCase().includes(opts.file!.toLowerCase())) matches.push(p);
+          }
+        }
+        await walk(filesDir);
+        if (!matches.length) fail(new DigicampusError("File not found", "NOT_FOUND"));
+        const src = matches[0];
+        title = basename(src);
+        outDir = join(ws, "current", course.slug, "extracted", extractSlug(title));
+        await sdk.extractor.extractFile(src, outDir);
+      }
+
+      const { viewerHtml, pageImages } = await buildSlideViewer(outDir, title);
+      const visual = buildAgentVisualPayload(pageImages, viewerHtml);
+      output(
+        { ...visual, viewerHtml, viewerFileUrl: `file://${viewerHtml}` },
+        pageImages.length
+          ? `Viewer: file://${viewerHtml}\n${pageImages.length} slide(s) — agents must read pageImages or open viewer in Playwright`
+          : `No page images in ${outDir}. Run: digicampus extract --file <path>`,
+      );
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+program
+  .command("doctor")
+  .description("Check extraction tool availability")
+  .action(async () => {
+    try {
+      const tools = await detectTools();
+      const hints = toolHints(tools);
+      const lines = [
+        `pdftotext:   ${tools.pdftotext || "MISSING"}`,
+        `pdftoppm:    ${tools.pdftoppm || "MISSING"}`,
+        `libreoffice: ${tools.soffice || "MISSING (native PPTX/DOCX text fallback active)"}`,
+        `tesseract:   ${tools.tesseract || "MISSING (no OCR for scanned PDFs/photos — agents can still read page images)"}`,
+        `unzip:       ${tools.unzip || "MISSING"}`,
+      ];
+      if (hints.length) lines.push("", ...hints);
+      output({ tools, hints }, lines.join("\n"));
     } catch (e) {
       fail(e);
     }
@@ -428,6 +689,123 @@ configCmd
         fail(new DigicampusError(`Unknown key: ${key}`, "INVALID_KEY"));
       }
       output({ ok: true }, `Set ${key}`);
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+const AGENT_HELP =
+  "cursor | claude-code | claude-desktop | codex | windsurf | opencode | all";
+
+const setupCmd = program
+  .command("setup")
+  .description("Idempotent agent wiring (skills, MCP) — only updates what changed");
+
+setupCmd
+  .command("status")
+  .description("Show detected agents and setup manifest")
+  .action(async () => {
+    try {
+      const sdk = await getSdk();
+      const status = await getSetupStatus(sdk.workspacePath);
+      const lines = [
+        `Workspace: ${status.workspace}`,
+        `Manifest: ${status.manifest ? status.manifest.updatedAt : "none"}`,
+        `Up to date: ${status.upToDate ? "yes" : "no"}`,
+        "",
+        "Detected agents:",
+        ...status.detected.map(
+          (a) => `  ${a.label} (${a.id}) — skills: ${a.skillsDir}`,
+        ),
+      ];
+      output(status, lines.join("\n"));
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+setupCmd
+  .command("skills")
+  .option("--agent <agent>", AGENT_HELP)
+  .option("--force", "Overwrite unchanged skills")
+  .option("-y, --yes", "Non-interactive")
+  .action(async (opts: { agent?: string; yes?: boolean; force?: boolean }) => {
+    try {
+      const sdk = await getSdk();
+      const result = await runSetup("skills", {
+        yes: opts.yes,
+        agent: (opts.agent || undefined) as AgentId | "all" | undefined,
+        workspace: sdk.workspacePath,
+        force: opts.force,
+      });
+      output(result, formatSetupSummary(result));
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+setupCmd
+  .command("workflows")
+  .option("--agent <agent>", AGENT_HELP)
+  .option("--force", "Overwrite unchanged workflows")
+  .action(async (opts: { agent?: string; force?: boolean }) => {
+    try {
+      const sdk = await getSdk();
+      const result = await runSetup("workflows", {
+        agent: (opts.agent || undefined) as AgentId | "all" | undefined,
+        workspace: sdk.workspacePath,
+        force: opts.force,
+      });
+      output(result, formatSetupSummary(result));
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+setupCmd
+  .command("mcp")
+  .option("--agent <agent>", AGENT_HELP)
+  .option("-o, --workspace <dir>", "Studium workspace path")
+  .option("--force", "Rewrite MCP config even if identical")
+  .action(async (opts: { agent?: string; workspace?: string; force?: boolean }) => {
+    try {
+      const sdk = await getSdk();
+      const result = await runSetup("mcp", {
+        agent: (opts.agent || undefined) as AgentId | "all" | undefined,
+        workspace: opts.workspace || sdk.workspacePath,
+        force: opts.force,
+      });
+      output(result, formatSetupSummary(result));
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+setupCmd
+  .command("all")
+  .description("Skills + workflows + MCP (idempotent — skips unchanged)")
+  .option("--agent <agent>", AGENT_HELP)
+  .option("-o, --workspace <dir>", "Studium workspace path")
+  .option("--all-agents", "Configure every harness, not only detected")
+  .option("--force", "Overwrite even when unchanged")
+  .option("-y, --yes", "Non-interactive")
+  .action(async (opts: {
+    agent?: string;
+    workspace?: string;
+    yes?: boolean;
+    allAgents?: boolean;
+    force?: boolean;
+  }) => {
+    try {
+      const sdk = await getSdk();
+      const result = await runSetup("all", {
+        yes: opts.yes,
+        agent: (opts.agent || undefined) as AgentId | "all" | undefined,
+        workspace: opts.workspace || sdk.workspacePath,
+        allAgents: opts.allAgents,
+        force: opts.force,
+      });
+      output(result, formatSetupSummary(result));
     } catch (e) {
       fail(e);
     }
