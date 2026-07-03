@@ -1,67 +1,59 @@
+/**
+ * DigiCampus login UI — uses shared design system from ui.ts
+ */
+import { brandHeader, checkIcon, escapeHtml, pageShell, warnIcon } from "./ui.js";
+
 export function buildLoginHelperHtml(opts: {
   origin: string;
   loginUrl: string;
+  captureUrl?: string;
   error?: string;
 }): string {
   const host = new URL(opts.origin).hostname;
-  const err = opts.error
-    ? `<p class="err">${escapeHtml(opts.error)}</p>`
+  const error = opts.error
+    ? `<div class="dc-status error">${warnIcon()}<p>${escapeHtml(opts.error)}</p></div>`
     : "";
-  return `<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DigiCampus Login</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
-    h1 { font-size: 1.25rem; }
-    .step { margin: 1.25rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px; }
-    a.btn { display: inline-block; background: #1a56db; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; text-decoration: none; font-weight: 600; }
-    a.btn:hover { background: #1344b0; }
-    textarea { width: 100%; min-height: 4rem; font-family: ui-monospace, monospace; font-size: 0.85rem; padding: 0.5rem; }
-    button { margin-top: 0.5rem; background: #111; color: #fff; border: 0; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer; }
-    .err { color: #b42318; background: #fef3f2; padding: 0.75rem; border-radius: 6px; }
-    .hint { color: #555; font-size: 0.9rem; }
-    code { background: #f4f4f5; padding: 0.1rem 0.3rem; border-radius: 4px; }
-  </style>
-</head>
-<body>
-  <h1>DigiCampus — Anmelden</h1>
-  <p class="hint">Saved passwords work. No extra apps or permissions.</p>
-  ${err}
-  <div class="step">
-    <strong>① Log in</strong>
-    <p>Open ${escapeHtml(host)} and sign in (MFA if asked).</p>
-    <p><a class="btn" href="${escapeHtml(opts.loginUrl)}" target="_blank" rel="noopener">Open DigiCampus login</a></p>
-  </div>
-  <div class="step">
-    <strong>② Paste session</strong>
-    <p>On ${escapeHtml(host)} after login: DevTools → Application → Cookies → <code>Seminar_Session</code> → copy <em>Value</em>.</p>
-    <p class="hint">Or Console: <code>copy(document.cookie.match(/Seminar_Session=([^;]+)/)?.[1])</code></p>
-    <form method="POST" action="/submit">
-      <textarea name="cookie" placeholder="Paste Seminar_Session value here" required autofocus></textarea>
-      <button type="submit">Save session</button>
-    </form>
-  </div>
-</body>
-</html>`;
+
+  const connectBtn = opts.captureUrl
+    ? `<p class="dc-copy">On the DigiCampus tab after sign-in, click:</p>
+       <p><a class="dc-btn primary" href="${escapeHtml(buildConnectBookmarklet(opts.captureUrl))}">Connect DigiCampus</a></p>
+       <p class="dc-copy">Drag that button to your bookmarks bar if the click does not work from the DigiCampus tab.</p>`
+    : "";
+
+  const body = `<main class="dc-card">
+    ${brandHeader(`Sign in setup for ${host}`)}
+
+    ${error}
+
+    <div class="dc-note">
+      <strong>① Log in</strong>
+      <p>Open ${escapeHtml(host)} and sign in (MFA if asked).</p>
+      <p style="margin-top:12px"><a class="dc-btn primary" href="${escapeHtml(opts.loginUrl)}" target="_blank" rel="noopener">Open DigiCampus login</a></p>
+    </div>
+
+    <div class="dc-note">
+      <strong>② Connect</strong>
+      ${connectBtn}
+      <details class="dc-advanced">
+        <summary>Expert: paste session manually</summary>
+        <form method="POST" action="/submit">
+          <textarea class="dc-input" name="cookie" placeholder="Paste Seminar_Session value"></textarea>
+          <button class="dc-btn" type="submit">Save session</button>
+        </form>
+      </details>
+    </div>
+
+    <p class="dc-footer">Runs only on your machine — session is stored locally.</p>
+  </main>`;
+
+  return pageShell("DigiCampus — Sign in", body);
 }
 
 export function buildLoginSuccessHtml(): string {
-  return `<!DOCTYPE html>
-<html lang="de"><head><meta charset="utf-8" /><title>Logged in</title>
-<style>body{font-family:system-ui,sans-serif;text-align:center;margin:4rem 1rem;} h1{color:#067647;}</style>
-</head><body><h1>✓ Logged in</h1><p>You can close this tab and return to the terminal.</p></body></html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  const body = `<main class="dc-card">
+    <div class="dc-status success">${checkIcon()}<p>Session saved. You can close this tab.</p></div>
+  </main>`;
+  return pageShell("DigiCampus — Signed in", body);
 }
 
 export async function readRequestBody(req: import("node:http").IncomingMessage): Promise<string> {
@@ -73,4 +65,10 @@ export async function readRequestBody(req: import("node:http").IncomingMessage):
 export function parseFormBody(body: string, field: string): string {
   const params = new URLSearchParams(body);
   return params.get(field) ?? "";
+}
+
+function buildConnectBookmarklet(captureUrl: string): string {
+  const target = `${captureUrl}?cookie=`;
+  const js = `(function(){var m=document.cookie.match(/Seminar_Session=([^;]+)/);if(!m){alert('Sign in to DigiCampus first');return;}location.href=${JSON.stringify(target)}+encodeURIComponent(m[1]);})()`;
+  return `javascript:${encodeURIComponent(js)}`;
 }
