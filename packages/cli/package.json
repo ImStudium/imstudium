@@ -1,0 +1,34 @@
+{
+  "name": "digicampus",
+  "version": "0.1.0",
+  "description": "DigiCampus Studium OS CLI — study workspace from Stud.IP",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "digicampus": "./dist/cli.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@digicampus/sdk": "workspace:*",
+    "commander": "^13.1.0"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.52.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

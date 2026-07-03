@@ -1,0 +1,31 @@
+{
+  "name": "@digicampus/mcp",
+  "version": "0.1.0",
+  "description": "DigiCampus Studium OS MCP server — study planning tools for LLMs",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "digicampus-mcp": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@digicampus/sdk": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
