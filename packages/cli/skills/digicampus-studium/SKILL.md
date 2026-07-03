@@ -9,6 +9,8 @@ description: |
 
 Local semester map at `~/Studium/studium.json` (or `DIGICAMPUS_WORKSPACE`).
 
+**Default:** current calendar semester only (e.g. `SS2026/`), not all past enrollments.
+
 ## Read first (no network)
 
 ```bash
@@ -19,7 +21,8 @@ Or MCP: `studium_overview`
 
 ## Output includes
 
-- Course list with slugs and file counts
+- Course list with slugs and file counts (current semester by default)
+- `semesters`, `semesterSlug` — active Stud.IP semester
 - `nextDeadlines` — upcoming exams
 - Schedule entries per course
 

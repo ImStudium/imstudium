@@ -8,6 +8,15 @@ description: |
 
 Incremental sync from Stud.IP JSON:API to local workspace.
 
+**Default:** syncs courses active in the **current calendar semester** into `~/Studium/SS2026/` (not all 50+ past enrollments).
+
+```bash
+digicampus semesters              # show current + recent semesters
+digicampus courses list           # current semester courses only
+digicampus sync --semester WS2025-26   # pick a specific semester
+digicampus sync --all-semesters   # legacy: every enrollment
+```
+
 ## Full refresh
 
 ```bash

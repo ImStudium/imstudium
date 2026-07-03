@@ -53,7 +53,7 @@ After `extract`, each file has `extracted/<file>/content.md` and `pages/*.png`. 
 ## Auth
 
 ```bash
-digicampus login   # opens normal browser — saved passwords; paste Seminar_Session once
+digicampus login   # local helper fallback until OAuth is registered
 ```
 
 ## Escalation
