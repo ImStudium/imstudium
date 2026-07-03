@@ -1,10 +1,42 @@
 import { randomBytes, createHash } from "node:crypto";
 import { createServer } from "node:http";
+import type { BrowserContext } from "playwright";
 import type { SessionData } from "./types.js";
 import { paths } from "./config.js";
+import { DigicampusError } from "./errors.js";
+import {
+  type BrowserProfileMode,
+  isChromeMissingError,
+  isProfileInUseError,
+  resolveIsolatedProfileDir,
+  resolveSystemChromeUserDataDir,
+} from "./browser-profile.js";
+import {
+  buildShibbolethLoginUrl,
+  openInSystemBrowser,
+  parseSeminarSessionCookie,
+} from "./login-url.js";
 
 const KEYTAR_SERVICE = "digicampus";
 const KEYTAR_ACCOUNT = "session";
+
+export interface BrowserLoginOptions {
+  instanceOrigin: string;
+  timeoutMs?: number;
+  headless?: boolean;
+  profile?: BrowserProfileMode;
+  profileDirectory?: string;
+}
+
+export interface InteractiveLoginOptions {
+  instanceOrigin: string;
+  /** Read one line from the user (Seminar_Session value). Required unless cookieValue is set. */
+  prompt?: (question: string) => Promise<string>;
+  /** Pre-supplied cookie — skips prompt (for tests / automation). */
+  cookieValue?: string;
+  openBrowser?: boolean;
+  onMessage?: (text: string) => void;
+}
 
 async function getKeytar() {
   try {
@@ -29,7 +61,6 @@ export class AuthManager {
       }
     }
 
-    // Fallback: file-based session in config dir (for CI / no keychain)
     try {
       const { readFile } = await import("node:fs/promises");
       const raw = await readFile(`${paths.configDir}/session.json`, "utf-8");
@@ -97,32 +128,108 @@ export class AuthManager {
     await this.importCookies(cookies);
   }
 
-  async loginWithBrowser(options: {
-    instanceOrigin: string;
-    timeoutMs?: number;
-    headless?: boolean;
-  }): Promise<SessionData> {
+  /** Default login — opens your normal browser, then paste one cookie. No extra installs. */
+  async loginInteractive(options: InteractiveLoginOptions): Promise<SessionData> {
+    const origin = options.instanceOrigin.replace(/\/$/, "");
+    const loginUrl = buildShibbolethLoginUrl(origin);
+
+    if (options.openBrowser !== false) {
+      await openInSystemBrowser(loginUrl);
+    }
+
+    options.onMessage?.(
+      [
+        "",
+        "① Log in with your university account in the browser window (saved passwords work).",
+        "② When you see your courses page, copy your session cookie:",
+        "",
+        "   Quick: on DigiCampus, press F12 → Console, paste this line, Enter:",
+        "   copy(document.cookie.match(/Seminar_Session=([^;]+)/)?.[1]||'')",
+        "",
+        "   Or: DevTools → Application → Cookies → Seminar_Session → copy Value",
+        "",
+      ].join("\n"),
+    );
+
+    let raw = options.cookieValue;
+    if (!raw) {
+      if (!options.prompt) {
+        throw new DigicampusError(
+          "Interactive login needs a terminal.",
+          "LOGIN_NOT_INTERACTIVE",
+          undefined,
+          "Run digicampus login in a terminal, or: digicampus session import --cookie \"<value>\"",
+        );
+      }
+      raw = await options.prompt("③ Paste Seminar_Session here: ");
+    }
+
+    const seminarSession = parseSeminarSessionCookie(raw);
+    if (!seminarSession) {
+      throw new DigicampusError(
+        "Empty session cookie.",
+        "LOGIN_INVALID_COOKIE",
+        undefined,
+        "Copy the Seminar_Session value after logging in at DigiCampus.",
+      );
+    }
+
+    await this.verifyCookie(origin, seminarSession);
+
+    const session: SessionData = {
+      type: "cookie",
+      cookies: { Seminar_Session: seminarSession },
+    };
+    await this.saveSession(session);
+    return session;
+  }
+
+  private async verifyCookie(origin: string, seminarSession: string): Promise<void> {
+    const apiUrl = `${origin}/jsonapi.php/v1/users/me`;
+    const res = await fetch(apiUrl, {
+      headers: {
+        Accept: "application/vnd.api+json",
+        Cookie: `Seminar_Session=${seminarSession}`,
+      },
+    });
+    if (!res.ok) {
+      throw new DigicampusError(
+        "Session cookie was rejected by DigiCampus.",
+        "LOGIN_INVALID_COOKIE",
+        res.status,
+        "Log in again in your browser and paste a fresh Seminar_Session value.",
+      );
+    }
+  }
+
+  /** Optional — Playwright automated capture (requires playwright + chrome). */
+  async loginWithBrowser(options: BrowserLoginOptions): Promise<SessionData> {
     let playwright: typeof import("playwright");
     try {
       playwright = await import("playwright");
     } catch {
-      throw new Error(
-        "Playwright is required for browser login. Install with: pnpm add playwright && npx playwright install chromium",
+      throw new DigicampusError(
+        "Playwright is required for browser login.",
+        "PLAYWRIGHT_MISSING",
+        undefined,
+        "Install: npm install -g digicampus (includes playwright) or npx playwright install chrome",
       );
     }
 
     const origin = options.instanceOrigin.replace(/\/$/, "");
-    const loginUrl = `${origin}/Shibboleth.sso/Login?target=${encodeURIComponent(
-      `${origin}/dispatch.php/my_courses?sso=shibboleth`,
-    )}`;
+    const loginUrl = buildShibbolethLoginUrl(origin);
 
-    const browser = await playwright.chromium.launch({
+    const profile = options.profile ?? "system";
+    const profileDirectory = options.profileDirectory ?? "Default";
+    const context = await this.launchLoginContext(playwright, {
+      profile,
+      profileDirectory,
       headless: options.headless ?? false,
     });
 
     try {
-      const context = await browser.newContext();
-      const page = await context.newPage();
+      const pages = context.pages();
+      const page = pages[0] ?? (await context.newPage());
       await page.goto(loginUrl, { waitUntil: "domcontentloaded" });
 
       const deadline = Date.now() + (options.timeoutMs ?? 300_000);
@@ -151,15 +258,91 @@ export class AuthManager {
       }
 
       if (!cookies.Seminar_Session) {
-        throw new Error("Login timed out. Complete MFA in the browser window.");
+        throw new DigicampusError(
+          "Login timed out. Complete MFA in the browser window.",
+          "LOGIN_TIMEOUT",
+          undefined,
+          profile === "system"
+            ? "Quit Chrome if the window closed early, then run digicampus login again."
+            : "Try: digicampus login (uses your Chrome profile with saved passwords)",
+        );
       }
 
       const session: SessionData = { type: "cookie", cookies };
       await this.saveSession(session);
       return session;
     } finally {
-      await browser.close();
+      await context.close();
     }
+  }
+
+  private async launchLoginContext(
+    playwright: typeof import("playwright"),
+    options: {
+      profile: BrowserProfileMode;
+      profileDirectory: string;
+      headless: boolean;
+    },
+  ): Promise<BrowserContext> {
+    const attempts: Array<{
+      userDataDir: string;
+      channel?: "chrome";
+      profileDirectory?: string;
+      label: string;
+    }> = [];
+
+    if (options.profile === "system") {
+      attempts.push({
+        userDataDir: resolveSystemChromeUserDataDir(),
+        channel: "chrome",
+        profileDirectory: options.profileDirectory,
+        label: "system Chrome profile",
+      });
+    }
+
+    attempts.push({
+      userDataDir: resolveIsolatedProfileDir(),
+      label: "isolated DigiCampus profile",
+    });
+
+    let lastError: unknown;
+    for (const attempt of attempts) {
+      try {
+        const args = attempt.profileDirectory
+          ? [`--profile-directory=${attempt.profileDirectory}`]
+          : [];
+        return await playwright.chromium.launchPersistentContext(attempt.userDataDir, {
+          headless: options.headless,
+          channel: attempt.channel,
+          args,
+        });
+      } catch (err) {
+        lastError = err;
+        const message = err instanceof Error ? err.message : String(err);
+
+        if (options.profile === "system" && attempt.channel === "chrome") {
+          if (isProfileInUseError(message)) {
+            throw new DigicampusError(
+              "Your Chrome profile is in use.",
+              "CHROME_PROFILE_LOCKED",
+              undefined,
+              "Quit Google Chrome completely, then run digicampus login --automated. Or use: digicampus login",
+            );
+          }
+          if (isChromeMissingError(message)) {
+            continue;
+          }
+        }
+      }
+    }
+
+    const message = lastError instanceof Error ? lastError.message : String(lastError);
+    throw new DigicampusError(
+      `Could not launch browser for login: ${message}`,
+      "BROWSER_LAUNCH_FAILED",
+      undefined,
+      "Install Google Chrome, or use: digicampus login (normal browser)",
+    );
   }
 
   /** OAuth2 PKCE stub — requires registered client_id */
@@ -181,14 +364,7 @@ export class AuthManager {
     authUrl.searchParams.set("code_challenge", challenge);
     authUrl.searchParams.set("code_challenge_method", "S256");
 
-    const { exec } = await import("node:child_process");
-    const open =
-      process.platform === "darwin"
-        ? "open"
-        : process.platform === "win32"
-          ? "start"
-          : "xdg-open";
-    exec(`${open} "${authUrl.toString()}"`);
+    await openInSystemBrowser(authUrl.toString());
 
     const code = await waitForCode();
     const tokenRes = await fetch(`${origin}/dispatch.php/api/oauth2/token`, {

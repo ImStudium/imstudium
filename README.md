@@ -16,6 +16,12 @@ Or:
 npx -y digicampus onboard -y -o ~/Studium
 ```
 
+First login (opens your normal browser, no extra tools):
+
+```bash
+digicampus login
+```
+
 One command: login → sync → wire **Cursor, Claude Code, Claude Desktop/Cowork, Codex, Windsurf, OpenCode** (only detected harnesses). **Idempotent** — re-running skips unchanged skills and MCP.
 
 Daily use:
@@ -83,6 +89,7 @@ digicampus --json studium
 | `extract` | Text + page images from all synced materials |
 | `view` | Build `viewer.html` for Playwright / browser agents (fast) |
 | `doctor` | Check extraction tools (poppler, LibreOffice) |
+| `update` | Check npm version, upgrade global CLI, refresh agent harness |
 | `watch --interval 1h` | Continuous sync |
 | `discover` | List JSON:API routes |
 
@@ -155,11 +162,12 @@ See [packages/cli/skills/](packages/cli/skills/) · [CLAUDE.md](CLAUDE.md)
 
 ## Auth
 
-DigiCampus uses Shibboleth + Microsoft MFA (since Jul 2025). Supported methods:
+DigiCampus uses Shibboleth + Microsoft MFA. **No Bun, Playwright, or Chrome permissions required.**
 
-1. **Browser login** (default): `digicampus login` — Playwright opens real login page
-2. **OAuth2 PKCE**: `digicampus login --oauth` — requires registered client (see [docs/OAUTH.md](docs/OAUTH.md))
-3. **Cookie import**: `digicampus session import --cookie <Seminar_Session>`
+1. **Normal browser login** (default): `digicampus login` — opens Safari/Chrome/Edge with **saved passwords**, paste one cookie when done
+2. **Cookie import**: `digicampus session import --cookie <Seminar_Session>`
+3. **OAuth2 PKCE**: `digicampus login --oauth` — when a university client is registered ([docs/OAUTH.md](docs/OAUTH.md))
+4. **Optional automated**: `digicampus login --automated` — Playwright (power users only)
 
 ## Instance
 

@@ -27,8 +27,7 @@ bun install && bun run validate    # preferred
 ## Auth development
 
 ```bash
-npx playwright install chromium
-digicampus login --instance https://digicampus.uni-augsburg.de
+digicampus login
 ```
 
 Do not commit session files or cookies.

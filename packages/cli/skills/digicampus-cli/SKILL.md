@@ -6,6 +6,7 @@ description: |
 allowed-tools:
   - Bash(digicampus *)
   - Bash(npx digicampus *)
+  - Bash(npx -y digicampus@latest *)
 ---
 
 # digicampus cli
@@ -22,34 +23,49 @@ Command-line interface for DigiCampus / Stud.IP. Sync materials, build agent wor
 ## One-shot setup
 
 ```bash
-npx -y digicampus onboard -y -o ~/Studium
+npx -y digicampus onboard --agents-only -y -o ~/Studium
+digicampus login
+digicampus init -o ~/Studium
 ```
 
-Installs skills + MCP for detected agents only. Re-run `digicampus setup all -y` after upgrades (skips unchanged).
+## Updates (LLM-friendly)
+
+Always use `--json` for machine-readable output:
+
+```bash
+digicampus update --check --json   # current, latest, updateAvailable, recommendedAction
+digicampus update -y               # refresh skills/MCP; upgrades global npm install if needed
+digicampus setup status --json     # harness manifest
+```
+
+npx users get latest with `npx -y digicampus@latest <cmd>`. Global users: `digicampus update -y`.
 
 ## Quick commands
 
 ```bash
-digicampus status
+digicampus status --json
 digicampus --json studium
 digicampus --json klausuren
 digicampus sync --quiet --extract
-digicampus extract --course "Analysis"   # text + slide PNGs
-digicampus doctor                        # extraction tool check
+digicampus extract --course "Analysis"
+digicampus doctor --json
 digicampus files tree --course "Analysis"
 ```
 
 ## Reading slides
 
-After `extract`, each file has `extracted/<file>/content.md` (text per slide) and `pages/*.png`. Read the PNGs to visually comprehend diagrams and formulas.
+After `extract`, each file has `extracted/<file>/content.md` and `pages/*.png`. Read the PNGs for diagrams and formulas (see `digicampus-visual` skill).
 
 ## Auth
 
-MFA required — run `digicampus login` (browser). Session stored in OS keychain.
+```bash
+digicampus login   # opens normal browser — saved passwords; paste Seminar_Session once
+```
 
 ## Escalation
 
-1. `digicampus status` — auth check
-2. `digicampus --json studium` — local overview
-3. `digicampus sync` — refresh from API
-4. MCP tools — see `digicampus-mcp` skill
+1. `digicampus status --json` — auth + cliVersion
+2. `digicampus update --check --json` — version drift
+3. `digicampus --json studium` — local overview
+4. `digicampus sync` — refresh from API
+5. MCP tools — see `digicampus-mcp` skill

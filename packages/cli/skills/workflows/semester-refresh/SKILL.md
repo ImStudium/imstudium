@@ -9,6 +9,7 @@ description: |
 
 ## Steps
 
+0. `digicampus update --check --json` — if `updateAvailable`, run `digicampus update -y`
 1. `digicampus_whoami` — auth OK?
 2. `digicampus_sync` or CLI `digicampus sync --quiet`
 3. `studium_overview` — course list

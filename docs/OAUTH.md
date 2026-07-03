@@ -38,13 +38,15 @@ Or in `~/.config/digicampus/config.json`:
 
 ## Until OAuth is registered
 
-Use browser login (default):
+Use your normal browser (saved passwords):
 
 ```bash
 digicampus login
 ```
 
-Or import session cookie from browser DevTools:
+Follow the three steps in the terminal — paste `Seminar_Session` when prompted.
+
+Or import manually:
 
 ```bash
 digicampus session import --cookie "<Seminar_Session value>"

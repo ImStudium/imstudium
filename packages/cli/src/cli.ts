@@ -19,6 +19,13 @@ import {
   runSetup,
   type AgentId,
 } from "./setup.js";
+import { isInteractiveTerminal, terminalPrompt } from "./prompt.js";
+import {
+  checkForUpdates,
+  getCliVersion,
+  runGlobalUpdate,
+} from "./version.js";
+import { fileURLToPath } from "node:url";
 
 interface GlobalOpts {
   json?: boolean;
@@ -59,12 +66,86 @@ async function getSdk() {
   return createSdk(partial);
 }
 
+function browserLoginOptions(opts: {
+  isolated?: boolean;
+  profileDirectory?: string;
+}): { profile?: "system" | "isolated"; profileDirectory?: string } {
+  return {
+    profile: opts.isolated ? "isolated" : "system",
+    profileDirectory: opts.profileDirectory,
+  };
+}
+
+async function runLogin(
+  sdk: Awaited<ReturnType<typeof createSdk>>,
+  opts: {
+    oauth?: boolean;
+    automated?: boolean;
+    isolated?: boolean;
+    profileDirectory?: string;
+  },
+) {
+  if (opts.oauth) {
+    const clientId = sdk.config.oauth?.clientId;
+    if (!clientId) {
+      fail(new DigicampusError("Set DIGICAMPUS_OAUTH_CLIENT_ID or config oauth.clientId", "NO_CLIENT_ID"));
+    }
+    await sdk.auth.loginWithOAuth({ instanceOrigin: sdk.config.instanceOrigin, clientId });
+    return;
+  }
+
+  if (opts.automated) {
+    output(
+      null,
+      opts.isolated
+        ? "Opening automated browser (isolated profile)..."
+        : "Opening automated Chrome (quit Chrome first)...",
+    );
+    await sdk.auth.loginWithBrowser({
+      instanceOrigin: sdk.config.instanceOrigin,
+      ...browserLoginOptions(opts),
+    });
+    return;
+  }
+
+  if (globalOpts.json) {
+    fail(
+      new DigicampusError(
+        "JSON login needs a cookie.",
+        "LOGIN_NOT_INTERACTIVE",
+        undefined,
+        'digicampus session import --cookie "<Seminar_Session>"',
+      ),
+    );
+  }
+
+  if (!isInteractiveTerminal()) {
+    fail(
+      new DigicampusError(
+        "Login needs an interactive terminal.",
+        "LOGIN_NOT_INTERACTIVE",
+        undefined,
+        "Run digicampus login in a terminal",
+      ),
+    );
+  }
+
+  output(null, "Opening your browser — log in with your university account...");
+  await sdk.auth.loginInteractive({
+    instanceOrigin: sdk.config.instanceOrigin,
+    prompt: terminalPrompt,
+    onMessage: (text) => output(null, text),
+  });
+}
+
+const CLI_ENTRY = fileURLToPath(import.meta.url);
+
 const program = new Command();
 
 program
   .name("digicampus")
   .description("DigiCampus Studium OS — extract, sync, and plan your studies")
-  .version("0.1.0")
+  .version(getCliVersion())
   .option("--json", "JSON output for agents")
   .option("--quiet", "Minimal output")
   .option("--instance <url>", "Stud.IP instance origin (default: digicampus.uni-augsburg.de)")
@@ -97,8 +178,17 @@ program
       if (!opts.agentsOnly) {
         const session = await sdk.auth.loadSession();
         if (!session) {
-          if (!opts.yes) output(null, "Opening browser for login...");
-          await sdk.auth.loginWithBrowser({ instanceOrigin: sdk.config.instanceOrigin });
+          if (opts.yes) {
+            fail(
+              new DigicampusError(
+                "Not logged in.",
+                "NO_SESSION",
+                undefined,
+                "Run: digicampus login",
+              ),
+            );
+          }
+          await runLogin(sdk, {});
         }
         if (!opts.skipSync) {
           const report = await sdk.sync.sync({
@@ -140,7 +230,7 @@ program
   .description("Login + sync Studium workspace (use onboard for first-time agent setup)")
   .option("-o, --output <dir>", "Workspace directory")
   .option("-y, --yes", "Non-interactive (skip prompts)")
-  .option("--browser", "Force browser login")
+  .option("--browser", "Force Playwright automated login (--automated)")
   .option("--extract", "Extract text + slide images after sync")
   .action(async (opts: {
     output?: string;
@@ -153,8 +243,12 @@ program
       const out = expandPath(opts.output || sdk.workspacePath);
       const session = await sdk.auth.loadSession();
       if (!session || opts.browser) {
-        if (!opts.yes && !opts.browser) output(null, "Opening browser for login...");
-        await sdk.auth.loginWithBrowser({ instanceOrigin: sdk.config.instanceOrigin });
+        if (opts.yes && !session) {
+          fail(
+            new DigicampusError("Not logged in.", "NO_SESSION", undefined, "Run: digicampus login"),
+          );
+        }
+        await runLogin(sdk, { automated: Boolean(opts.browser) });
       }
 
       await sdk.saveConfig({ workspacePath: out });
@@ -187,19 +281,20 @@ program
 
 program
   .command("login")
-  .description("Browser login (Shibboleth + MFA)")
+  .description("Log in via your normal browser (saved passwords) — no extra installs")
   .option("--oauth", "Use OAuth2 PKCE (requires registered client_id)")
-  .action(async (opts: { oauth?: boolean }) => {
+  .option("--automated", "Playwright auto-capture (optional; needs Google Chrome)")
+  .option("--isolated", "With --automated: use isolated browser profile")
+  .option("--profile-directory <name>", "With --automated: Chrome profile folder", "Default")
+  .action(async (opts: {
+    oauth?: boolean;
+    automated?: boolean;
+    isolated?: boolean;
+    profileDirectory?: string;
+  }) => {
     try {
       const sdk = await getSdk();
-      if (opts.oauth) {
-        const clientId = sdk.config.oauth?.clientId;
-        if (!clientId) fail(new DigicampusError("Set DIGICAMPUS_OAUTH_CLIENT_ID or config oauth.clientId", "NO_CLIENT_ID"));
-        await sdk.auth.loginWithOAuth({ instanceOrigin: sdk.config.instanceOrigin, clientId });
-      } else {
-        output(null, "Complete login in the browser window...");
-        await sdk.auth.loginWithBrowser({ instanceOrigin: sdk.config.instanceOrigin });
-      }
+      await runLogin(sdk, opts);
       const me = await sdk.courses.getMe();
       const name = (me.attributes?.["formatted-name"] as string) || me.id;
       output({ user: { id: me.id, name } }, `Logged in as ${name}`);
@@ -229,18 +324,99 @@ program
       const sdk = await getSdk();
       const session = await sdk.auth.loadSession();
       if (!session) {
-        output({ authenticated: false }, "Not logged in. Run: digicampus login");
+        output(
+          { authenticated: false, cliVersion: getCliVersion() },
+          "Not logged in. Run: digicampus login",
+        );
         return;
       }
       const me = await sdk.courses.getMe();
       const props = await sdk.discovery.getProperties();
       output({
         authenticated: true,
+        cliVersion: getCliVersion(),
         user: { id: me.id, name: me.attributes?.["formatted-name"] },
         studipVersion: props["studip-version"],
         workspace: sdk.workspacePath,
         sessionType: session.type,
+        next: "digicampus update --check --json",
       });
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+program
+  .command("update")
+  .description("Check for updates, upgrade CLI (global), refresh agent skills/MCP")
+  .option("--check", "Report versions only — no changes")
+  .option("--agents", "Refresh skills/MCP only — skip npm upgrade")
+  .option("-y, --yes", "Non-interactive")
+  .action(async (opts: { check?: boolean; agents?: boolean; yes?: boolean }) => {
+    try {
+      const sdk = await getSdk();
+      const check = await checkForUpdates(CLI_ENTRY);
+
+      if (opts.check) {
+        const text = check.updateAvailable
+          ? `Update available: ${check.current} → ${check.latest}\n${check.recommendedAction}`
+          : `Up to date (${check.current}, ${check.installMode})\n${check.recommendedAction}`;
+        output(check, text);
+        return;
+      }
+
+      if (opts.agents) {
+        const setup = await runSetup("all", {
+          yes: opts.yes ?? true,
+          workspace: sdk.workspacePath,
+        });
+        output(
+          { ...check, setup, summary: formatSetupSummary(setup) },
+          `Agent harness refreshed\n${formatSetupSummary(setup)}`,
+        );
+        return;
+      }
+
+      if (check.installMode === "development") {
+        output(check, `Development install — ${check.recommendedAction}`);
+        return;
+      }
+
+      let upgradeNote = "";
+      if (check.installMode === "global" && check.updateAvailable) {
+        const result = await runGlobalUpdate();
+        if (!result.ok) {
+          fail(
+            new DigicampusError(
+              "npm global upgrade failed",
+              "UPDATE_FAILED",
+              undefined,
+              result.output.slice(0, 500),
+            ),
+          );
+        }
+        upgradeNote = `Upgraded to ${check.latest}\n`;
+      } else if (check.installMode === "npx") {
+        upgradeNote = check.updateAvailable
+          ? "npx users: use npx -y digicampus@latest for the newest CLI\n"
+          : "";
+      }
+
+      const setup = await runSetup("all", {
+        yes: opts.yes ?? true,
+        workspace: sdk.workspacePath,
+        force: Boolean(check.updateAvailable),
+      });
+
+      const refreshed = await checkForUpdates(CLI_ENTRY);
+      output(
+        {
+          ...refreshed,
+          setup,
+          summary: formatSetupSummary(setup),
+        },
+        `${upgradeNote}${formatSetupSummary(setup)}`,
+      );
     } catch (e) {
       fail(e);
     }
@@ -568,7 +744,13 @@ program
     try {
       const tools = await detectTools();
       const hints = toolHints(tools);
+      const update = await checkForUpdates(CLI_ENTRY);
       const lines = [
+        `digicampus:  ${getCliVersion()} (${update.installMode})`,
+        update.updateAvailable
+          ? `update:      ${update.current} → ${update.latest} — run: digicampus update -y`
+          : `update:      up to date`,
+        "",
         `pdftotext:   ${tools.pdftotext || "MISSING"}`,
         `pdftoppm:    ${tools.pdftoppm || "MISSING"}`,
         `libreoffice: ${tools.soffice || "MISSING (native PPTX/DOCX text fallback active)"}`,
@@ -576,7 +758,7 @@ program
         `unzip:       ${tools.unzip || "MISSING"}`,
       ];
       if (hints.length) lines.push("", ...hints);
-      output({ tools, hints }, lines.join("\n"));
+      output({ cliVersion: getCliVersion(), update, tools, hints }, lines.join("\n"));
     } catch (e) {
       fail(e);
     }

@@ -12,6 +12,8 @@ export * from "./errors.js";
 export * from "./config.js";
 export * from "./client.js";
 export * from "./auth.js";
+export * from "./browser-profile.js";
+export * from "./login-url.js";
 export * from "./sync.js";
 export * from "./studium.js";
 export * from "./extract.js";

@@ -74,7 +74,7 @@ git tag v0.1.0 && git push origin v0.1.0
 
 ## Known limitations
 
-- MFA requires interactive `digicampus login` (Playwright Chromium — `npx playwright install chromium`)
+- MFA: `digicampus login` opens your **default browser** (saved passwords) — paste `Seminar_Session` once; no Playwright required
 - Session cookies expire; re-login when `status` fails
 - Exam dates from achievement text are **unconfirmed** — student must verify
 - Slide page images require poppler (`brew install poppler`); Office rendering needs LibreOffice — without them, native PPTX/DOCX text fallback still works (`digicampus doctor`)

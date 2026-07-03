@@ -8,7 +8,7 @@ Universal guide for **all** agent harnesses.
 npx -y digicampus onboard -y -o ~/Studium
 ```
 
-Or: `curl -fsSL https://raw.githubusercontent.com/paddy-shrp/digicampus/main/scripts/install.sh | bash`
+Login uses your normal browser (no extra installs): `digicampus login`
 
 Configures **only detected** harnesses (no churn elsewhere):
 
@@ -25,6 +25,15 @@ Configures **only detected** harnesses (no churn elsewhere):
 Re-run is **idempotent**: `digicampus setup all -y` skips unchanged files. Force: `--force`.
 
 Check: `digicampus setup status`
+
+## Updates
+
+```bash
+digicampus update --check --json   # LLM: version + recommendedAction
+digicampus update -y               # global npm upgrade + refresh skills/MCP
+```
+
+After a new release: `digicampus update -y` once per machine (or `npx -y digicampus@latest` each session).
 
 ## Visual comprehension (slides)
 
