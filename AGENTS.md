@@ -8,6 +8,8 @@ Universal guide for **all** agent harnesses.
 npx -y digicampus onboard -y -o ~/Studium
 ```
 
+Interactive `onboard` (without `--json` / `--yes`) opens a **setup dashboard** in your browser with live step progress — workspace, sign-in, sync, agents.
+
 Login uses your normal browser (no extra installs): `digicampus login`
 
 Configures **only detected** harnesses (no churn elsewhere):
