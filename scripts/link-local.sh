@@ -14,7 +14,7 @@ log "Linking digicampus-sdk + digicampus (pnpm global)..."
 (cd packages/cli && pnpm link --global)
 
 log "Refreshing agent harness..."
-digicampus update --agents -y
+digicampus update
 
 log "Done. $(digicampus --version 2>/dev/null || echo 'digicampus linked')"
 echo "  digicampus doctor"

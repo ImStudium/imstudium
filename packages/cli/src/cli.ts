@@ -339,7 +339,7 @@ program
         studipVersion: props["studip-version"],
         workspace: sdk.workspacePath,
         sessionType: session.type,
-        next: "digicampus update --check --json",
+        next: "digicampus update",
       });
     } catch (e) {
       fail(e);
@@ -348,42 +348,16 @@ program
 
 program
   .command("update")
-  .description("Check for updates, upgrade CLI (global), refresh agent skills/MCP")
-  .option("--check", "Report versions only — no changes")
-  .option("--agents", "Refresh skills/MCP only — skip npm upgrade")
-  .option("-y, --yes", "Non-interactive")
-  .action(async (opts: { check?: boolean; agents?: boolean; yes?: boolean }) => {
+  .description("Upgrade CLI (if needed) and refresh agent skills/MCP")
+  .action(async () => {
     try {
       const sdk = await getSdk();
-      const check = await checkForUpdates(CLI_ENTRY);
+      const before = await checkForUpdates(CLI_ENTRY);
 
-      if (opts.check) {
-        const text = check.updateAvailable
-          ? `Update available: ${check.current} → ${check.latest}\n${check.recommendedAction}`
-          : `Up to date (${check.current}, ${check.installMode})\n${check.recommendedAction}`;
-        output(check, text);
-        return;
-      }
-
-      if (opts.agents) {
-        const setup = await runSetup("all", {
-          yes: opts.yes ?? true,
-          workspace: sdk.workspacePath,
-        });
-        output(
-          { ...check, setup, summary: formatSetupSummary(setup) },
-          `Agent harness refreshed\n${formatSetupSummary(setup)}`,
-        );
-        return;
-      }
-
-      if (check.installMode === "development") {
-        output(check, `Development install — ${check.recommendedAction}`);
-        return;
-      }
-
+      let upgraded = false;
       let upgradeNote = "";
-      if (check.installMode === "global" && check.updateAvailable) {
+
+      if (before.installMode === "global" && before.updateAvailable) {
         const result = await runGlobalUpdate();
         if (!result.ok) {
           fail(
@@ -395,28 +369,24 @@ program
             ),
           );
         }
-        upgradeNote = `Upgraded to ${check.latest}\n`;
-      } else if (check.installMode === "npx") {
-        upgradeNote = check.updateAvailable
-          ? "npx users: use npx -y digicampus@latest for the newest CLI\n"
-          : "";
+        upgraded = true;
+        upgradeNote = `CLI ${before.current} → ${before.latest}\n`;
       }
 
       const setup = await runSetup("all", {
-        yes: opts.yes ?? true,
+        yes: true,
         workspace: sdk.workspacePath,
-        force: Boolean(check.updateAvailable),
+        force: upgraded,
       });
 
-      const refreshed = await checkForUpdates(CLI_ENTRY);
-      output(
-        {
-          ...refreshed,
-          setup,
-          summary: formatSetupSummary(setup),
-        },
-        `${upgradeNote}${formatSetupSummary(setup)}`,
-      );
+      const after = await checkForUpdates(CLI_ENTRY);
+      const summary = formatSetupSummary(setup);
+      const text =
+        before.installMode === "npx" && before.updateAvailable
+          ? `${summary}\nTip: npx -y digicampus@latest for newest CLI`
+          : `${upgradeNote}${summary}`.trim();
+
+      output({ ...after, upgraded, setup, summary }, text);
     } catch (e) {
       fail(e);
     }
@@ -748,7 +718,7 @@ program
       const lines = [
         `digicampus:  ${getCliVersion()} (${update.installMode})`,
         update.updateAvailable
-          ? `update:      ${update.current} → ${update.latest} — run: digicampus update -y`
+          ? `update:      ${update.current} → ${update.latest} — run: digicampus update`
           : `update:      up to date`,
         "",
         `pdftotext:   ${tools.pdftotext || "MISSING"}`,

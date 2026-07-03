@@ -29,11 +29,9 @@ Check: `digicampus setup status`
 ## Updates
 
 ```bash
-digicampus update --check --json   # LLM: version + recommendedAction
-digicampus update -y               # global npm upgrade + refresh skills/MCP
+digicampus update              # upgrade CLI + refresh skills/MCP
+digicampus update --json       # same, machine-readable
 ```
-
-After a new release: `digicampus update -y` once per machine (or `npx -y digicampus@latest` each session).
 
 ## Visual comprehension (slides)
 

@@ -28,17 +28,11 @@ digicampus login
 digicampus init -o ~/Studium
 ```
 
-## Updates (LLM-friendly)
-
-Always use `--json` for machine-readable output:
+## Updates
 
 ```bash
-digicampus update --check --json   # current, latest, updateAvailable, recommendedAction
-digicampus update -y               # refresh skills/MCP; upgrades global npm install if needed
-digicampus setup status --json     # harness manifest
+digicampus update --json   # upgrade + refresh harness; use --json for agents
 ```
-
-npx users get latest with `npx -y digicampus@latest <cmd>`. Global users: `digicampus update -y`.
 
 ## Quick commands
 
@@ -65,7 +59,7 @@ digicampus login   # opens normal browser — saved passwords; paste Seminar_Ses
 ## Escalation
 
 1. `digicampus status --json` — auth + cliVersion
-2. `digicampus update --check --json` — version drift
+2. `digicampus update --json` — upgrade + refresh harness
 3. `digicampus --json studium` — local overview
 4. `digicampus sync` — refresh from API
 5. MCP tools — see `digicampus-mcp` skill

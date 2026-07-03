@@ -88,19 +88,6 @@ export async function checkForUpdates(entryPath: string): Promise<UpdateCheckRes
 
   const updateAvailable = latestMain ? semverLt(current, latestMain) : false;
 
-  let recommendedAction: string;
-  if (installMode === "development") {
-    recommendedAction = "git pull && bun run validate (development install)";
-  } else if (installMode === "npx") {
-    recommendedAction = updateAvailable
-      ? "npx -y digicampus@latest <command> (npx always pulls latest)"
-      : "Up to date — keep using npx -y digicampus";
-  } else if (updateAvailable) {
-    recommendedAction = "digicampus update -y";
-  } else {
-    recommendedAction = "digicampus setup all -y (refresh agent harness)";
-  }
-
   return {
     schemaVersion: "1",
     current,
@@ -108,7 +95,7 @@ export async function checkForUpdates(entryPath: string): Promise<UpdateCheckRes
     updateAvailable,
     installMode,
     packages,
-    recommendedAction,
+    recommendedAction: "digicampus update",
   };
 }
 
