@@ -1,69 +1,48 @@
 # AGENTS.md — DigiCampus Studium OS
 
-Guide for LLM agents using the digicampus CLI and MCP.
+Universal guide for **all** agent harnesses.
 
-## First steps
-
-1. Check auth: `digicampus status` or MCP `digicampus_whoami`
-2. If not authenticated: tell user to run `digicampus login` (browser MFA required)
-3. Read workspace: `digicampus --json studium` or MCP `studium_overview`
-4. For exam planning: `digicampus --json klausuren` or MCP `studium_klausuren`
-
-## Exit codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | Error (see stderr JSON if `--json`) |
-
-## JSON output shape
-
-All `--json` responses include `"schemaVersion": "1"`.
-
-Errors on stderr:
-
-```json
-{
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "...",
-    "hint": "Run digicampus login first"
-  }
-}
-```
-
-## MCP tool selection
-
-| User intent | Tool |
-|-------------|------|
-| "What courses am I in?" | `studium_overview` |
-| "When are my exams?" | `studium_klausuren` |
-| "Tell me about Analysis" | `studium_course_brief` |
-| "Find the Analysis script" | `studium_find_materials` |
-| "Refresh from DigiCampus" | `digicampus_sync` |
-| "What's new to download?" | `digicampus_sync_dry_run` |
-
-## Study planning workflow
-
-```
-studium_overview → studium_klausuren → studium_find_materials (per course)
-```
-
-Use `klausuren.md` confirmed vs unconfirmed sections. Unconfirmed dates need student verification.
-
-## Sync without network
-
-After `digicampus init`, all planning can use local `~/Studium/studium.json` — no API calls needed until refresh.
-
-## Cron
+## Onboard once
 
 ```bash
-0 8 * * * digicampus sync --quiet -o ~/Studium
+npx -y digicampus onboard -y -o ~/Studium
 ```
 
-## Config paths
+Configures **only detected** harnesses (no churn elsewhere):
 
-- Config: `~/.config/digicampus/config.json`
-- Session: OS keychain service `digicampus` (fallback: `~/.config/digicampus/session.json`)
-- Sync state: `~/.local/share/digicampus/sync-state.json`
-- Workspace: `~/Studium` (override: `DIGICAMPUS_WORKSPACE`)
+| Harness | Skills | MCP config |
+|---------|--------|------------|
+| **Cursor** | `~/.cursor/skills/` | `~/.cursor/mcp.json` |
+| **Claude Code** | `~/.claude/skills/` | `~/.claude/mcp.json` |
+| **Claude Desktop / Cowork** | `~/.claude/skills/` (shared) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **OpenAI Codex** | `~/.codex/skills/` | `~/.codex/mcp.json` |
+| **Windsurf** | `~/.codeium/windsurf/skills/` | `~/.codeium/windsurf/mcp.json` |
+| **OpenCode** | `~/.config/opencode/skills/` | `~/.config/opencode/mcp.json` |
+| **Project** | — | `~/Studium/mcp.json` |
+
+Re-run is **idempotent**: `digicampus setup all -y` skips unchanged files. Force: `--force`.
+
+Check: `digicampus setup status`
+
+## Visual comprehension (slides)
+
+**Never summarize slides from text alone.** After `studium_read_material`, read every `pageImages` PNG or open `viewerFileUrl` in Playwright/browser.
+
+Skill: `digicampus-visual` (installed by onboard)
+
+## MCP tools
+
+`studium_overview` → `studium_klausuren` → `studium_find_materials` → `studium_read_material` → **read pageImages**
+
+## Daily loop (fast)
+
+```bash
+digicampus sync --quiet --extract -o ~/Studium
+```
+
+No agent re-setup on daily sync.
+
+## Paths
+
+- Manifest: `~/.config/digicampus/setup-manifest.json`
+- Workspace: `~/Studium` (`DIGICAMPUS_WORKSPACE`)
