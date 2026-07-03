@@ -12,9 +12,13 @@ export * from "./errors.js";
 export * from "./config.js";
 export * from "./client.js";
 export * from "./auth.js";
-export * from "./browser-profile.js";
 export * from "./login-url.js";
 export * from "./login-helper.js";
+export * from "./ui.js";
+export * from "./onboard-ui.js";
+export * from "./semesters.js";
+export * from "./browser-profile.js";
+export * from "./oauth.js";
 export * from "./sync.js";
 export * from "./studium.js";
 export * from "./extract.js";
@@ -40,7 +44,12 @@ export interface DigicampusSdk {
 export async function createSdk(configOverride?: Partial<ReturnType<typeof getDefaultConfig>>) {
   const config = { ...(await loadConfig()), ...configOverride };
   const auth = new AuthManager();
+  auth.setInstanceOrigin(config.instanceOrigin);
   await auth.loadSession();
+  await auth.ensureValidSession({
+    instanceOrigin: config.instanceOrigin,
+    clientId: config.oauth?.clientId,
+  });
 
   const client = new StudIpClient({
     baseUrl: config.baseUrl,

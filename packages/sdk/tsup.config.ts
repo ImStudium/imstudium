@@ -5,5 +5,5 @@ export default defineConfig({
   format: ["esm"],
   dts: true,
   clean: true,
-  external: ["playwright", "playwright-core", "keytar"],
+  external: ["keytar", "playwright"],
 });

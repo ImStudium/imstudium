@@ -12,25 +12,23 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build && npm run typecheck"
   },
   "dependencies": {
-    "keytar": "^7.9.0"
-  },
-  "optionalDependencies": {
+    "keytar": "^7.9.0",
     "playwright": "^1.52.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.1"
+    "typescript": "^5.8.3"
   },
   "engines": {
     "node": ">=20"
