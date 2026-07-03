@@ -25,8 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Turbo reads packageManager (pnpm) — binary must exist even in Bun jobs.
       - uses: pnpm/action-setup@v4
-        if: matrix.pm == 'pnpm'
 
       - uses: oven-sh/setup-bun@v2
         if: matrix.pm == 'bun'
@@ -41,5 +41,3 @@ jobs:
 
       - name: Validate (${{ matrix.pm }})
         run: ${{ matrix.run }}
-        env:
-          TURBO_PACKAGE_MANAGER: ${{ matrix.pm == 'bun' && 'bun' || '' }}
