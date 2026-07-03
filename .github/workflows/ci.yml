@@ -41,3 +41,5 @@ jobs:
 
       - name: Validate (${{ matrix.pm }})
         run: ${{ matrix.run }}
+        env:
+          TURBO_PACKAGE_MANAGER: ${{ matrix.pm == 'bun' && 'bun' || '' }}
