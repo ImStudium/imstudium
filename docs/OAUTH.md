@@ -38,15 +38,15 @@ Or in `~/.config/digicampus/config.json`:
 
 ## Until OAuth is registered
 
-Use your normal browser (saved passwords):
-
 ```bash
 digicampus login
 ```
 
-Follow the three steps in the terminal — paste `Seminar_Session` when prompted.
+Opens a sign-in browser window and auto-detects your session — no copy/paste. This uses Stud.IP's **session cookie** auth (same as the web UI).
 
-Or import manually:
+**DigiCampus (Uni Augsburg) as of Jul 2025:** OAuth2 keys are not configured on the server (`invalid_setup`). Ask RZ to run `cli/studip oauth2:keys` and register a client. Until then, browser sign-in is the correct path.
+
+Or import manually (scripts/CI only):
 
 ```bash
 digicampus session import --cookie "<Seminar_Session value>"

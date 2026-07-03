@@ -8,9 +8,9 @@
 
 | Method | Header / cookie | DigiCampus Jul 2025+ |
 |--------|-----------------|----------------------|
-| Session cookie | `Seminar_Session` | Yes (browser login) |
-| OAuth2 Bearer | `Authorization: Bearer` | Yes (if client registered) |
-| HTTP Basic | `Authorization: Basic` | Unlikely (MFA) |
+| Session cookie | `Seminar_Session` | Yes — `digicampus login` (auto browser capture) |
+| OAuth2 Bearer | `Authorization: Bearer` | Yes — preferred when instance OAuth is configured |
+| HTTP Basic | `Authorization: Basic` | No — blocked by Shibboleth/MFA at Uni Augsburg |
 
 ## File downloads (primary automation path)
 
