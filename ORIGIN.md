@@ -34,11 +34,11 @@ notes: Stud.IP extraction harness + Studium workspace + MCP
 
 After v0.1 stabilizes, backport patterns into Origin template:
 
-- `packages/mcp/` with tool registry (`tools.ts` + tests)
+- `packages/mcp/` with tool registry (`tools.ts`)
 - `StudiumBuilder` pattern — local agent workspace from API sync
 - `implementation-status.md` gate
 - CLI `--json` + `schemaVersion: 1` convention
-- Playwright optional dep for browser auth
+- OAuth-first auth with local helper fallback
 
 ### 3. Skills on spawn
 

@@ -16,7 +16,7 @@
 | Area | Status | Notes |
 |------|--------|-------|
 | SDK — StudIpClient | ✅ | Pagination, JSON:API errors, HEAD/download |
-| SDK — AuthManager | ✅ | Playwright browser login, keychain, cookie import |
+| SDK — AuthManager | ✅ | OAuth-ready login, local helper fallback, keychain, cookie import |
 | SDK — SyncEngine | ✅ | Flat/tree layouts, incremental chdate/etag, wiki/news/calendar |
 | SDK — StudiumBuilder | ✅ | `studium.json`, `STUDIUM.md`, `klausuren.md`, `COURSE.md` |
 | SDK — Extractor | ✅ | All file types → text + page PNGs (poppler / LibreOffice / native XML fallback / tesseract OCR for scans) |
@@ -27,8 +27,7 @@
 | CLI setup | ✅ | `onboard` + idempotent `setup` — 6 native harnesses, manifest hash-skip |
 | Agent setup | ✅ | Cursor, Claude Code, Claude Desktop/Cowork, Codex, Windsurf, OpenCode + `~/Studium/mcp.json` |
 | Docs | ✅ | README, AGENTS, API, STUDIUM, OAUTH |
-| Tests | ✅ | SDK unit (incl. real PPTX extraction) + CLI smoke (live discover) + MCP tool registry |
-| CI | ✅ | typecheck → build → test on push/PR |
+| CI | ✅ | typecheck → build on push/PR |
 
 ## Deferred (v0.2+)
 
@@ -64,17 +63,9 @@ git tag v0.1.0 && git push origin v0.1.0
 - [ ] GitHub remote exists; tag pushed after publish
 - [ ] Post-ship: register in auvy-origin `spawned/` (see [ORIGIN.md](./ORIGIN.md)), add `context/projects/digicampus.md` in personal OS
 
-## Test matrix
-
-| Suite | Command | Coverage |
-|-------|---------|----------|
-| SDK unit | `packages/sdk` vitest | client, errors, studium, sync, config, **extract (PPTX E2E, images, incremental)** |
-| CLI smoke | `packages/cli` vitest | `--help`, live `discover --json`, setup merge |
-| MCP registry | `packages/mcp` vitest | 9 tool names |
-
 ## Known limitations
 
-- MFA: `digicampus login` opens your **default browser** (saved passwords) — paste `Seminar_Session` once; no Playwright required
+- MFA: clean no-technical login requires OAuth client registration. Until then, `digicampus login` is a temporary local-helper fallback.
 - Session cookies expire; re-login when `status` fails
 - Exam dates from achievement text are **unconfirmed** — student must verify
 - Slide page images require poppler (`brew install poppler`); Office rendering needs LibreOffice — without them, native PPTX/DOCX text fallback still works (`digicampus doctor`)

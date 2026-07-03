@@ -51,7 +51,8 @@ Primary dev/test: **Uni Augsburg DigiCampus** — Stud.IP 5.4.11, Shibboleth + M
 - [README](./README.md) · [AGENTS.md](./AGENTS.md) · [ORIGIN.md](./ORIGIN.md)
 - [implementation-status.md](./implementation-status.md) — release truth
 - [docs/API.md](./docs/API.md) · [docs/STUDIUM.md](./docs/STUDIUM.md) · [docs/OAUTH.md](./docs/OAUTH.md)
-- Personal OS: `patrick-schroeppel/context/projects/digicampus.md` (proposed)
+- Personal OS: `patrick-schroeppel/context/projects/digicampus.md`
+- Patterns backport: `auvy-origin/spawned/digicampus-patterns.md`
 
 ## Status
 

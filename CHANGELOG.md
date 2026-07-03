@@ -15,7 +15,7 @@ All notable changes to DigiCampus Studium OS.
   - MCP `studium_read_material` — returns text + `pageImages` PNG paths for visual comprehension
 
 - `digicampus-sdk` — Stud.IP JSON:API client, pagination, file download
-- Browser auth via Playwright (Shibboleth + MFA)
+- Login via OAuth-ready auth manager, with local helper fallback for Shibboleth + MFA
 - Session storage (OS keychain + file fallback)
 - `SyncEngine` — flat/tree file sync, wiki/news/calendar export, incremental state
 - `StudiumBuilder` — `studium.json`, `STUDIUM.md`, `klausuren.md`, per-course `COURSE.md`
@@ -23,7 +23,6 @@ All notable changes to DigiCampus Studium OS.
 - `digicampus-mcp` — 8 study-planning tools for Cursor / Claude
 - Global `--json` output with `schemaVersion: 1`
 - CI workflow, AGENTS.md, API/STUDIUM/OAUTH docs
-- Test suite: SDK unit tests, CLI smoke (live discover), MCP tool registry
 
 ### Known gaps
 
