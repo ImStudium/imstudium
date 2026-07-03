@@ -164,7 +164,7 @@ See [packages/cli/skills/](packages/cli/skills/) · [CLAUDE.md](CLAUDE.md)
 
 DigiCampus uses Shibboleth + Microsoft MFA. **No Bun, Playwright, or Chrome permissions required.**
 
-1. **Normal browser login** (default): `digicampus login` — opens Safari/Chrome/Edge with **saved passwords**, paste one cookie when done
+1. **Browser helper** (default): `digicampus login` — opens a local page in your browser; paste `Seminar_Session` there (no Terminal permissions, saved passwords work)
 2. **Cookie import**: `digicampus session import --cookie <Seminar_Session>`
 3. **OAuth2 PKCE**: `digicampus login --oauth` — when a university client is registered ([docs/OAUTH.md](docs/OAUTH.md))
 4. **Optional automated**: `digicampus login --automated` — Playwright (power users only)

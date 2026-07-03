@@ -16,6 +16,12 @@ import {
   openInSystemBrowser,
   parseSeminarSessionCookie,
 } from "./login-url.js";
+import {
+  buildLoginHelperHtml,
+  buildLoginSuccessHtml,
+  parseFormBody,
+  readRequestBody,
+} from "./login-helper.js";
 
 const KEYTAR_SERVICE = "digicampus";
 const KEYTAR_ACCOUNT = "session";
@@ -128,54 +134,38 @@ export class AuthManager {
     await this.importCookies(cookies);
   }
 
-  /** Default login — opens your normal browser, then paste one cookie. No extra installs. */
+  /** Default login — local helper page in your browser (no Terminal permissions). */
   async loginInteractive(options: InteractiveLoginOptions): Promise<SessionData> {
     const origin = options.instanceOrigin.replace(/\/$/, "");
-    const loginUrl = buildShibbolethLoginUrl(origin);
 
-    if (options.openBrowser !== false) {
-      await openInSystemBrowser(loginUrl);
+    if (options.cookieValue) {
+      return this.finishCookieLogin(origin, parseSeminarSessionCookie(options.cookieValue));
     }
 
-    options.onMessage?.(
-      [
-        "",
-        "① Log in with your university account in the browser window (saved passwords work).",
-        "② When you see your courses page, copy your session cookie:",
-        "",
-        "   Quick: on DigiCampus, press F12 → Console, paste this line, Enter:",
-        "   copy(document.cookie.match(/Seminar_Session=([^;]+)/)?.[1]||'')",
-        "",
-        "   Or: DevTools → Application → Cookies → Seminar_Session → copy Value",
-        "",
-      ].join("\n"),
-    );
-
-    let raw = options.cookieValue;
-    if (!raw) {
-      if (!options.prompt) {
-        throw new DigicampusError(
-          "Interactive login needs a terminal.",
-          "LOGIN_NOT_INTERACTIVE",
-          undefined,
-          "Run digicampus login in a terminal, or: digicampus session import --cookie \"<value>\"",
-        );
-      }
-      raw = await options.prompt("③ Paste Seminar_Session here: ");
+    if (process.env.DIGICAMPUS_SESSION_COOKIE) {
+      return this.finishCookieLogin(
+        origin,
+        parseSeminarSessionCookie(process.env.DIGICAMPUS_SESSION_COOKIE),
+      );
     }
 
-    const seminarSession = parseSeminarSessionCookie(raw);
+    if (options.prompt) {
+      return this.loginViaTerminal(options);
+    }
+
+    return this.loginViaLocalHelper(options);
+  }
+
+  private async finishCookieLogin(origin: string, seminarSession: string): Promise<SessionData> {
     if (!seminarSession) {
       throw new DigicampusError(
         "Empty session cookie.",
         "LOGIN_INVALID_COOKIE",
         undefined,
-        "Copy the Seminar_Session value after logging in at DigiCampus.",
+        "Provide Seminar_Session after logging in at DigiCampus.",
       );
     }
-
     await this.verifyCookie(origin, seminarSession);
-
     const session: SessionData = {
       type: "cookie",
       cookies: { Seminar_Session: seminarSession },
@@ -183,6 +173,111 @@ export class AuthManager {
     await this.saveSession(session);
     return session;
   }
+
+  private async loginViaTerminal(options: InteractiveLoginOptions): Promise<SessionData> {
+    const origin = options.instanceOrigin.replace(/\/$/, "");
+    const loginUrl = buildShibbolethLoginUrl(origin);
+
+    if (options.openBrowser !== false) {
+      await openInSystemBrowser(loginUrl);
+    }
+
+    options.onMessage?.("Log in in your browser, then paste Seminar_Session below.");
+    const raw = await options.prompt!("Paste Seminar_Session: ");
+    return this.finishCookieLogin(origin, parseSeminarSessionCookie(raw));
+  }
+
+  private loginViaLocalHelper(options: InteractiveLoginOptions): Promise<SessionData> {
+    const origin = options.instanceOrigin.replace(/\/$/, "");
+    const loginUrl = buildShibbolethLoginUrl(origin);
+    const timeoutMs = 300_000;
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        server.close();
+        fn();
+      };
+
+      const server = createServer(async (req, res) => {
+        try {
+          const path = (req.url || "/").split("?")[0];
+
+          if (req.method === "GET" && path === "/") {
+            res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+            res.end(buildLoginHelperHtml({ origin, loginUrl }));
+            return;
+          }
+
+          if (req.method === "POST" && path === "/submit") {
+            const body = await readRequestBody(req);
+            const raw = parseFormBody(body, "cookie");
+            const seminarSession = parseSeminarSessionCookie(raw);
+
+            try {
+              const session = await this.finishCookieLogin(origin, seminarSession);
+              res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+              res.end(buildLoginSuccessHtml());
+              finish(() => resolve(session));
+            } catch (err) {
+              const message =
+                err instanceof DigicampusError ? err.message : "Invalid cookie — try again.";
+              res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+              res.end(buildLoginHelperHtml({ origin, loginUrl, error: message }));
+            }
+            return;
+          }
+
+          res.writeHead(404);
+          res.end("Not found");
+        } catch (err) {
+          finish(() =>
+            reject(err instanceof Error ? err : new DigicampusError(String(err), "LOGIN_FAILED")),
+          );
+        }
+      });
+
+      const timer = setTimeout(() => {
+        finish(() =>
+          reject(
+            new DigicampusError(
+              "Login timed out.",
+              "LOGIN_TIMEOUT",
+              undefined,
+              "Run digicampus login again and paste Seminar_Session on the helper page.",
+            ),
+          ),
+        );
+      }, timeoutMs);
+
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address();
+        if (!addr || typeof addr === "string") {
+          finish(() => reject(new DigicampusError("Could not start login helper", "LOGIN_FAILED")));
+          return;
+        }
+        const helperUrl = `http://127.0.0.1:${addr.port}/`;
+        options.onMessage?.(
+          [
+            "Opening login helper in your browser…",
+            `If it did not open: ${helperUrl}`,
+            "① Log in → ② Paste Seminar_Session → Save",
+          ].join("\n"),
+        );
+        if (options.openBrowser !== false) {
+          void openInSystemBrowser(helperUrl);
+        }
+      });
+
+      server.on("error", (err) => {
+        finish(() => reject(new DigicampusError(err.message, "LOGIN_FAILED")));
+      });
+    });
+  }
+
 
   private async verifyCookie(origin: string, seminarSession: string): Promise<void> {
     const apiUrl = `${origin}/jsonapi.php/v1/users/me`;

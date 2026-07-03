@@ -19,7 +19,6 @@ import {
   runSetup,
   type AgentId,
 } from "./setup.js";
-import { isInteractiveTerminal, terminalPrompt } from "./prompt.js";
 import {
   checkForUpdates,
   getCliVersion,
@@ -109,31 +108,20 @@ async function runLogin(
   }
 
   if (globalOpts.json) {
-    fail(
-      new DigicampusError(
-        "JSON login needs a cookie.",
-        "LOGIN_NOT_INTERACTIVE",
-        undefined,
-        'digicampus session import --cookie "<Seminar_Session>"',
-      ),
-    );
+    output(null, "Starting login helper — open the URL in your browser if needed.");
+    const result = await sdk.auth.loginInteractive({
+      instanceOrigin: sdk.config.instanceOrigin,
+      onMessage: (text) => {
+        if (!globalOpts.quiet) output(null, text);
+      },
+    });
+    output({ ok: true, sessionType: result.type }, "Session saved");
+    return;
   }
 
-  if (!isInteractiveTerminal()) {
-    fail(
-      new DigicampusError(
-        "Login needs an interactive terminal.",
-        "LOGIN_NOT_INTERACTIVE",
-        undefined,
-        "Run digicampus login in a terminal",
-      ),
-    );
-  }
-
-  output(null, "Opening your browser — log in with your university account...");
+  output(null, "Starting login…");
   await sdk.auth.loginInteractive({
     instanceOrigin: sdk.config.instanceOrigin,
-    prompt: terminalPrompt,
     onMessage: (text) => output(null, text),
   });
 }
