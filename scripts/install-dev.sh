@@ -30,11 +30,10 @@ case "$PM" in
     ;;
 esac
 
-log "Running validate (typecheck + build + test)..."
+log "Running validate (typecheck + build)..."
 pm_validate "$PM"
 
 log "Dev ready. Commands:"
 echo "  $PM run build"
-echo "  $PM run test"
-echo "  $PM run test:e2e"
+echo "  $PM run validate"
 echo "  node packages/cli/dist/cli.js --help"

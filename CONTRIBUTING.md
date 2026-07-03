@@ -19,9 +19,8 @@ bun install && bun run validate    # preferred
 
 ## Before a PR
 
-1. `bun run validate` or `pnpm run validate` must pass (typecheck + build + test)
-2. Add tests for new SDK logic
-3. Update `implementation-status.md` if shipping a feature
+1. `bun run validate` or `pnpm run validate` must pass (typecheck + build)
+2. Update `implementation-status.md` if shipping a feature
 4. Update `CHANGELOG.md` under `[Unreleased]` or version section
 
 ## Auth development

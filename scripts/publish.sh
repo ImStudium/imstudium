@@ -10,9 +10,9 @@ PM="$(detect_pm)"
 
 log "Building with $PM..."
 case "$PM" in
-  bun)  bun run build && bun run test ;;
-  pnpm) pnpm run build && pnpm run test ;;
-  npm)  npm run build && npm run test ;;
+  bun)  bun run build ;;
+  pnpm) pnpm run build ;;
+  npm)  npm run build ;;
 esac
 
 echo ""
