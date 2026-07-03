@@ -197,6 +197,32 @@ export interface SessionData {
   expiresAt?: string;
 }
 
+export type MaterialKind = "pdf" | "office" | "image" | "text" | "unsupported";
+
+export interface ExtractResult {
+  source: string;
+  outDir: string;
+  kind: MaterialKind;
+  pages: number;
+  hasImages?: boolean;
+  tool?: string;
+  skipped?: boolean;
+  error?: string;
+  hint?: string;
+}
+
+export interface ExtractManifest {
+  schemaVersion: "1";
+  source: string;
+  kind: MaterialKind;
+  pages: number;
+  tool?: string;
+  error?: string;
+  extractedAt: string;
+  sourceMtimeMs: number;
+  sourceSize: number;
+}
+
 export interface FileTreeNode {
   id: string;
   name: string;

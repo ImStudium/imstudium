@@ -2,6 +2,7 @@ import { StudIpClient } from "./client.js";
 import { AuthManager } from "./auth.js";
 import { SyncEngine } from "./sync.js";
 import { StudiumBuilder } from "./studium.js";
+import { Extractor } from "./extract.js";
 import { CoursesResource, DiscoveryResource, ScheduleResource } from "./resources/courses.js";
 import { FilesResource, NewsResource, WikiResource } from "./resources/files.js";
 import { loadConfig, saveConfig, getDefaultConfig, paths, expandPath } from "./config.js";
@@ -13,6 +14,8 @@ export * from "./client.js";
 export * from "./auth.js";
 export * from "./sync.js";
 export * from "./studium.js";
+export * from "./extract.js";
+export * from "./viewer.js";
 export * from "./resources/courses.js";
 export * from "./resources/files.js";
 
@@ -27,6 +30,7 @@ export interface DigicampusSdk {
   discovery: DiscoveryResource;
   sync: SyncEngine;
   studium: StudiumBuilder;
+  extractor: Extractor;
   config: Awaited<ReturnType<typeof loadConfig>>;
 }
 
@@ -52,6 +56,7 @@ export async function createSdk(configOverride?: Partial<ReturnType<typeof getDe
     discovery: new DiscoveryResource(client),
     sync: new SyncEngine(client),
     studium: new StudiumBuilder(client),
+    extractor: new Extractor(),
     config,
     async saveConfig(partial: Parameters<typeof saveConfig>[0]) {
       return saveConfig(partial);

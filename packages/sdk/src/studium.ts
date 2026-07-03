@@ -93,11 +93,9 @@ export class StudiumBuilder {
       await this.writeCourseBrief(courseDir, course);
     }
 
-    const now = new Date();
     for (const exam of allExams) {
       if (exam.date) {
-        const d = new Date(exam.date);
-        exam.daysRemaining = Math.ceil((d.getTime() - now.getTime()) / 86_400_000);
+        exam.daysRemaining = computeDaysRemaining(exam.date);
       }
     }
 
@@ -284,6 +282,15 @@ function extractExamDates(
   }
 
   return results;
+}
+
+/** @internal — unit tests */
+export const extractExamDatesForTest = extractExamDates;
+
+export function computeDaysRemaining(isoDate: string): number {
+  const d = new Date(isoDate);
+  const now = new Date();
+  return Math.ceil((d.getTime() - now.getTime()) / 86_400_000);
 }
 
 async function readNotesSection(filePath: string): Promise<string | null> {
