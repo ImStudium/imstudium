@@ -7,26 +7,26 @@
   "bin": {
     "digicampus": "./dist/cli.js"
   },
-  "files": ["dist", "skills", "mcp.json"],
+  "files": [
+    "dist",
+    "skills",
+    "mcp.json"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build && npm run typecheck"
   },
   "dependencies": {
+    "commander": "^13.1.0",
     "digicampus-sdk": "workspace:*",
-    "commander": "^13.1.0"
-  },
-  "optionalDependencies": {
     "playwright": "^1.52.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.1"
+    "typescript": "^5.8.3"
   },
   "engines": {
     "node": ">=20"

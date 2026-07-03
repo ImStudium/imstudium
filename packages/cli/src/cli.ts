@@ -9,6 +9,7 @@ import {
   DigicampusError,
   expandPath,
   extractSlug,
+  probeOAuthServer,
   toolHints,
   type StudiumExamDate,
   type StudiumWorkspace,
@@ -19,6 +20,7 @@ import {
   runSetup,
   type AgentId,
 } from "./setup.js";
+import { runOnboardFlow } from "./onboard-flow.js";
 import {
   checkForUpdates,
   getCliVersion,
@@ -65,65 +67,133 @@ async function getSdk() {
   return createSdk(partial);
 }
 
-function browserLoginOptions(opts: {
-  isolated?: boolean;
-  profileDirectory?: string;
-}): { profile?: "system" | "isolated"; profileDirectory?: string } {
-  return {
-    profile: opts.isolated ? "isolated" : "system",
-    profileDirectory: opts.profileDirectory,
-  };
+function semesterSyncOptions(
+  sdk: Awaited<ReturnType<typeof createSdk>>,
+  opts: { semester?: string; allSemesters?: boolean },
+) {
+  if (opts.allSemesters) return { allSemesters: true as const };
+  if (opts.semester) return { semesterLabel: opts.semester };
+  if (sdk.config.semesterId) return { semesterId: sdk.config.semesterId };
+  return {};
+}
+
+function courseDirFor(ws: StudiumWorkspace, workspaceRoot: string, slug: string): string {
+  const folder = ws.workspaceFolder || ws.semesterSlug || ws.semesters[0] || "current";
+  return join(workspaceRoot, folder, slug);
 }
 
 async function runLogin(
   sdk: Awaited<ReturnType<typeof createSdk>>,
   opts: {
     oauth?: boolean;
-    automated?: boolean;
-    isolated?: boolean;
+    manual?: boolean;
+    chromeProfile?: boolean;
     profileDirectory?: string;
+    onMessage?: (text: string) => void;
   },
 ) {
-  if (opts.oauth) {
-    const clientId = sdk.config.oauth?.clientId;
+  const loginOpts = {
+    instanceOrigin: sdk.config.instanceOrigin,
+    onMessage: (text: string) => {
+      opts.onMessage?.(text);
+      if (!opts.onMessage && !globalOpts.quiet) output(null, text);
+    },
+  };
+
+  const clientId = sdk.config.oauth?.clientId;
+  const useOAuth = opts.oauth || Boolean(clientId);
+
+  if (useOAuth && !opts.manual) {
     if (!clientId) {
       fail(new DigicampusError("Set DIGICAMPUS_OAUTH_CLIENT_ID or config oauth.clientId", "NO_CLIENT_ID"));
     }
-    await sdk.auth.loginWithOAuth({ instanceOrigin: sdk.config.instanceOrigin, clientId });
+
+    const probe = await probeOAuthServer(sdk.config.instanceOrigin, clientId);
+
+    if (probe.status === "ready") {
+      await sdk.auth.loginWithOAuth({
+        instanceOrigin: sdk.config.instanceOrigin,
+        clientId,
+        onMessage: loginOpts.onMessage,
+      });
+      return;
+    }
+
+    if (probe.status === "broken_setup") {
+      if (!globalOpts.quiet) {
+        output(
+          null,
+          "Stud.IP OAuth is not set up on this instance yet — using browser sign-in instead.",
+        );
+        output(null, `University admin: ${probe.endpoints.admin}`);
+      }
+    } else if (probe.status === "no_client") {
+      fail(
+        new DigicampusError(
+          "OAuth client_id was rejected by Stud.IP.",
+          "OAUTH_CLIENT_INVALID",
+          undefined,
+          "Check oauth.clientId in ~/.config/digicampus/config.json",
+        ),
+      );
+    } else if (opts.oauth) {
+      fail(
+        new DigicampusError(
+          probe.message || "OAuth is unavailable on this Stud.IP instance.",
+          "OAUTH_UNAVAILABLE",
+        ),
+      );
+    } else if (!globalOpts.quiet) {
+      output(null, `${probe.message || "OAuth unavailable"} — using browser sign-in.`);
+    }
+  }
+
+  if (opts.manual) {
+    if (globalOpts.json) {
+      output(null, "Starting manual login helper…");
+      const result = await sdk.auth.loginInteractive(loginOpts);
+      output({ ok: true, sessionType: result.type }, "Session saved");
+      return;
+    }
+    output(null, "Opening manual login helper…");
+    await sdk.auth.loginInteractive(loginOpts);
     return;
   }
 
-  if (opts.automated) {
+  const browserOpts = {
+    instanceOrigin: sdk.config.instanceOrigin,
+    profile: (opts.chromeProfile ? "system" : "isolated") as "system" | "isolated",
+    profileDirectory: opts.profileDirectory,
+    onMessage: loginOpts.onMessage,
+  };
+
+  if (!globalOpts.quiet) {
     output(
       null,
-      opts.isolated
-        ? "Opening automated browser (isolated profile)..."
-        : "Opening automated Chrome (quit Chrome first)...",
+      opts.chromeProfile
+        ? "Opening Chrome with your saved passwords…"
+        : "Opening sign-in browser…",
     );
-    await sdk.auth.loginWithBrowser({
-      instanceOrigin: sdk.config.instanceOrigin,
-      ...browserLoginOptions(opts),
-    });
-    return;
   }
 
-  if (globalOpts.json) {
-    output(null, "Starting login helper — open the URL in your browser if needed.");
-    const result = await sdk.auth.loginInteractive({
-      instanceOrigin: sdk.config.instanceOrigin,
-      onMessage: (text) => {
-        if (!globalOpts.quiet) output(null, text);
-      },
-    });
-    output({ ok: true, sessionType: result.type }, "Session saved");
-    return;
+  if (opts.chromeProfile) {
+    try {
+      await sdk.auth.loginWithBrowser(browserOpts);
+      return;
+    } catch (firstErr) {
+      if (!(firstErr instanceof DigicampusError)) throw firstErr;
+      if (firstErr.code === "CHROME_PROFILE_LOCKED") {
+        if (!globalOpts.quiet) {
+          output(null, "Chrome is open — using a separate sign-in browser instead…");
+        }
+        await sdk.auth.loginWithBrowser({ ...browserOpts, profile: "isolated" });
+        return;
+      }
+      throw firstErr;
+    }
   }
 
-  output(null, "Starting login…");
-  await sdk.auth.loginInteractive({
-    instanceOrigin: sdk.config.instanceOrigin,
-    onMessage: (text) => output(null, text),
-  });
+  await sdk.auth.loginWithBrowser(browserOpts);
 }
 
 const CLI_ENTRY = fileURLToPath(import.meta.url);
@@ -159,54 +229,29 @@ program
     allAgents?: boolean;
   }) => {
     try {
-      const sdk = await getSdk();
-      const out = expandPath(opts.output || sdk.workspacePath);
-      await sdk.saveConfig({ workspacePath: out });
-
-      if (!opts.agentsOnly) {
-        const session = await sdk.auth.loadSession();
-        if (!session) {
-          if (opts.yes) {
-            fail(
-              new DigicampusError(
-                "Not logged in.",
-                "NO_SESSION",
-                undefined,
-                "Run: digicampus login",
-              ),
-            );
-          }
-          await runLogin(sdk, {});
-        }
-        if (!opts.skipSync) {
-          const report = await sdk.sync.sync({
-            outputDir: out,
-            include: ["wiki", "news", "calendar"],
+      const result = await runOnboardFlow({
+        ...opts,
+        json: globalOpts.json,
+        quiet: globalOpts.quiet,
+        instance: globalOpts.instance,
+        runLogin: async (sdk, onMessage) => {
+          await runLogin(sdk, {
+            onMessage: (text) => {
+              onMessage?.(text);
+              if (!globalOpts.quiet && !onMessage) output(null, text);
+            },
           });
-          const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin);
-          const setup = await runSetup("all", {
-            yes: opts.yes,
-            workspace: out,
-            force: opts.force,
-            allAgents: opts.allAgents,
-          });
-          output(
-            { workspace, report, setup, summary: formatSetupSummary(setup) },
-            `Onboarded → ${out}\n${formatSetupSummary(setup)}`,
-          );
-          return;
-        }
-      }
-
-      const setup = await runSetup("all", {
-        yes: opts.yes,
-        workspace: out,
-        force: opts.force,
-        allAgents: opts.allAgents,
+        },
       });
       output(
-        { setup, summary: formatSetupSummary(setup) },
-        `Agents configured\n${formatSetupSummary(setup)}`,
+        {
+          workspace: result.workspace,
+          report: result.report,
+          studium: result.studium,
+          setup: result.setup,
+          summary: result.summary,
+        },
+        `Onboarded → ${result.workspace}\n${result.summary}`,
       );
     } catch (e) {
       fail(e);
@@ -218,38 +263,42 @@ program
   .description("Login + sync Studium workspace (use onboard for first-time agent setup)")
   .option("-o, --output <dir>", "Workspace directory")
   .option("-y, --yes", "Non-interactive (skip prompts)")
-  .option("--browser", "Force Playwright automated login (--automated)")
+  .option("--relogin", "Sign in again even if a session is already stored")
+  .option("--chrome-profile", "Use your Chrome profile with saved passwords (quit Chrome first)")
   .option("--extract", "Extract text + slide images after sync")
   .action(async (opts: {
     output?: string;
     yes?: boolean;
-    browser?: boolean;
+    relogin?: boolean;
     extract?: boolean;
+    chromeProfile?: boolean;
   }) => {
     try {
       const sdk = await getSdk();
       const out = expandPath(opts.output || sdk.workspacePath);
       const session = await sdk.auth.loadSession();
-      if (!session || opts.browser) {
+      if (!session || opts.relogin) {
         if (opts.yes && !session) {
           fail(
             new DigicampusError("Not logged in.", "NO_SESSION", undefined, "Run: digicampus login"),
           );
         }
-        await runLogin(sdk, { automated: Boolean(opts.browser) });
+        await runLogin(sdk, { chromeProfile: opts.chromeProfile });
       }
 
       await sdk.saveConfig({ workspacePath: out });
+      const semOpts = semesterSyncOptions(sdk, {});
       const report = await sdk.sync.sync({
         outputDir: out,
         include: ["wiki", "news", "calendar"],
+        ...semOpts,
       });
-      const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin);
+      const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin, semOpts);
 
       let extracted = 0;
       if (opts.extract) {
         for (const course of workspace.courses) {
-          const courseDir = join(out, "current", course.slug);
+          const courseDir = courseDirFor(workspace, out, course.slug);
           const results = await sdk.extractor.extractDir(
             join(courseDir, "files"),
             join(courseDir, "extracted"),
@@ -260,7 +309,7 @@ program
 
       output(
         { workspace, report, extracted: opts.extract ? extracted : undefined, next: "digicampus onboard --agents-only" },
-        `Studium workspace ready at ${out}${opts.extract ? ` · ${extracted} extracted` : ""}\nRun: digicampus onboard --agents-only  (once, idempotent)`,
+        `Studium workspace ready at ${out} — ${workspace.activeSemester.title} in ${workspace.workspaceFolder}/${opts.extract ? ` · ${extracted} extracted` : ""}\nRun: digicampus onboard --agents-only  (once, idempotent)`,
       );
     } catch (e) {
       fail(e);
@@ -269,15 +318,15 @@ program
 
 program
   .command("login")
-  .description("Log in via your normal browser (saved passwords) — no extra installs")
+  .description("Sign in via browser — auto-detects session, no copy/paste")
   .option("--oauth", "Use OAuth2 PKCE (requires registered client_id)")
-  .option("--automated", "Playwright auto-capture (optional; needs Google Chrome)")
-  .option("--isolated", "With --automated: use isolated browser profile")
-  .option("--profile-directory <name>", "With --automated: Chrome profile folder", "Default")
+  .option("--chrome-profile", "Use your Chrome profile with saved passwords (quit Chrome first)")
+  .option("--profile-directory <name>", "Chrome profile folder with --chrome-profile", "Default")
+  .option("--manual", "Expert fallback: local helper page with manual session paste")
   .action(async (opts: {
     oauth?: boolean;
-    automated?: boolean;
-    isolated?: boolean;
+    manual?: boolean;
+    chromeProfile?: boolean;
     profileDirectory?: string;
   }) => {
     try {
@@ -310,11 +359,32 @@ program
   .action(async () => {
     try {
       const sdk = await getSdk();
+      const oauth = await probeOAuthServer(sdk.config.instanceOrigin, sdk.config.oauth?.clientId);
       const session = await sdk.auth.loadSession();
       if (!session) {
         output(
-          { authenticated: false, cliVersion: getCliVersion() },
-          "Not logged in. Run: digicampus login",
+          {
+            authenticated: false,
+            cliVersion: getCliVersion(),
+            oauth: {
+              status: oauth.status,
+              message: oauth.message,
+              recommended: oauth.status === "ready" ? "digicampus login --oauth" : "digicampus login",
+              adminUrl: oauth.endpoints.admin,
+            },
+          },
+          [
+            "Not logged in. Run: digicampus login",
+            oauth.status === "broken_setup"
+              ? "Note: Stud.IP OAuth is not configured on this instance — browser sign-in is used."
+              : oauth.status === "ready" && sdk.config.oauth?.clientId
+                ? "OAuth is ready — digicampus login will use it automatically."
+                : oauth.status === "ready"
+                  ? "OAuth is available — register a client (see docs/OAUTH.md) for one-click login."
+                  : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
         );
         return;
       }
@@ -327,6 +397,10 @@ program
         studipVersion: props["studip-version"],
         workspace: sdk.workspacePath,
         sessionType: session.type,
+        oauth: {
+          status: oauth.status,
+          adminUrl: oauth.endpoints.admin,
+        },
         next: "digicampus update",
       });
     } catch (e) {
@@ -428,25 +502,33 @@ const courses = program.command("courses").description("Course commands");
 courses
   .command("list")
   .description("List my courses")
-  .option("--semester <name>", "Filter by semester")
-  .action(async (opts: { semester?: string }) => {
+  .option("--semester <name>", "Semester title or slug (default: calendar current)")
+  .option("--all-semesters", "List every enrollment")
+  .action(async (opts: { semester?: string; allSemesters?: boolean }) => {
     try {
       const sdk = await getSdk();
       const me = await sdk.courses.getMe();
-      let list = await sdk.courses.listMine(me.id);
-      if (opts.semester) {
-        list = list.filter((c) =>
-          JSON.stringify(c).toLowerCase().includes(opts.semester!.toLowerCase()),
-        );
-      }
-      output({
-        courses: list.map((c) => ({
-          id: c.id,
-          title: c.attributes?.title,
-          type: c.attributes?.["course-type"],
-          number: c.attributes?.["course-number"],
-        })),
+      const semOpts = semesterSyncOptions(sdk, opts);
+      const ctx = await sdk.courses.resolveSemesterContext(semOpts);
+      let list = await sdk.courses.listMine(me.id, {
+        semesterId: semOpts.semesterId ?? ctx?.semester.id,
+        allSemesters: opts.allSemesters,
       });
+      output(
+        {
+          courses: list.map((c) => ({
+            id: c.id,
+            title: c.attributes?.title,
+            type: c.attributes?.["course-type"],
+            number: c.attributes?.["course-number"],
+          })),
+          semester: ctx ? { id: ctx.semester.id, title: ctx.title, slug: ctx.slug } : undefined,
+          count: list.length,
+        },
+        ctx
+          ? `${list.length} courses in ${ctx.title}`
+          : `${list.length} courses (all semesters)`,
+      );
     } catch (e) {
       fail(e);
     }
@@ -519,7 +601,8 @@ program
   .description("Sync files and rebuild Studium workspace")
   .option("-o, --output <dir>", "Output directory")
   .option("--course <name>", "Sync single course")
-  .option("--semester <label>", "Semester folder label", "current")
+  .option("--semester <label>", "Semester title or slug (e.g. SS2026, WS2025-26)")
+  .option("--all-semesters", "Sync every enrollment (all semesters)")
   .option("--layout <mode>", "flat or tree", "flat")
   .option("--dry-run", "List changes without downloading")
   .option("--include <items>", "Comma-separated: wiki,news,calendar")
@@ -532,27 +615,31 @@ program
     dryRun?: boolean;
     include?: string;
     extract?: boolean;
+    allSemesters?: boolean;
   }) => {
     try {
       const sdk = await getSdk();
       const out = expandPath(opts.output || sdk.workspacePath);
       const include = opts.include?.split(",").map((s) => s.trim()) as Array<"wiki" | "news" | "calendar"> | undefined;
+      const semOpts = semesterSyncOptions(sdk, opts);
       const report = await sdk.sync.sync({
         outputDir: out,
         layout: (opts.layout as "flat" | "tree") || "flat",
         dryRun: opts.dryRun,
-        semesterLabel: opts.semester,
         include,
+        ...semOpts,
         courseFilter: opts.course
           ? (c) => c.title.toLowerCase().includes(opts.course!.toLowerCase()) || c.id === opts.course
           : undefined,
       });
       let extracted = 0;
+      let folderNote = "";
       if (!opts.dryRun) {
-        const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin);
+        const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin, semOpts);
+        folderNote = ` — ${workspace.activeSemester.title} in ${workspace.workspaceFolder}/`;
         if (opts.extract) {
           for (const course of workspace.courses) {
-            const courseDir = join(out, "current", course.slug);
+            const courseDir = courseDirFor(workspace, out, course.slug);
             const results = await sdk.extractor.extractDir(
               join(courseDir, "files"),
               join(courseDir, "extracted"),
@@ -563,7 +650,7 @@ program
       }
       output(
         { ...report, extracted: opts.extract ? extracted : undefined },
-        `Sync: ${report.downloaded} downloaded, ${report.skipped} skipped, ${report.failed} failed${opts.extract ? `, ${extracted} extracted` : ""}`,
+        `Sync: ${report.downloaded} downloaded, ${report.skipped} skipped, ${report.failed} failed${opts.extract ? `, ${extracted} extracted` : ""}${folderNote}`,
       );
     } catch (e) {
       fail(e);
@@ -617,7 +704,7 @@ program
       const tools = await sdk.extractor.getTools();
       const results = [];
       for (const course of courses) {
-        const courseDir = join(ws, "current", course.slug);
+        const courseDir = courseDirFor(workspace, ws, course.slug);
         const courseResults = await sdk.extractor.extractDir(
           join(courseDir, "files"),
           join(courseDir, "extracted"),
@@ -663,7 +750,8 @@ program
           c.title.toLowerCase().includes(opts.course!.toLowerCase()),
         );
         if (!course) fail(new DigicampusError("Course not found", "NOT_FOUND"));
-        const filesDir = join(ws, "current", course.slug, "files");
+        const courseDir = courseDirFor(workspace, ws, course.slug);
+        const filesDir = join(courseDir, "files");
         const { readdir: rd } = await import("node:fs/promises");
         const matches: string[] = [];
         async function walk(d: string) {
@@ -678,7 +766,7 @@ program
         if (!matches.length) fail(new DigicampusError("File not found", "NOT_FOUND"));
         const src = matches[0];
         title = basename(src);
-        outDir = join(ws, "current", course.slug, "extracted", extractSlug(title));
+        outDir = join(courseDir, "extracted", extractSlug(title));
         await sdk.extractor.extractFile(src, outDir);
       }
 
@@ -700,6 +788,8 @@ program
   .description("Check extraction tool availability")
   .action(async () => {
     try {
+      const sdk = await getSdk();
+      const oauth = await probeOAuthServer(sdk.config.instanceOrigin, sdk.config.oauth?.clientId);
       const tools = await detectTools();
       const hints = toolHints(tools);
       const update = await checkForUpdates(CLI_ENTRY);
@@ -709,6 +799,13 @@ program
           ? `update:      ${update.current} → ${update.latest} — run: digicampus update`
           : `update:      up to date`,
         "",
+        `oauth:       ${oauth.status}${oauth.message ? ` — ${oauth.message}` : ""}`,
+        oauth.status === "broken_setup"
+          ? `oauth fix:   university admin → ${oauth.endpoints.admin}`
+          : oauth.status === "ready" && !sdk.config.oauth?.clientId
+            ? `oauth tip:   register client → docs/OAUTH.md`
+            : "",
+        "",
         `pdftotext:   ${tools.pdftotext || "MISSING"}`,
         `pdftoppm:    ${tools.pdftoppm || "MISSING"}`,
         `libreoffice: ${tools.soffice || "MISSING (native PPTX/DOCX text fallback active)"}`,
@@ -716,7 +813,7 @@ program
         `unzip:       ${tools.unzip || "MISSING"}`,
       ];
       if (hints.length) lines.push("", ...hints);
-      output({ cliVersion: getCliVersion(), update, tools, hints }, lines.join("\n"));
+      output({ cliVersion: getCliVersion(), update, oauth, tools, hints }, lines.filter(Boolean).join("\n"));
     } catch (e) {
       fail(e);
     }
@@ -753,10 +850,11 @@ program
     const sdk = await getSdk();
     const out = expandPath(opts.output || sdk.workspacePath);
     output(null, `Watching every ${opts.interval} → ${out} (Ctrl+C to stop)`);
+    const semOpts = semesterSyncOptions(sdk, {});
     for (;;) {
       try {
-        const report = await sdk.sync.sync({ outputDir: out, include: ["wiki", "news", "calendar"] });
-        await sdk.studium.build(out, sdk.config.instanceOrigin);
+        const report = await sdk.sync.sync({ outputDir: out, include: ["wiki", "news", "calendar"], ...semOpts });
+        await sdk.studium.build(out, sdk.config.instanceOrigin, semOpts);
         if (!globalOpts.quiet) {
           output(report, `[${new Date().toISOString()}] ${report.downloaded} new files`);
         }
@@ -764,6 +862,53 @@ program
         console.error(e);
       }
       await sleep(ms);
+    }
+  });
+
+program
+  .command("semesters")
+  .description("List Stud.IP semesters and show the calendar-current one")
+  .action(async () => {
+    try {
+      const sdk = await getSdk();
+      const { SemestersResource, computeSemesterProgress } = await import("digicampus-sdk");
+      const semesters = new SemestersResource(sdk.client);
+      const all = await semesters.listAll();
+      const current = await semesters.getCurrent();
+      const progress = current ? computeSemesterProgress(current) : undefined;
+      output(
+        {
+          current: current
+            ? {
+                id: current.id,
+                title: current.attributes?.title,
+                start: current.attributes?.start,
+                end: current.attributes?.end,
+                ...progress,
+              }
+            : null,
+          semesters: all.slice(-12).map((s) => ({
+            id: s.id,
+            title: s.attributes?.title,
+            start: s.attributes?.start,
+            end: s.attributes?.end,
+            current: s.id === current?.id,
+          })),
+        },
+        [
+          current
+            ? `Current: ${current.attributes?.title} (${current.id})${progress ? ` — week ${progress.weekNumber}, day ${progress.daysElapsed}/${progress.daysTotal} (${progress.progressPercent}%)` : ""}`
+            : "No current semester",
+          "Default sync/studium/courses commands focus on this semester. Use --semester \"<name>\" or --all-semesters for others.",
+          "",
+          ...all.slice(-8).map((s) => {
+            const mark = s.id === current?.id ? " ← current" : "";
+            return `${s.attributes?.title}${mark}`;
+          }),
+        ].join("\n"),
+      );
+    } catch (e) {
+      fail(e);
     }
   });
 
