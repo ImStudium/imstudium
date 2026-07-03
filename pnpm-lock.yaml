@@ -17,12 +17,12 @@ importers:
 
   packages/cli:
     dependencies:
-      '@digicampus/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       commander:
         specifier: ^13.1.0
         version: 13.1.0
+      digicampus-sdk:
+        specifier: workspace:*
+        version: link:../sdk
     optionalDependencies:
       playwright:
         specifier: ^1.52.0
@@ -37,15 +37,18 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.6(@types/node@22.20.0)
 
   packages/mcp:
     dependencies:
-      '@digicampus/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.1
         version: 1.29.0(zod@4.4.3)
+      digicampus-sdk:
+        specifier: workspace:*
+        version: link:../sdk
     devDependencies:
       '@types/node':
         specifier: ^22.15.21
@@ -56,6 +59,9 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.6(@types/node@22.20.0)
 
   packages/sdk:
     dependencies:

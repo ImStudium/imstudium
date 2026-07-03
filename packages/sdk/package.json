@@ -1,5 +1,5 @@
 {
-  "name": "@digicampus/sdk",
+  "name": "digicampus-sdk",
   "version": "0.1.0",
   "description": "DigiCampus Stud.IP JSON:API client, auth, sync, and Studium workspace builder",
   "license": "MIT",
@@ -17,7 +17,8 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run build && pnpm run typecheck"
   },
   "dependencies": {
     "keytar": "^7.9.0"

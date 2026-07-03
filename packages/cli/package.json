@@ -7,14 +7,16 @@
   "bin": {
     "digicampus": "./dist/cli.js"
   },
-  "files": ["dist"],
+  "files": ["dist", "skills", "mcp.json"],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "test": "vitest run",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run build && pnpm run typecheck"
   },
   "dependencies": {
-    "@digicampus/sdk": "workspace:*",
+    "digicampus-sdk": "workspace:*",
     "commander": "^13.1.0"
   },
   "optionalDependencies": {
@@ -23,7 +25,8 @@
   "devDependencies": {
     "@types/node": "^22.15.21",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.1"
   },
   "engines": {
     "node": ">=20"

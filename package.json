@@ -3,13 +3,18 @@
   "private": true,
   "version": "0.1.0",
   "description": "DigiCampus Studium OS — extraction harness + study workspace for Stud.IP",
-  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/patrick-schroeppel/digicampus.git"
+  },
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "validate": "pnpm typecheck && pnpm build && pnpm test",
+    "test:e2e": "bash scripts/test-e2e.sh"
   },
   "devDependencies": {
     "turbo": "^2.5.4",
