@@ -89,7 +89,7 @@ digicampus --json studium
 | `extract` | Text + page images from all synced materials |
 | `view` | Build `viewer.html` for Playwright / browser agents (fast) |
 | `doctor` | Check extraction tools (poppler, LibreOffice) |
-| `update` | Check npm version, upgrade global CLI, refresh agent harness |
+| `update` | Upgrade CLI + refresh agent skills/MCP |
 | `watch --interval 1h` | Continuous sync |
 | `discover` | List JSON:API routes |
 
