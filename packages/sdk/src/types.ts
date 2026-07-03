@@ -116,6 +116,7 @@ export interface StudiumCourse {
   achievement?: string;
   credits?: number;
   semester?: string;
+  semesterId?: string;
   lecturers?: string[];
   schedule: StudiumScheduleEntry[];
   examDates: StudiumExamDate[];
@@ -145,12 +146,46 @@ export interface StudiumExamDate {
   daysRemaining?: number;
 }
 
+/** Temporal context so agents default to "now" instead of the oldest enrollment. */
+export interface StudiumSemesterInfo {
+  id: string;
+  title: string;
+  slug: string;
+  isCurrent: boolean;
+  start?: string;
+  end?: string;
+  /** ISO-week-ish counter within the semester, e.g. "week 5". */
+  weekNumber?: number;
+  daysElapsed?: number;
+  daysTotal?: number;
+  progressPercent?: number;
+}
+
+export interface StudiumSemesterSummary {
+  id: string;
+  title: string;
+  slug: string;
+  isCurrent: boolean;
+  synced: boolean;
+}
+
 export interface StudiumWorkspace {
-  schemaVersion: "1";
+  schemaVersion: "2";
   generatedAt: string;
   instanceUrl: string;
   user?: { id: string; name: string };
+  /** The semester this workspace snapshot focuses on — always check this first. */
+  activeSemester: StudiumSemesterInfo;
+  /** Nearby semesters not synced by default; sync explicitly with --semester. */
+  otherSemesters: StudiumSemesterSummary[];
+  /** Relative folder holding course dirs for this snapshot, e.g. "SS2026" or "archive/WS2025-26". */
+  workspaceFolder: string;
+  /** @deprecated kept for backward compat; use activeSemester.title */
   semesters: string[];
+  /** @deprecated kept for backward compat; use activeSemester.id */
+  semesterId?: string;
+  /** @deprecated kept for backward compat; use activeSemester.slug */
+  semesterSlug?: string;
   courses: StudiumCourse[];
   nextDeadlines: StudiumExamDate[];
 }
@@ -186,6 +221,8 @@ export interface DigicampusConfig {
     clientId?: string;
     redirectUri?: string;
   };
+  /** Override Stud.IP semester id for sync/studium (default: calendar current). */
+  semesterId?: string;
   user?: { id: string; name: string };
 }
 

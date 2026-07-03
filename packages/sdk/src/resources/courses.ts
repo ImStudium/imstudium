@@ -6,6 +6,28 @@ import type {
   UserAttributes,
 } from "../types.js";
 import { slugify } from "../config.js";
+import {
+  filterCoursesForSemester,
+  findCurrentSemester,
+  type SemesterResource,
+  SemestersResource,
+  semesterSlug,
+} from "../semesters.js";
+
+export interface ListMineOptions {
+  semesterId?: string;
+  allSemesters?: boolean;
+}
+
+export interface ResolvedSemesterContext {
+  semester: SemesterResource;
+  slug: string;
+  title: string;
+  /** Whether this is the calendar-current semester (vs. an explicit override). */
+  isCurrent: boolean;
+  /** All known semesters — cheap to reuse for "other semesters" hints. */
+  allSemesters: SemesterResource[];
+}
 
 type CourseResource = JsonApiResource<"courses"> & { attributes?: CourseAttributes };
 type UserResource = JsonApiResource<"users"> & { attributes?: UserAttributes };
@@ -14,7 +36,11 @@ type EventResource = JsonApiResource<"schedule-entries" | "events"> & {
 };
 
 export class CoursesResource {
-  constructor(private client: StudIpClient) {}
+  readonly semesters: SemestersResource;
+
+  constructor(private client: StudIpClient) {
+    this.semesters = new SemestersResource(client);
+  }
 
   async getMe(): Promise<UserResource> {
     const doc = await this.client.get<UserResource>("/users/me");
@@ -24,9 +50,48 @@ export class CoursesResource {
     return doc.data;
   }
 
-  async listMine(userId?: string): Promise<CourseResource[]> {
+  async listMine(userId?: string, options: ListMineOptions = {}): Promise<CourseResource[]> {
     const user = userId ? { id: userId } : await this.getMe();
-    return this.client.paginateAll<CourseResource>(`/users/${user.id}/courses`);
+    const all = await this.client.paginateAll<CourseResource>(`/users/${user.id}/courses`);
+    if (options.allSemesters) return all;
+
+    const allSemesters = await this.semesters.listAll();
+    let target: SemesterResource | null = null;
+    if (options.semesterId) {
+      target = allSemesters.find((s) => s.id === options.semesterId) ?? null;
+      if (!target) target = await this.semesters.get(options.semesterId);
+    } else {
+      target = findCurrentSemester(allSemesters);
+    }
+    if (!target) return all;
+    return filterCoursesForSemester(all, target, allSemesters) as CourseResource[];
+  }
+
+  async resolveSemesterContext(options?: {
+    semesterId?: string;
+    semesterLabel?: string;
+    allSemesters?: boolean;
+  }): Promise<ResolvedSemesterContext | null> {
+    if (options?.allSemesters) return null;
+    const all = await this.semesters.listAll();
+    const calendarCurrent = findCurrentSemester(all);
+    let target: SemesterResource | null = null;
+    if (options?.semesterId) {
+      target = all.find((s) => s.id === options.semesterId) ?? null;
+    } else if (options?.semesterLabel) {
+      target = this.semesters.resolveByLabel(all, options.semesterLabel);
+    } else {
+      target = calendarCurrent;
+    }
+    if (!target) return null;
+    const title = String(target.attributes?.title || target.id);
+    return {
+      semester: target,
+      slug: semesterSlug(title),
+      title,
+      isCurrent: !!calendarCurrent && calendarCurrent.id === target.id,
+      allSemesters: all,
+    };
   }
 
   async listAll(filters?: { semester?: string; q?: string }): Promise<CourseResource[]> {

@@ -5,6 +5,7 @@ import { CoursesResource } from "./resources/courses.js";
 import { FilesResource, NewsResource, WikiResource } from "./resources/files.js";
 import { ScheduleResource } from "./resources/courses.js";
 import { paths, ensureDir, slugify } from "./config.js";
+import { migrateLegacyCurrentFolder, resolveWorkspaceFolder } from "./semesters.js";
 import type { SyncReport, SyncState, SyncStateEntry } from "./types.js";
 
 export interface SyncOptions {
@@ -14,7 +15,12 @@ export interface SyncOptions {
   concurrency?: number;
   include?: Array<"wiki" | "news" | "calendar">;
   courseFilter?: (course: { id: string; title: string }) => boolean;
+  /** Stud.IP semester id — default: calendar current semester. */
+  semesterId?: string;
+  /** Folder label override (default: semester title slug, e.g. SS2026). */
   semesterLabel?: string;
+  /** Sync every enrollment across all semesters. */
+  allSemesters?: boolean;
 }
 
 export class SyncEngine {
@@ -59,7 +65,17 @@ export class SyncEngine {
 
     const state = await this.loadState();
     const me = await this.courses.getMe();
-    const allCourses = await this.courses.listMine(me.id);
+    const semesterCtx = await this.courses.resolveSemesterContext({
+      semesterId: options.semesterId,
+      semesterLabel: options.semesterLabel,
+      allSemesters: options.allSemesters,
+    });
+    const allCourses = await this.courses.listMine(me.id, {
+      semesterId: options.semesterId ?? semesterCtx?.semester.id,
+      allSemesters: options.allSemesters,
+    });
+    const semesterFolder = resolveWorkspaceFolder(semesterCtx, options.allSemesters);
+    if (!options.dryRun) await migrateLegacyCurrentFolder(options.outputDir, semesterFolder);
     const layout = options.layout ?? "flat";
     const concurrency = options.concurrency ?? 8;
 
@@ -87,9 +103,8 @@ export class SyncEngine {
 
     for (const course of filtered) {
       const title = course.attributes?.title || course.id;
-      const semester = options.semesterLabel || "current";
       const courseSlug = slugify(title);
-      const courseDir = join(options.outputDir, semester, courseSlug);
+      const courseDir = join(options.outputDir, semesterFolder, courseSlug);
 
       if (options.include?.includes("wiki")) {
         try {

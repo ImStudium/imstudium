@@ -1,13 +1,20 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { StudIpClient } from "./client.js";
-import { CoursesResource, ScheduleResource } from "./resources/courses.js";
+import { CoursesResource, ScheduleResource, type ResolvedSemesterContext } from "./resources/courses.js";
 import { FilesResource } from "./resources/files.js";
 import { ensureDir, slugify } from "./config.js";
+import {
+  computeSemesterProgress,
+  migrateLegacyCurrentFolder,
+  resolveWorkspaceFolder,
+  semesterSlug,
+} from "./semesters.js";
 import type {
   StudiumCourse,
   StudiumExamDate,
   StudiumScheduleEntry,
+  StudiumSemesterSummary,
   StudiumWorkspace,
 } from "./types.js";
 
@@ -31,7 +38,15 @@ export class StudiumBuilder {
     this.schedule = new ScheduleResource(client);
   }
 
-  async build(workspacePath: string, instanceUrl: string): Promise<StudiumWorkspace> {
+  async build(
+    workspacePath: string,
+    instanceUrl: string,
+    options?: {
+      semesterId?: string;
+      semesterLabel?: string;
+      allSemesters?: boolean;
+    },
+  ): Promise<StudiumWorkspace> {
     await ensureDir(workspacePath);
     const me = await this.courses.getMe();
     const userName =
@@ -39,7 +54,18 @@ export class StudiumBuilder {
       (me.attributes?.username as string) ||
       me.id;
 
-    const rawCourses = await this.courses.listMine(me.id);
+    const semesterCtx = await this.courses.resolveSemesterContext({
+      semesterId: options?.semesterId,
+      semesterLabel: options?.semesterLabel,
+      allSemesters: options?.allSemesters,
+    });
+    const rawCourses = await this.courses.listMine(me.id, {
+      semesterId: options?.semesterId ?? semesterCtx?.semester.id,
+      allSemesters: options?.allSemesters,
+    });
+    const semesterFolder = resolveWorkspaceFolder(semesterCtx, options?.allSemesters);
+    const semesterTitle = semesterCtx?.title || semesterFolder;
+    await migrateLegacyCurrentFolder(workspacePath, semesterFolder);
     const scheduleEntries = await this.schedule.getSchedule(me.id);
 
     const studiumCourses: StudiumCourse[] = [];
@@ -78,7 +104,8 @@ export class StudiumBuilder {
         description: c.attributes?.description,
         achievement: c.attributes?.achievement,
         credits: c.attributes?.credits,
-        semester: "current",
+        semester: semesterTitle,
+        semesterId: semesterCtx?.semester.id,
         schedule: courseSchedule,
         examDates,
         fileCount: fileRefs.length,
@@ -88,7 +115,7 @@ export class StudiumBuilder {
       };
       studiumCourses.push(course);
 
-      const courseDir = join(workspacePath, "current", course.slug);
+      const courseDir = join(workspacePath, semesterFolder, course.slug);
       await ensureDir(courseDir);
       await this.writeCourseBrief(courseDir, course);
     }
@@ -105,12 +132,28 @@ export class StudiumBuilder {
       return new Date(a.date).getTime() - new Date(b.date).getTime();
     });
 
+    const progress = semesterCtx ? computeSemesterProgress(semesterCtx.semester) : undefined;
+    const otherSemesters = this.buildOtherSemesters(semesterCtx);
+
     const workspace: StudiumWorkspace = {
-      schemaVersion: "1",
+      schemaVersion: "2",
       generatedAt: new Date().toISOString(),
       instanceUrl,
       user: { id: me.id, name: userName },
-      semesters: ["current"],
+      activeSemester: {
+        id: semesterCtx?.semester.id || "unknown",
+        title: semesterTitle,
+        slug: semesterCtx?.slug || semesterFolder,
+        isCurrent: options?.allSemesters ? true : (semesterCtx?.isCurrent ?? true),
+        start: semesterCtx?.semester.attributes?.start,
+        end: semesterCtx?.semester.attributes?.end,
+        ...progress,
+      },
+      otherSemesters,
+      workspaceFolder: semesterFolder,
+      semesters: options?.allSemesters ? ["all"] : [semesterTitle],
+      semesterId: semesterCtx?.semester.id,
+      semesterSlug: semesterCtx?.slug || semesterFolder,
       courses: studiumCourses,
       nextDeadlines: allExams.filter((e) => e.date && (e.daysRemaining ?? 999) >= 0).slice(0, 10),
     };
@@ -129,6 +172,26 @@ export class StudiumBuilder {
     } catch {
       return null;
     }
+  }
+
+  /** Nearby semesters not covered by this snapshot — surfaced so agents know how to reach them. */
+  private buildOtherSemesters(
+    ctx: ResolvedSemesterContext | null,
+  ): StudiumSemesterSummary[] {
+    if (!ctx) return [];
+    const current = this.courses.semesters.recentWindow(ctx.allSemesters, ctx.semester, 6);
+    return current
+      .filter((s) => s.id !== ctx.semester.id)
+      .map((s) => {
+        const title = String(s.attributes?.title || s.id);
+        return {
+          id: s.id,
+          title,
+          slug: semesterSlug(title),
+          isCurrent: false,
+          synced: false,
+        };
+      });
   }
 
   private async writeCourseBrief(dir: string, course: StudiumCourse): Promise<void> {
@@ -169,18 +232,33 @@ export class StudiumBuilder {
 
   private async writeStudiumMd(workspacePath: string, ws: StudiumWorkspace): Promise<void> {
     const existingNotes = await readNotesSection(join(workspacePath, "STUDIUM.md"));
+    const sem = ws.activeSemester;
+    const progress =
+      sem.weekNumber != null
+        ? ` — week ${sem.weekNumber} · day ${sem.daysElapsed}/${sem.daysTotal} (${sem.progressPercent}%)`
+        : "";
     const lines = [
       "# Studium Overview",
       "",
+      `📅 **Focus: ${sem.title}**${progress} — courses live in \`${ws.workspaceFolder}/\``,
       `Generated: ${ws.generatedAt}`,
       `Student: ${ws.user?.name || "—"}`,
       "",
-      "## Courses",
-      "",
     ];
 
+    if (ws.otherSemesters.length) {
+      const names = ws.otherSemesters.map((s) => s.title).join(", ");
+      lines.push(
+        `_Not synced by default: ${names}. Fetch one with \`digicampus sync --semester "<name>"\`._`,
+        "",
+      );
+    }
+
+    lines.push("## Courses", "");
     for (const c of ws.courses) {
-      lines.push(`- **${c.title}** (${c.fileCount} files) — \`${c.slug}\``);
+      lines.push(
+        `- **${c.title}** (${c.fileCount} files) — \`${c.slug}\`${c.semester ? ` · ${c.semester}` : ""}`,
+      );
     }
 
     if (ws.nextDeadlines.length) {
