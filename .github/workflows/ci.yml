@@ -7,19 +7,37 @@ on:
     branches: [main, master]
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pm: pnpm
+            install: pnpm install --frozen-lockfile
+            run: pnpm run validate
+            cache: pnpm
+          - pm: bun
+            install: bun install --frozen-lockfile
+            run: bun run validate
+            cache: ""
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        if: matrix.pm == 'pnpm'
+
+      - uses: oven-sh/setup-bun@v2
+        if: matrix.pm == 'bun'
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: pnpm
+          node-version: 22
+          cache: ${{ matrix.cache }}
 
-      - run: pnpm install --frozen-lockfile || pnpm install
-      - run: pnpm validate
+      - name: Install dependencies (${{ matrix.pm }})
+        run: ${{ matrix.install }}
+
+      - name: Validate (${{ matrix.pm }})
+        run: ${{ matrix.run }}

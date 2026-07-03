@@ -3,6 +3,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/common.sh
+source "$ROOT/scripts/lib/common.sh"
+
 CLI="$ROOT/packages/cli/dist/cli.js"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -31,17 +34,17 @@ EOF
 echo "sample lecture notes" > "$TMP/current/$COURSE_SLUG/files/vorlesung.txt"
 echo "# Slides" > "$TMP/current/$COURSE_SLUG/files/folien.md"
 
-node "$CLI" doctor --json | grep -q '"schemaVersion": "1"'
-node "$CLI" extract --course "$COURSE_SLUG" -o "$TMP" --json | grep -q '"extracted": 2'
+run_runtime "$CLI" doctor --json | grep -q '"schemaVersion": "1"'
+run_runtime "$CLI" extract --course "$COURSE_SLUG" -o "$TMP" --json | grep -q '"extracted": 2'
 
 EXTRACTED="$TMP/current/$COURSE_SLUG/extracted"
 test -d "$EXTRACTED"
 test -f "$EXTRACTED/vorlesung-txt/content.md"
 
-node "$CLI" extract --course "$COURSE_SLUG" -o "$TMP" --json | grep -q '"skipped": 2'
+run_runtime "$CLI" extract --course "$COURSE_SLUG" -o "$TMP" --json | grep -q '"skipped": 2'
 
-node "$CLI" view --dir "$EXTRACTED/vorlesung-txt" --json | grep -q 'requiredAction'
+run_runtime "$CLI" view --dir "$EXTRACTED/vorlesung-txt" --json | grep -q 'requiredAction'
 
-node "$CLI" setup status --json | grep -q '"detected"'
+run_runtime "$CLI" setup status --json | grep -q '"detected"'
 
 echo "==> E2E OK"

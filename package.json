@@ -7,14 +7,18 @@
     "type": "git",
     "url": "https://github.com/paddy-shrp/digicampus.git"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "clean": "turbo run clean",
-    "validate": "pnpm typecheck && pnpm build && pnpm test",
-    "test:e2e": "bash scripts/test-e2e.sh"
+    "validate": "turbo run typecheck build test",
+    "test:e2e": "bash scripts/test-e2e.sh",
+    "install:dev": "bash scripts/install-dev.sh"
   },
   "devDependencies": {
     "turbo": "^2.5.4",
@@ -22,6 +26,7 @@
   },
   "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "bun": ">=1.1"
   }
 }

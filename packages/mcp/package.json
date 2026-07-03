@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist",
-    "prepublishOnly": "pnpm run build && pnpm run typecheck"
+    "prepublishOnly": "npm run build && npm run typecheck"
   },
   "dependencies": {
     "digicampus-sdk": "workspace:*",

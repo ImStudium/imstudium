@@ -4,6 +4,14 @@
 
 ## Onboard (first time)
 
+**One line (no Bun / no global install):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/paddy-shrp/digicampus/main/scripts/install.sh | bash
+```
+
+Or:
+
 ```bash
 npx -y digicampus onboard -y -o ~/Studium
 ```

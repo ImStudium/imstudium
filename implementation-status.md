@@ -9,7 +9,7 @@
 | **Version** | 0.1.0 |
 | **Tag** | `v0.1.0` |
 | **Date** | 2026-07-03 |
-| **Gate** | ✅ CI green · ✅ `pnpm validate` · ⚠️ npm publish (2FA token required) |
+| **Gate** | ✅ CI (pnpm + Bun) · ✅ `validate` · ⚠️ npm publish (2FA token required) |
 
 ## Shipped (v0.1.0)
 
@@ -40,11 +40,10 @@
 | `digicampus-company` hub | P3 | Only if commercial SKU |
 | Multi-instance profiles | P3 | `--profile` flag |
 
-## Ship checklist (`pnpm validate`)
+## Ship checklist (`validate`)
 
 ```bash
-pnpm install
-pnpm validate          # typecheck + build + test
+bun install && bun run validate    # or: pnpm install && pnpm run validate
 pnpm publish -r --dry-run
 ```
 

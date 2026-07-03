@@ -8,6 +8,8 @@ Universal guide for **all** agent harnesses.
 npx -y digicampus onboard -y -o ~/Studium
 ```
 
+Or: `curl -fsSL https://raw.githubusercontent.com/paddy-shrp/digicampus/main/scripts/install.sh | bash`
+
 Configures **only detected** harnesses (no churn elsewhere):
 
 | Harness | Skills | MCP config |

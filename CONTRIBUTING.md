@@ -5,15 +5,21 @@ Thanks for contributing to DigiCampus Studium OS.
 ## Setup
 
 ```bash
-git clone https://github.com/patrick-schroeppel/digicampus.git
+git clone https://github.com/paddy-shrp/digicampus.git
 cd digicampus
-pnpm install
-pnpm validate
+bash scripts/install-dev.sh   # auto: Bun → pnpm → npm
+```
+
+Or manually:
+
+```bash
+bun install && bun run validate    # preferred
+# pnpm install && pnpm run validate
 ```
 
 ## Before a PR
 
-1. `pnpm validate` must pass (typecheck + build + test)
+1. `bun run validate` or `pnpm run validate` must pass (typecheck + build + test)
 2. Add tests for new SDK logic
 3. Update `implementation-status.md` if shipping a feature
 4. Update `CHANGELOG.md` under `[Unreleased]` or version section

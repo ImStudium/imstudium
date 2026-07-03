@@ -1,0 +1,5 @@
+[bun]
+# Native modules (keytar) need lifecycle scripts in CI/dev.
+install = { auto = "auto" }
+
+[install.scopes]
