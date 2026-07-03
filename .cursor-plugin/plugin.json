@@ -1,0 +1,13 @@
+{
+  "name": "digicampus",
+  "displayName": "DigiCampus Studium OS",
+  "description": "Skills and MCP for Stud.IP sync, Klausur planning, and Studium workspace agents.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Patrick Schröppel",
+    "url": "https://github.com/patrick-schroeppel"
+  },
+  "repository": "https://github.com/patrick-schroeppel/digicampus",
+  "license": "MIT",
+  "keywords": ["digicampus", "studip", "studium", "klausur", "mcp", "education"]
+}
