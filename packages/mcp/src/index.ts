@@ -70,7 +70,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         try {
           const { readFile } = await import("node:fs/promises");
           courseMd = await readFile(
-            join(workspacePath, "current", course.slug, "COURSE.md"),
+            join(workspacePath, ws.workspaceFolder, course.slug, "COURSE.md"),
             "utf-8",
           );
         } catch {
@@ -88,7 +88,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
         if (!course) return jsonText({ error: "Course not found" });
 
-        const filesDir = join(workspacePath, "current", course.slug, "files");
+        const filesDir = join(workspacePath, ws.workspaceFolder, course.slug, "files");
         const matches = await findFilesRecursive(filesDir, query);
         return jsonText({ course: course.title, matches });
       }
@@ -106,7 +106,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
         }
 
-        const filesDir = join(workspacePath, "current", course.slug, "files");
+        const filesDir = join(workspacePath, ws.workspaceFolder, course.slug, "files");
         const candidates = await findFilesRecursive(filesDir, fileArg);
         if (candidates.length === 0) {
           return jsonText({
@@ -116,7 +116,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const src = candidates[0];
 
-        const outDir = join(workspacePath, "current", course.slug, "extracted", extractSlug(basename(src)));
+        const outDir = join(
+          workspacePath,
+          ws.workspaceFolder,
+          course.slug,
+          "extracted",
+          extractSlug(basename(src)),
+        );
         const result = await sdk.extractor.extractFile(src, outDir);
         if (result.error) {
           return jsonText({ error: result.error, hint: result.hint, source: src });
@@ -158,22 +164,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "digicampus_sync": {
         const course = (args as { course?: string })?.course;
+        const semOpts = { semesterId: sdk.config.semesterId };
         const report = await sdk.sync.sync({
           outputDir: workspacePath,
           include: ["wiki", "news", "calendar"],
+          ...semOpts,
           courseFilter: course
             ? (c) => c.title.toLowerCase().includes(course.toLowerCase())
             : undefined,
         });
-        const workspace = await sdk.studium.build(workspacePath, sdk.config.instanceOrigin);
-        return jsonText({ report, workspaceSummary: { courses: workspace.courses.length } });
+        const workspace = await sdk.studium.build(workspacePath, sdk.config.instanceOrigin, semOpts);
+        return jsonText({
+          report,
+          workspaceSummary: {
+            courses: workspace.courses.length,
+            activeSemester: workspace.activeSemester,
+            workspaceFolder: workspace.workspaceFolder,
+            otherSemesters: workspace.otherSemesters,
+          },
+        });
       }
 
       case "digicampus_sync_dry_run": {
         const course = (args as { course?: string })?.course;
+        const semOpts = { semesterId: sdk.config.semesterId };
         const report = await sdk.sync.sync({
           outputDir: workspacePath,
           dryRun: true,
+          ...semOpts,
           courseFilter: course
             ? (c) => c.title.toLowerCase().includes(course.toLowerCase())
             : undefined,
@@ -183,8 +201,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "digicampus_list_courses": {
         const me = await sdk.courses.getMe();
-        const courses = await sdk.courses.listMine(me.id);
+        const ctx = await sdk.courses.resolveSemesterContext({ semesterId: sdk.config.semesterId });
+        const courses = await sdk.courses.listMine(me.id, { semesterId: ctx?.semester.id });
         return jsonText({
+          semester: ctx
+            ? { id: ctx.semester.id, title: ctx.title, slug: ctx.slug, isCurrent: ctx.isCurrent }
+            : undefined,
+          hint: "This defaults to the current semester. Pass allSemesters or sync --semester for older terms.",
           courses: courses.map((c) => ({
             id: c.id,
             title: c.attributes?.title,
