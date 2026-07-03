@@ -5,9 +5,11 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createSdk, expandPath, type StudiumWorkspace } from "@digicampus/sdk";
-import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { createSdk, expandPath, extractSlug, type StudiumWorkspace } from "digicampus-sdk";
+import { readdir, readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { MCP_TOOLS } from "./tools.js";
+import { materialVisualPayload } from "./visual.js";
 
 const server = new Server(
   { name: "digicampus-studium", version: "0.1.0" },
@@ -29,72 +31,7 @@ function jsonText(data: unknown) {
 }
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    {
-      name: "studium_overview",
-      description:
-        "Full course map and semester context from local studium.json. Call this first for study planning.",
-      inputSchema: { type: "object", properties: {} },
-    },
-    {
-      name: "studium_klausuren",
-      description: "Exam timeline with days-remaining from klausuren.md / studium.json",
-      inputSchema: { type: "object", properties: {} },
-    },
-    {
-      name: "studium_course_brief",
-      description: "One course: schedule, materials count, exams, COURSE.md content",
-      inputSchema: {
-        type: "object",
-        properties: {
-          course: { type: "string", description: "Course title substring or id" },
-        },
-        required: ["course"],
-      },
-    },
-    {
-      name: "studium_find_materials",
-      description: "Search synced files by course and optional filename query",
-      inputSchema: {
-        type: "object",
-        properties: {
-          course: { type: "string", description: "Course title substring" },
-          query: { type: "string", description: "Filename search" },
-        },
-        required: ["course"],
-      },
-    },
-    {
-      name: "digicampus_sync",
-      description: "Refresh workspace from live DigiCampus (requires login). Full sync + rebuild.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          course: { type: "string", description: "Optional single course filter" },
-        },
-      },
-    },
-    {
-      name: "digicampus_sync_dry_run",
-      description: "Preview pending file downloads without downloading",
-      inputSchema: {
-        type: "object",
-        properties: {
-          course: { type: "string" },
-        },
-      },
-    },
-    {
-      name: "digicampus_list_courses",
-      description: "Live course list from DigiCampus API (when workspace is stale)",
-      inputSchema: { type: "object", properties: {} },
-    },
-    {
-      name: "digicampus_whoami",
-      description: "Check authentication status and current user",
-      inputSchema: { type: "object", properties: {} },
-    },
-  ],
+  tools: [...MCP_TOOLS],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -154,6 +91,69 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const filesDir = join(workspacePath, "current", course.slug, "files");
         const matches = await findFilesRecursive(filesDir, query);
         return jsonText({ course: course.title, matches });
+      }
+
+      case "studium_read_material": {
+        const ws = await loadWorkspace(sdk);
+        const courseArg = String((args as { course?: string })?.course || "");
+        const fileArg = String((args as { file?: string })?.file || "").toLowerCase();
+        const page = (args as { page?: number })?.page;
+
+        const course = ws.courses.find((c) =>
+          c.title.toLowerCase().includes(courseArg.toLowerCase()),
+        );
+        if (!course) {
+          return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
+        }
+
+        const filesDir = join(workspacePath, "current", course.slug, "files");
+        const candidates = await findFilesRecursive(filesDir, fileArg);
+        if (candidates.length === 0) {
+          return jsonText({
+            error: `No file matching "${fileArg}" in ${course.title}`,
+            hint: "Use studium_find_materials to list files, or digicampus_sync to refresh",
+          });
+        }
+        const src = candidates[0];
+
+        const outDir = join(workspacePath, "current", course.slug, "extracted", extractSlug(basename(src)));
+        const result = await sdk.extractor.extractFile(src, outDir);
+        if (result.error) {
+          return jsonText({ error: result.error, hint: result.hint, source: src });
+        }
+
+        let content = "";
+        try {
+          content = await readFile(join(outDir, "content.md"), "utf-8");
+        } catch {
+          // extraction may be image-only
+        }
+        if (page && content) {
+          const sections = content.split(/^## (?:Page|Slide) /m);
+          const match = sections.find((s) => s.startsWith(`${page}\n`) || s.startsWith(`${page}\r`));
+          if (match) content = `## Page ${match}`;
+        }
+
+        const visual = await materialVisualPayload(outDir, basename(src));
+        let { pageImages, viewerHtml } = visual;
+        if (page) {
+          pageImages = pageImages.filter((p) => new RegExp(`-0*${page}\\.`).test(p));
+        }
+
+        return jsonText({
+          course: course.title,
+          source: src,
+          kind: result.kind,
+          pages: result.pages,
+          content,
+          pageImages,
+          viewerHtml,
+          requiredAction: visual.requiredAction,
+          viewerFileUrl: visual.viewerFileUrl,
+          methods: visual.methods,
+          hint: pageImages.length ? undefined : result.hint || "Install poppler for slide images: digicampus doctor",
+          otherMatches: candidates.slice(1),
+        });
       }
 
       case "digicampus_sync": {
