@@ -4,6 +4,24 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-07-04
+
+### Added
+
+- `extraction-guidance.ts` — single source of truth for agent extraction limits
+- `searchGuidance.extractionLimits` on `studium_overview` (no LaTeX, OCR limits, page PNGs mandatory)
+
+### Changed
+
+- Skills, AGENTS.md, llms.txt, and MCP tool hints document formula/OCR limitations
+- Fix npm `bin` paths (`dist/cli.js` without `./`)
+
+## [0.1.2] — 2026-07-04
+
+### Fixed
+
+- Publishable package deps (`^0.1.2` instead of `workspace:*`) so `npx @imstudium/cli` installs correctly
+
 ## [0.1.1] — 2026-07-04
 
 ### Added
@@ -57,5 +75,7 @@ All notable changes to ImStudium.
 - OAuth2 PKCE requires university-registered client
 - Courseware plugin files not in JSON:API (Stud.IP 5.4)
 
+[0.1.3]: https://github.com/paddy-shrp/imstudium/releases/tag/v0.1.3
+[0.1.2]: https://github.com/paddy-shrp/imstudium/releases/tag/v0.1.2
 [0.1.1]: https://github.com/paddy-shrp/imstudium/releases/tag/v0.1.1
 [0.1.0]: https://github.com/paddy-shrp/imstudium/releases/tag/v0.1.0
