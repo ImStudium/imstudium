@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import { ensureDir, slugify } from "./config.js";
+import {
+  buildCourseSearchIndex,
+} from "./search-corpus.js";
 import type { ExtractManifest, ExtractResult, MaterialKind } from "./types.js";
+import type { StudiumCourse } from "./types.js";
 
 const exec = promisify(execFile);
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -215,7 +219,13 @@ export class Extractor {
   async extractDir(
     filesDir: string,
     outRoot: string,
-    opts: { images?: boolean; dpi?: number; force?: boolean } = {},
+    opts: {
+      images?: boolean;
+      dpi?: number;
+      force?: boolean;
+      course?: Pick<StudiumCourse, "title" | "path">;
+      workspaceRoot?: string;
+    } = {},
   ): Promise<ExtractResult[]> {
     const files = await walkFiles(filesDir);
     const results: ExtractResult[] = [];
@@ -224,6 +234,12 @@ export class Extractor {
       const outDir = join(outRoot, extractSlug(basename(f)));
       results.push(await this.extractFile(f, outDir, opts));
     }
+
+    if (opts.course) {
+      const courseDir = filesDir.replace(/\/files\/?$/, "");
+      await buildCourseSearchIndex(courseDir, opts.course, opts.workspaceRoot);
+    }
+
     return results;
   }
 

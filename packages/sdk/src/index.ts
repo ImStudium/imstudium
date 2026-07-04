@@ -17,6 +17,8 @@ export * from "./login-helper.js";
 export * from "./ui.js";
 export * from "./onboard-ui.js";
 export * from "./semesters.js";
+export * from "./search-corpus.js";
+export * from "./workspace-path.js";
 export * from "./browser-profile.js";
 export * from "./oauth.js";
 export * from "./sync.js";
