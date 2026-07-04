@@ -4,6 +4,26 @@
   "description": "DigiCampus Studium OS MCP server — study planning tools for LLMs",
   "license": "MIT",
   "type": "module",
+  "author": "Patrick Schröppel",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paddy-shrp/digicampus.git"
+  },
+  "homepage": "https://github.com/paddy-shrp/digicampus#readme",
+  "bugs": {
+    "url": "https://github.com/paddy-shrp/digicampus/issues"
+  },
+  "keywords": [
+    "digicampus",
+    "studip",
+    "studium",
+    "mcp",
+    "cursor",
+    "claude",
+    "codex",
+    "windsurf",
+    "opencode"
+  ],
   "bin": {
     "digicampus-mcp": "./dist/index.js"
   },
