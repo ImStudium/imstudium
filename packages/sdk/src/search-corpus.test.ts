@@ -43,7 +43,7 @@ describe("pageRef", () => {
 
 describe("parseExtractionChunks", () => {
   it("indexes only meaningful pages", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "dc-chunk-"));
+    const dir = mkdtempSync(join(tmpdir(), "is-chunk-"));
     writeFileSync(join(dir, "manifest.json"), JSON.stringify({ source: "/tmp/x.pdf", kind: "pdf" }));
     writeFileSync(
       join(dir, "content.md"),
@@ -61,7 +61,7 @@ describe("parseExtractionChunks", () => {
 
 describe("agentSearchGuidance", () => {
   it("points agents at native grep, not a custom search tool", () => {
-    const wsRoot = mkdtempSync(join(tmpdir(), "dc-ws-"));
+    const wsRoot = mkdtempSync(join(tmpdir(), "is-ws-"));
     mkdirSync(join(wsRoot, "SS2026/Test/search"), { recursive: true });
     const workspace = {
       schemaVersion: "2",
