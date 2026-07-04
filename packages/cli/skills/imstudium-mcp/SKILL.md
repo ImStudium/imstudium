@@ -56,4 +56,10 @@ Prefer local tools before `imstudium_sync` (network + auth).
 
 ## Visual comprehension (important)
 
-`studium_read_material` returns `content` (text) and `pageImages` (PNG paths). Slides carry diagrams, plots, and formulas that text misses — **read the `pageImages` files** with your image-reading tool before explaining slide content. Use the `page` argument to target one slide.
+`studium_read_material` returns `content` (text) and `pageImages` (PNG paths).
+
+**No LaTeX in extracted text** — poppler/Tesseract only. `content.md` and corpus hits are for discovery; formulas are often wrong or missing in text.
+
+Slides carry diagrams, plots, and formulas that text misses — **read the `pageImages` files** with your image-reading tool before explaining slide content. Use the `page` argument to target one slide.
+
+`studium_overview` → `searchGuidance.extractionLimits` for the full list.

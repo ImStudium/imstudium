@@ -14,6 +14,21 @@ allowed-tools:
 
 Slides are **visual**. `content.md` text misses diagrams, plots, formulas, tables, and layout.
 
+## Extraction limits (know this)
+
+ImStudium does **not** produce LaTeX `$...$` in markdown. Local tools only:
+
+| Source | What you get in `content.md` |
+|--------|------------------------------|
+| Typed PDF | poppler Unicode text — math symbols at best, not LaTeX |
+| Scanned / handwritten | Tesseract OCR — **unreliable for formulas** (`_(OCR)_` prefix) |
+| PPTX (XML fallback) | Slide text only — Office Math omitted |
+| `.tex` source files | LaTeX passthrough as-is |
+
+**corpus.jsonl** is for finding pages by keyword — not for answering math from OCR text alone.
+
+For any formula, diagram, plot, or table: **read `pageImages` or open `viewerFileUrl`** before explaining.
+
 ## Rule (all agents)
 
 **Never summarize slide content from text alone.** Before answering:

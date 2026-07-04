@@ -55,6 +55,17 @@ Each JSONL line includes `ref` (cite as `SS2026/Course#file.pdf:5`), `text`, `pa
 
 See `llms.txt` at the workspace root.
 
+## Extraction limits (agents)
+
+Local extract (`imstudium extract`) uses poppler + optional Tesseract — **not** LaTeX-in-markdown.
+
+- **Typed PDFs:** Unicode text in `content.md` — math symbols at best, not `$...$` LaTeX
+- **Scans / handwriting:** Tesseract OCR — unreliable for formulas (`_(OCR)_` blocks)
+- **Slides with formulas/diagrams:** read `extracted/<slug>/pages/*.png` before explaining
+- **corpus.jsonl:** keyword discovery only — do not answer math from indexed OCR text alone
+
+`studium_overview` (MCP) returns `searchGuidance.extractionLimits`. Skill: `imstudium-visual`.
+
 ## klausuren.md
 
 Human-readable exam list with confirmed vs unconfirmed dates. Unconfirmed entries come from course achievement text — verify in Stud.IP.

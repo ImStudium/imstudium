@@ -16,4 +16,5 @@ globs:
 - Do not ship a custom search engine — build `search/corpus.jsonl` indexes; agents grep/semantic-search natively (see `agentSearchGuidance`).
 - Exam dates from achievement text are `confirmed: false` — preserve that semantics.
 - Slide answers require visual inspection: agents must read `pageImages` or `viewerFileUrl` (see `imstudium-visual` skill). Never ship slide summaries from `content.md` text only.
+- Extraction has no LaTeX pipeline: `content.md` is poppler Unicode or Tesseract OCR — formulas/diagrams require page PNGs; see `extraction-guidance.ts` / `searchGuidance.extractionLimits`.
 - `viewer.html` is generated on read/view only — not during bulk extract (keep sync fast).

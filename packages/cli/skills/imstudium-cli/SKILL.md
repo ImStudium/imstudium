@@ -48,7 +48,9 @@ imstudium files tree --course "Analysis"
 
 ## Reading slides
 
-After `extract`, each file has `extracted/<file>/content.md` and `pages/*.png`. Read the PNGs for diagrams and formulas (see `imstudium-visual` skill).
+After `extract`, each file has `extracted/<file>/content.md` and `pages/*.png`.
+
+**Limits:** text is poppler/OCR — not LaTeX markdown. OCR fails on handwritten math. Use PNGs for formulas and diagrams (see `imstudium-visual` skill).
 
 ## Auth
 

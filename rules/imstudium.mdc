@@ -42,6 +42,8 @@ After `studium_read_material`:
 
 Diagrams, formulas, and layout are lost in text extraction. Skill: `imstudium-visual`.
 
+**No LaTeX in markdown** — poppler/Tesseract only; read `pageImages` for math. See `searchGuidance.extractionLimits` on `studium_overview`.
+
 ## Exam dates
 
 Dates parsed from achievement text are **unconfirmed** — tell the student to verify in Stud.IP.

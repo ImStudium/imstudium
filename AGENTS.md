@@ -41,6 +41,17 @@ imstudium update --json       # same, machine-readable
 
 Skill: `imstudium-visual` (installed by onboard)
 
+## Extraction limits (formulas, OCR)
+
+Local extract uses **poppler** (PDF text) and **Tesseract** (scans) — **not** LaTeX-in-markdown.
+
+- `content.md` / `corpus.jsonl` text: plain Unicode or OCR — fine for keyword search, **not** for explaining math
+- Typed PDFs: symbols like β, ∑ at best; subscripts often wrong (`x1` not `x_1`)
+- Scanned/handwritten: OCR is unreliable — `_(OCR)_` blocks are low trust
+- **Formulas, diagrams, plots:** read `pages/*.png` or `viewer.html` before answering (mandatory)
+
+`studium_overview` → `searchGuidance.extractionLimits` lists the full contract. Skill: `imstudium-visual`.
+
 ## MCP tools
 
 `studium_overview` → `studium_klausuren` → grep/semantic-search `*/search/corpus.jsonl` → `studium_read_material` → **read pageImages**
