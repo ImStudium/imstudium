@@ -16,12 +16,14 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "clean": "turbo run clean",
-    "validate": "turbo run typecheck build",
+    "test": "vitest run",
+    "validate": "turbo run typecheck build && vitest run",
     "install:dev": "bash scripts/install-dev.sh"
   },
   "devDependencies": {
     "turbo": "^2.5.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.9"
   },
   "packageManager": "pnpm@9.15.0",
   "engines": {
