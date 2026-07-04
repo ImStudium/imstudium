@@ -25,6 +25,7 @@ export * from "./sync.js";
 export * from "./studium.js";
 export * from "./extract.js";
 export * from "./viewer.js";
+export * from "./migrate.js";
 export * from "./resources/courses.js";
 export * from "./resources/files.js";
 

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { ensureMigrated } from "./migrate.js";
 import type { ImstudiumConfig, SessionData } from "./types.js";
 
 const DEFAULT_BASE = "https://digicampus.uni-augsburg.de/jsonapi.php/v1";
@@ -28,6 +29,7 @@ export function getDefaultConfig(): ImstudiumConfig {
 }
 
 export async function loadConfig(): Promise<ImstudiumConfig> {
+  await ensureMigrated();
   try {
     const raw = await readFile(paths.configFile, "utf-8");
     return { ...getDefaultConfig(), ...JSON.parse(raw) };
