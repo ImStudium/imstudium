@@ -5,7 +5,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createSdk, expandPath, extractSlug, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, type StudiumWorkspace } from "imstudium-sdk";
+import { createSdk, expandPath, extractSlug, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, type StudiumWorkspace } from "@imstudium/sdk";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { MCP_TOOLS } from "./tools.js";

@@ -5,7 +5,7 @@ Universal guide for **all** agent harnesses.
 ## Onboard once
 
 ```bash
-npx -y imstudium onboard -y -o ~/Studium
+npx -y @imstudium/cli onboard -y -o ~/Studium
 ```
 
 Interactive `onboard` (without `--json` / `--yes`) opens a **setup dashboard** in your browser with live step progress — workspace, sign-in, sync, agents.
@@ -74,7 +74,7 @@ No agent re-setup on daily sync.
 
 | Surface | Install |
 |---------|---------|
-| **Cursor** | `npx -y imstudium onboard -y` or Cursor marketplace plugin |
+| **Cursor** | `npx -y @imstudium/cli onboard -y` or Cursor marketplace plugin |
 | **Claude Code** | `imstudium onboard -y` |
 | **Claude Desktop / Cowork** | `imstudium onboard -y` (shared `~/.claude/skills`, platform MCP path) |
 | **OpenAI Codex** | `imstudium onboard -y` or Codex plugin |

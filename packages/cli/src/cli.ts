@@ -17,7 +17,7 @@ import {
   toolHints,
   type StudiumExamDate,
   type StudiumWorkspace,
-} from "imstudium-sdk";
+} from "@imstudium/sdk";
 import {
   formatSetupSummary,
   getSetupStatus,
@@ -471,7 +471,7 @@ program
       const summary = formatSetupSummary(setup);
       const text =
         before.installMode === "npx" && before.updateAvailable
-          ? `${summary}\nTip: npx -y imstudium@latest for newest CLI`
+          ? `${summary}\nTip: npx -y @imstudium/cli@latest for newest CLI`
           : `${upgradeNote}${summary}`.trim();
 
       output({ ...after, upgraded, setup, summary }, text);
@@ -779,7 +779,7 @@ program
       if (opts.course) {
         const course = pickCourse(workspace, opts.course);
         if (!course?.path) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
-        const { buildCourseSearchIndex, buildMaterialsManifest } = await import("imstudium-sdk");
+        const { buildCourseSearchIndex, buildMaterialsManifest } = await import("@imstudium/sdk");
         const idx = await buildCourseSearchIndex(join(ws, course.path), course, ws);
         if (!idx) fail(new ImstudiumError("No extractions for this course. Run: imstudium extract --course ...", "NO_CORPUS"));
         await buildMaterialsManifest(join(ws, course.path), course);
@@ -940,7 +940,7 @@ program
   .action(async () => {
     try {
       const sdk = await getSdk();
-      const { SemestersResource, computeSemesterProgress } = await import("imstudium-sdk");
+      const { SemestersResource, computeSemesterProgress } = await import("@imstudium/sdk");
       const semesters = new SemestersResource(sdk.client);
       const all = await semesters.listAll();
       const current = await semesters.getCurrent();

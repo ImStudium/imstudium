@@ -4,7 +4,7 @@ import {
   expandPath,
   OnboardUI,
   type StudiumWorkspace,
-} from "imstudium-sdk";
+} from "@imstudium/sdk";
 import { formatSetupSummary, runSetup, type SetupResult } from "./setup.js";
 
 export interface OnboardFlowOpts {

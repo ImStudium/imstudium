@@ -1,5 +1,5 @@
-import { buildAgentVisualPayload, buildSlideViewer } from "imstudium-sdk";
-import type { AgentVisualPayload } from "imstudium-sdk";
+import { buildAgentVisualPayload, buildSlideViewer } from "@imstudium/sdk";
+import type { AgentVisualPayload } from "@imstudium/sdk";
 
 export async function materialVisualPayload(
   outDir: string,

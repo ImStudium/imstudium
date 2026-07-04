@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 
 export type InstallMode = "global" | "npx" | "development";
 
-const CLI_PACKAGES = ["imstudium", "imstudium-mcp"] as const;
+const CLI_PACKAGES = ["@imstudium/cli", "@imstudium/mcp"] as const;
 
 export function getCliVersion(): string {
   try {
@@ -45,8 +45,9 @@ export function semverLt(current: string, latest: string): boolean {
 }
 
 export async function fetchNpmLatest(name: string): Promise<string | null> {
+  const registryPath = name.startsWith("@") ? name.replace("/", "%2F") : name;
   try {
-    const res = await fetch(`https://registry.npmjs.org/${name}/latest`, {
+    const res = await fetch(`https://registry.npmjs.org/${registryPath}/latest`, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
@@ -77,10 +78,10 @@ export async function checkForUpdates(entryPath: string): Promise<UpdateCheckRes
 
   for (const name of CLI_PACKAGES) {
     const latest = await fetchNpmLatest(name);
-    if (name === "imstudium") latestMain = latest;
+    if (name === "@imstudium/cli") latestMain = latest;
     packages.push({
       name,
-      current: name === "imstudium" ? current : current,
+      current: name === "@imstudium/cli" ? current : current,
       latest,
       updateAvailable: latest ? semverLt(current, latest) : false,
     });
@@ -101,7 +102,7 @@ export async function checkForUpdates(entryPath: string): Promise<UpdateCheckRes
 
 export async function runGlobalUpdate(): Promise<{ ok: boolean; output: string }> {
   try {
-    const out = execSync("npm install -g imstudium@latest imstudium-mcp@latest", {
+    const out = execSync("npm install -g @imstudium/cli@latest @imstudium/mcp@latest", {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });

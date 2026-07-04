@@ -14,8 +14,8 @@ All notable changes to ImStudium.
 
 ### Changed
 
-- **Rebrand:** DigiCampus Studium OS → **ImStudium** (`imstudium` CLI, `imstudium-sdk` / `imstudium-mcp`, `~/.config/imstudium`, `IMSTUDIUM_*` env, `imstudium_*` MCP tools)
-- Monorepo tooling is Bun-only (lockfile, CI, dev scripts). End-user install via `npx imstudium` unchanged.
+- **Rebrand:** DigiCampus Studium OS → **ImStudium** — `@imstudium/cli` (bin: `imstudium`), `@imstudium/sdk`, `@imstudium/mcp`, `~/.config/imstudium`, `IMSTUDIUM_*` env, `imstudium_*` MCP tools
+- Monorepo tooling is Bun-only (lockfile, CI, dev scripts). End-user install via `npx @imstudium/cli` unchanged.
 - MCP and CLI no longer ship duplicate keyword search — harness-native search on `corpus.jsonl`
 - Consumer docs refreshed (`README`, `docs/STUDIUM.md`, skills)
 
@@ -31,13 +31,13 @@ All notable changes to ImStudium.
   - Incremental (mtime+size manifest), `imstudium extract`, `sync --extract`, `doctor`
   - MCP `studium_read_material` — returns text + `pageImages` PNG paths for visual comprehension
 
-- `imstudium-sdk` — Stud.IP JSON:API client, pagination, file download
+- `@imstudium/sdk` — Stud.IP JSON:API client, pagination, file download
 - Login via OAuth-ready auth manager, with local helper fallback for Shibboleth + MFA
 - Session storage (OS keychain + file fallback)
 - `SyncEngine` — flat/tree file sync, wiki/news/calendar export, incremental state
 - `StudiumBuilder` — `studium.json`, `STUDIUM.md`, `klausuren.md`, per-course `COURSE.md`
 - `imstudium` CLI — init, login, sync, studium, klausuren, discover, watch
-- `imstudium-mcp` — 9 study-planning tools for all agent harnesses
+- `@imstudium/mcp` — 9 study-planning tools for all agent harnesses
 - Global `--json` output with `schemaVersion: 1`
 - CI workflow, AGENTS.md, API/STUDIUM/OAUTH docs
 

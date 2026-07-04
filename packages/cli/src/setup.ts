@@ -2,7 +2,7 @@ import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expandPath, paths } from "imstudium-sdk";
+import { expandPath, paths } from "@imstudium/sdk";
 import {
   type AgentId,
   type AgentProfile,
@@ -49,7 +49,7 @@ const MANIFEST_FILE = join(paths.configDir, "setup-manifest.json");
 
 const IMSTUDIUM_MCP_SERVER = {
   command: "npx",
-  args: ["-y", "imstudium-mcp"],
+  args: ["-y", "@imstudium/mcp"],
 } as const;
 
 export function mergeMcpConfig(

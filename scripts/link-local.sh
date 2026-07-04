@@ -12,7 +12,7 @@ ensure_bun
 log "Building..."
 bun run build
 
-log "Linking imstudium-sdk + imstudium (bun link --global)..."
+log "Linking @imstudium/sdk + imstudium (bun link --global)..."
 (cd packages/sdk && bun link)
 (cd packages/cli && bun link --global)
 

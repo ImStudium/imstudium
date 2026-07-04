@@ -1,5 +1,5 @@
 {
-  "name": "imstudium",
+  "name": "@imstudium/cli",
   "version": "0.1.0",
   "description": "ImStudium CLI — study workspace from Stud.IP",
   "license": "MIT",
@@ -7,7 +7,8 @@
   "author": "Patrick Schröppel",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddy-shrp/imstudium.git"
+    "url": "https://github.com/paddy-shrp/imstudium.git",
+    "directory": "packages/cli"
   },
   "homepage": "https://github.com/paddy-shrp/imstudium#readme",
   "bugs": {
@@ -39,8 +40,8 @@
     "prepublishOnly": "bun run build && bun run typecheck"
   },
   "dependencies": {
+    "@imstudium/sdk": "workspace:*",
     "commander": "^13.1.0",
-    "imstudium-sdk": "workspace:*",
     "playwright": "^1.52.0"
   },
   "devDependencies": {
@@ -53,6 +54,7 @@
     "node": ">=20"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

@@ -21,7 +21,7 @@ describe("mergeMcpConfig", () => {
       env: { IMSTUDIUM_WORKSPACE: string };
     };
     assert.equal(entry.command, "npx");
-    assert.deepEqual(entry.args, ["-y", "imstudium-mcp"]);
+    assert.deepEqual(entry.args, ["-y", "@imstudium/mcp"]);
     assert.ok(entry.env.IMSTUDIUM_WORKSPACE.includes("Studium"));
   });
 
@@ -31,7 +31,7 @@ describe("mergeMcpConfig", () => {
         mcpServers: {
           imstudium: {
             command: "npx",
-            args: ["-y", "imstudium-mcp"],
+            args: ["-y", "@imstudium/mcp"],
             env: { IMSTUDIUM_WORKSPACE: "/old" },
           },
         },
@@ -49,7 +49,7 @@ describe("mcpEntryMatches", () => {
     const d = desired as { command: string; args: string[]; env: Record<string, string> };
     const existing = {
       command: "npx",
-      args: ["-y", "imstudium-mcp"],
+      args: ["-y", "@imstudium/mcp"],
       env: d.env,
     };
     assert.equal(mcpEntryMatches(existing, desired), true);

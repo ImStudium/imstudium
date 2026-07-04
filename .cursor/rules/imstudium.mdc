@@ -9,7 +9,7 @@ globs:
 - Read [AGENTS.md](../AGENTS.md) and [docs/STUDIUM.md](../docs/STUDIUM.md) before changing behavior.
 - All CLI `--json` output must include `schemaVersion: "1"`.
 - Errors use `ImstudiumError` with `code`, `message`, `hint`.
-- SDK has no Commander imports; CLI has no raw fetch — use `imstudium-sdk`.
+- SDK has no Commander imports; CLI has no raw fetch — use `@imstudium/sdk`.
 - MCP tools are defined in `packages/mcp/src/tools.ts`.
 - Extraction lives in `packages/sdk/src/extract.ts` — external tools (poppler/LibreOffice) are optional; every kind must degrade gracefully with a `hint`. Never add heavy npm deps for parsing (no pdfjs, no mammoth); shell out or use native XML.
 - Run `bun run validate` before proposing ship.

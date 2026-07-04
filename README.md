@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/paddy-shrp/imstudium/main/scripts/i
 Or:
 
 ```bash
-npx -y imstudium onboard -y -o ~/Studium
+npx -y @imstudium/cli onboard -y -o ~/Studium
 ```
 
 First login (opens your normal browser, no extra tools):
@@ -66,7 +66,7 @@ Sync defaults to the **current semester**. Other terms: `imstudium sync --semest
 
 ```bash
 # First time (recommended)
-npx -y imstudium onboard -y -o ~/Studium
+npx -y @imstudium/cli onboard -y -o ~/Studium
 
 # Or: workspace first, agents second (less churn on re-sync)
 imstudium init -o ~/Studium
@@ -155,7 +155,7 @@ imstudium setup all -y
 | `imstudium-klausuren` | Exam timeline |
 | `imstudium-sync` | Material refresh |
 | `imstudium-visual` | **Read PNGs / Playwright — mandatory for slides** |
-| `imstudium-mcp` | MCP tool picker |
+| `@imstudium/mcp` | MCP tool picker |
 | `klausur-prep` | Exam prep workflow |
 | `semester-refresh` | Daily briefing workflow |
 
@@ -165,9 +165,9 @@ See [packages/cli/skills/](packages/cli/skills/) · [AGENTS.md](AGENTS.md) · [C
 
 | Package | Description |
 |---------|-------------|
-| `imstudium-sdk` | JSON:API client, auth, sync, Studium builder |
-| `imstudium` | CLI |
-| `imstudium-mcp` | MCP server |
+| `@imstudium/sdk` | JSON:API client, auth, sync, Studium builder |
+| `@imstudium/cli` | CLI |
+| `@imstudium/mcp` | MCP server |
 
 ## Auth
 

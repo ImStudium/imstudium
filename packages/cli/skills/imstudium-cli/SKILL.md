@@ -5,8 +5,8 @@ description: |
   Use when the user mentions ImStudium, Studium, Stud.IP, course materials, Klausur dates, or exam prep from university LMS.
 allowed-tools:
   - Bash(imstudium *)
-  - Bash(npx imstudium *)
-  - Bash(npx -y imstudium@latest *)
+  - Bash(npx @imstudium/cli *)
+  - Bash(npx -y @imstudium/cli@latest *)
 ---
 
 # imstudium cli
@@ -23,7 +23,7 @@ Command-line interface for ImStudium / Stud.IP. Sync materials, build agent work
 ## One-shot setup
 
 ```bash
-npx -y imstudium onboard --agents-only -y -o ~/Studium
+npx -y @imstudium/cli onboard --agents-only -y -o ~/Studium
 imstudium login
 imstudium init -o ~/Studium
 ```
@@ -62,4 +62,4 @@ imstudium login   # local helper fallback until OAuth is registered
 2. `imstudium update --json` — upgrade + refresh harness
 3. `imstudium --json studium` — local overview
 4. `imstudium sync` — refresh from API
-5. MCP tools — see `imstudium-mcp` skill
+5. MCP tools — see `@imstudium/mcp` skill

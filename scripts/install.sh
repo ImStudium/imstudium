@@ -24,7 +24,7 @@ ImStudium install — Node.js only. No Bun or extra browser tools required.
   bash scripts/install.sh [--global] [-o ~/Studium]
 
 Options:
-  --global          npm install -g imstudium imstudium-mcp
+  --global          npm install -g @imstudium/cli @imstudium/mcp
   -o, --workspace   Studium workspace path (default: ~/Studium)
 EOF
       exit 0
@@ -69,8 +69,8 @@ install_optional_tools() {
 
 install_cli() {
   if [[ "$GLOBAL" -eq 1 ]]; then
-    log "Installing imstudium + imstudium-mcp globally..."
-    npm install -g imstudium imstudium-mcp
+    log "Installing @imstudium/cli + @imstudium/mcp globally..."
+    npm install -g @imstudium/cli @imstudium/mcp
   else
     log "Ready via npx (no global install needed)."
   fi
@@ -83,7 +83,7 @@ log "Wiring all agent harnesses (Cursor, Claude, Codex, Windsurf, OpenCode)..."
 if [[ "$GLOBAL" -eq 1 ]]; then
   imstudium onboard --agents-only -y -o "$WORKSPACE"
 else
-  npx -y imstudium onboard --agents-only -y -o "$WORKSPACE"
+  npx -y @imstudium/cli onboard --agents-only -y -o "$WORKSPACE"
 fi
 
 echo ""

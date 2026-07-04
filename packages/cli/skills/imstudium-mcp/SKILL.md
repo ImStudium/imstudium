@@ -7,7 +7,7 @@ description: |
 
 # imstudium mcp
 
-MCP server: `imstudium-mcp`
+MCP server: `@imstudium/mcp`
 
 ## Install
 

@@ -1,5 +1,5 @@
 {
-  "name": "imstudium-sdk",
+  "name": "@imstudium/sdk",
   "version": "0.1.0",
   "description": "ImStudium Stud.IP JSON:API client, auth, sync, and Studium workspace builder",
   "license": "MIT",
@@ -7,7 +7,8 @@
   "author": "Patrick Schröppel",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddy-shrp/imstudium.git"
+    "url": "https://github.com/paddy-shrp/imstudium.git",
+    "directory": "packages/sdk"
   },
   "homepage": "https://github.com/paddy-shrp/imstudium#readme",
   "bugs": {
@@ -49,6 +50,7 @@
     "node": ">=20"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

@@ -39,5 +39,5 @@ ensure_npm() {
     brew install node@22
     return 0
   fi
-  die "Install Node.js 20+ from https://nodejs.org (for npm install -g imstudium)"
+  die "Install Node.js 20+ from https://nodejs.org (for npm install -g @imstudium/cli)"
 }
