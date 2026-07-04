@@ -1,5 +1,5 @@
 ---
-name: digicampus-semester-refresh
+name: imstudium-semester-refresh
 description: |
   Workflow — morning semester refresh: sync, overview, next 3 exams, flag stale courses.
   Use for daily briefing, "what's due", "update my Studium".
@@ -9,9 +9,9 @@ description: |
 
 ## Steps
 
-0. `digicampus update` — upgrade CLI + refresh harness
-1. `digicampus_whoami` — auth OK?
-2. `digicampus_sync` or CLI `digicampus sync --quiet`
+0. `imstudium update` — upgrade CLI + refresh harness
+1. `imstudium_whoami` — auth OK?
+2. `imstudium_sync` or CLI `imstudium sync --quiet`
 3. `studium_overview` — course list
 4. `studium_klausuren` — `nextDeadlines` top 3
 
@@ -26,4 +26,4 @@ description: |
 
 ## Cron alignment
 
-Matches `0 8 * * * digicampus sync --quiet` — run this workflow after sync in daily briefing.
+Matches `0 8 * * * imstudium sync --quiet` — run this workflow after sync in daily briefing.
