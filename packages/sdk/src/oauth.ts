@@ -1,5 +1,5 @@
 import { randomBytes, createHash } from "node:crypto";
-import { DigicampusError } from "./errors.js";
+import { ImstudiumError } from "./errors.js";
 
 /** Stud.IP OAuth2 endpoints — see docs.gitlab.studip.de/entwicklung/functions/oauth2/ */
 export function oauthEndpoints(instanceOrigin: string) {
@@ -134,7 +134,7 @@ export async function exchangeOAuthCode(options: {
 
   if (!tokenRes.ok) {
     const text = await tokenRes.text();
-    throw new DigicampusError(
+    throw new ImstudiumError(
       "OAuth token exchange failed.",
       "OAUTH_TOKEN_FAILED",
       tokenRes.status,
@@ -172,11 +172,11 @@ export async function refreshOAuthToken(options: {
 
   if (!tokenRes.ok) {
     const text = await tokenRes.text();
-    throw new DigicampusError(
+    throw new ImstudiumError(
       "OAuth refresh failed.",
       "OAUTH_REFRESH_FAILED",
       tokenRes.status,
-      text.slice(0, 200) || "Run: digicampus login",
+      text.slice(0, 200) || "Run: imstudium login",
     );
   }
 

@@ -116,7 +116,7 @@ export function buildAgentVisualPayload(
     requiredAction:
       pageImages.length > 0
         ? "MANDATORY: Visually inspect all pageImages (or viewerHtml via Playwright/browser) BEFORE explaining slide content, diagrams, formulas, or layout. Extracted text is supplementary only."
-        : "No page images available — run digicampus doctor (poppler) or digicampus extract, then retry.",
+        : "No page images available — run imstudium doctor (poppler) or imstudium extract, then retry.",
     pageImages,
     viewerHtml,
     viewerFileUrl,

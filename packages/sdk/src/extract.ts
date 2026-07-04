@@ -306,7 +306,7 @@ export class Extractor {
 
     // Preferred: LibreOffice → PDF → full poppler pipeline (text + slide images).
     if (tools.soffice && tools.pdftotext) {
-      const tmp = join(tmpdir(), `digicampus-extract-${Date.now()}`);
+      const tmp = join(tmpdir(), `imstudium-extract-${Date.now()}`);
       await mkdir(tmp, { recursive: true });
       try {
         await exec(tools.soffice, ["--headless", "--convert-to", "pdf", "--outdir", tmp, src], {
@@ -403,7 +403,7 @@ export class Extractor {
 
 /** OCR one image. German course materials first, plain default as fallback. */
 async function runOcr(tesseract: string, imagePath: string): Promise<string> {
-  const langs = [process.env.DIGICAMPUS_OCR_LANG || "deu+eng", ""];
+  const langs = [process.env.IMSTUDIUM_OCR_LANG || process.env.DIGICAMPUS_OCR_LANG || "deu+eng", ""];
   for (const lang of langs) {
     try {
       const args = [imagePath, "stdout", ...(lang ? ["-l", lang] : [])];

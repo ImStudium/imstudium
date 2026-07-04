@@ -1,8 +1,17 @@
+/** Shibboleth entityID per Stud.IP host — skips DFN-AAI org picker when set. */
+const KNOWN_SHIB_IDP: Record<string, string> = {
+  "digicampus.uni-augsburg.de":
+    "https://idp.rz.uni-augsburg.de/simplesaml/saml2/idp/metadata.php",
+};
+
 export function buildShibbolethLoginUrl(instanceOrigin: string): string {
   const origin = instanceOrigin.replace(/\/$/, "");
-  return `${origin}/Shibboleth.sso/Login?target=${encodeURIComponent(
-    `${origin}/dispatch.php/my_courses?sso=shibboleth`,
-  )}`;
+  const host = new URL(origin).hostname;
+  const target = `${origin}/?sso=shibboleth&cancel_login=1&again=yes`;
+  const params = new URLSearchParams({ target });
+  const entityId = KNOWN_SHIB_IDP[host];
+  if (entityId) params.set("entityID", entityId);
+  return `${origin}/Shibboleth.sso/Login?${params}`;
 }
 
 export function parseSeminarSessionCookie(input: string): string {

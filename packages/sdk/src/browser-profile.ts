@@ -1,3 +1,5 @@
+import { execSync } from "node:child_process";
+import { access } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { paths } from "./config.js";
@@ -17,7 +19,7 @@ export function resolveSystemChromeUserDataDir(): string {
   return join(home, ".config", "google-chrome");
 }
 
-/** DigiCampus-only profile — no saved passwords, safe while Chrome is open. */
+/** ImStudium browser profile — no saved passwords, safe while Chrome is open. */
 export function resolveIsolatedProfileDir(): string {
   return join(paths.configDir, "chrome-profile");
 }
@@ -33,6 +35,46 @@ export function isProfileInUseError(message: string): boolean {
         lower.includes("already running") ||
         lower.includes("locked")))
   );
+}
+
+/** True when the user's normal Chrome is running — system profile launch would fail or fight it. */
+export async function isChromeRunning(): Promise<boolean> {
+  if (platform() === "darwin") {
+    try {
+      const out = execSync('pgrep -x "Google Chrome" 2>/dev/null || true', {
+        encoding: "utf-8",
+      });
+      if (out.trim()) return true;
+    } catch {
+      // fall through to lock file
+    }
+  } else if (platform() === "win32") {
+    try {
+      const out = execSync('tasklist /FI "IMAGENAME eq chrome.exe" 2>nul', {
+        encoding: "utf-8",
+      });
+      if (/chrome\.exe/i.test(out)) return true;
+    } catch {
+      // fall through
+    }
+  } else {
+    try {
+      const out = execSync(
+        "pgrep -x chrome 2>/dev/null || pgrep -x google-chrome 2>/dev/null || true",
+        { encoding: "utf-8" },
+      );
+      if (out.trim()) return true;
+    } catch {
+      // fall through
+    }
+  }
+
+  try {
+    await access(join(resolveSystemChromeUserDataDir(), "SingletonLock"));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function isChromeMissingError(message: string): boolean {

@@ -1,5 +1,5 @@
 import type { JsonApiDocument, JsonApiResource } from "./types.js";
-import { DigicampusError, readResponseError } from "./errors.js";
+import { ImstudiumError, readResponseError } from "./errors.js";
 
 export interface StudIpClientOptions {
   baseUrl: string;
@@ -72,7 +72,7 @@ export class StudIpClient {
 
     const contentType = res.headers.get("content-type") || "";
     if (!contentType.includes("json")) {
-      throw new DigicampusError("Expected JSON response", "INVALID_RESPONSE");
+      throw new ImstudiumError("Expected JSON response", "INVALID_RESPONSE");
     }
 
     return (await res.json()) as JsonApiDocument<T>;

@@ -299,7 +299,7 @@ export class StudiumBuilder {
     if (ws.otherSemesters.length) {
       const names = ws.otherSemesters.map((s) => s.title).join(", ");
       lines.push(
-        `_Not synced by default: ${names}. Fetch one with \`digicampus sync --semester "<name>"\`._`,
+        `_Not synced by default: ${names}. Fetch one with \`imstudium sync --semester "<name>"\`._`,
         "",
       );
     }
@@ -441,7 +441,7 @@ export async function writeLlmsTxt(workspacePath: string, ws: StudiumWorkspace):
   const lines = [
     `# Studium — ${ws.user?.name || "student"}`,
     "",
-    `> Local mirror of DigiCampus (Stud.IP) course materials, optimized for LLM navigation.`,
+    `> Local mirror of Stud.IP course materials, optimized for LLM navigation.`,
     `> Active semester: ${sem.title}${sem.weekNumber != null ? ` (week ${sem.weekNumber}, ${sem.progressPercent}% elapsed)` : ""}. Generated: ${ws.generatedAt}`,
     "",
     "## Start here",
@@ -487,10 +487,10 @@ export async function writeLlmsTxt(workspacePath: string, ws: StudiumWorkspace):
     "",
     "## Rules for agents",
     "",
-    "1. Search with your native tools on corpus.jsonl — do not expect a digicampus search MCP tool.",
+    "1. Search with your native tools on corpus.jsonl — do not expect an ImStudium search MCP tool.",
     "2. Cite pages with `ref` from JSONL hits or materials.json.",
     "3. Slides/diagrams: read `pages/page-NNN.png` before explaining visual content.",
-    "4. Refresh: `digicampus sync --quiet --extract` (daily), `digicampus index` (rebuild page index).",
+    "4. Refresh: `imstudium sync --quiet --extract` (daily), `imstudium index` (rebuild page index).",
     "",
   );
 
