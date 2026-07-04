@@ -1,14 +1,14 @@
 ---
-description: DigiCampus Studium OS — study workspace, MCP tools, and slide comprehension
+description: ImStudium — study workspace, MCP tools, and slide comprehension
 globs:
   - "**/*"
 ---
 
-# DigiCampus Studium OS
+# ImStudium
 
 ## Workspace
 
-- Default workspace: `~/Studium` (`DIGICAMPUS_WORKSPACE`)
+- Default workspace: `~/Studium` (`IMSTUDIUM_WORKSPACE`)
 - Agent entry point: `llms.txt` — navigation + search guidance
 - Machine-readable map: `studium.json`
 - Exam timeline: `klausuren.md`
@@ -17,11 +17,11 @@ globs:
 ## Daily loop
 
 ```bash
-digicampus sync --quiet --extract -o ~/Studium
-digicampus setup status
+imstudium sync --quiet --extract -o ~/Studium
+imstudium setup status
 ```
 
-Re-run agent wiring after upgrades: `digicampus setup all -y`
+Re-run agent wiring after upgrades: `imstudium setup all -y`
 
 ## MCP tools (use in order)
 
@@ -29,7 +29,7 @@ Re-run agent wiring after upgrades: `digicampus setup all -y`
 
 `studium_overview` returns `searchGuidance` — use your native grep or codebase search on `corpus.jsonl`.
 
-Other tools: `studium_course_brief`, `digicampus_sync`, `digicampus_sync_dry_run`, `digicampus_list_courses`, `digicampus_whoami`
+Other tools: `studium_course_brief`, `imstudium_sync`, `imstudium_sync_dry_run`, `imstudium_list_courses`, `imstudium_whoami`
 
 ## Slides and PDFs — visual comprehension required
 
@@ -40,7 +40,7 @@ After `studium_read_material`:
 1. Read every `pageImages` PNG, or
 2. Open `viewerFileUrl` in a browser / Playwright
 
-Diagrams, formulas, and layout are lost in text extraction. Skill: `digicampus-visual`.
+Diagrams, formulas, and layout are lost in text extraction. Skill: `imstudium-visual`.
 
 ## Exam dates
 
