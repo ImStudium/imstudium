@@ -1,14 +1,14 @@
 # Contributing
 
-Thanks for contributing to DigiCampus Studium OS.
+Thanks for contributing to ImStudium.
 
 ## Setup
 
 Requires [Bun](https://bun.sh) 1.2+.
 
 ```bash
-git clone https://github.com/paddy-shrp/digicampus.git
-cd digicampus
+git clone https://github.com/paddy-shrp/imstudium.git
+cd imstudium
 bash scripts/install-dev.sh
 ```
 
@@ -28,7 +28,7 @@ bun run validate
 ## Auth development
 
 ```bash
-digicampus login
+imstudium login
 ```
 
 Do not commit session files or cookies.

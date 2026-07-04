@@ -1,6 +1,6 @@
 # Studium workspace format
 
-Version **2** — produced by `digicampus init`, `digicampus sync`, and `digicampus index`.
+Version **2** — produced by `imstudium init`, `imstudium sync`, and `imstudium index`.
 
 ## Directory layout
 
@@ -30,7 +30,7 @@ Studium/
         └── news/
 ```
 
-Default sync scope: **current semester** (`digicampus sync`). Other semesters: `digicampus sync --semester "WS 2025/26"`.
+Default sync scope: **current semester** (`imstudium sync`). Other semesters: `imstudium sync --semester "WS 2025/26"`.
 
 ## studium.json (schema v2)
 

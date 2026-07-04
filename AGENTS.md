@@ -1,16 +1,16 @@
-# AGENTS.md — DigiCampus Studium OS
+# AGENTS.md — ImStudium
 
 Universal guide for **all** agent harnesses.
 
 ## Onboard once
 
 ```bash
-npx -y digicampus onboard -y -o ~/Studium
+npx -y imstudium onboard -y -o ~/Studium
 ```
 
 Interactive `onboard` (without `--json` / `--yes`) opens a **setup dashboard** in your browser with live step progress — workspace, sign-in, sync, agents.
 
-Login uses your normal browser (no extra installs): `digicampus login`
+Login uses your normal browser (no extra installs): `imstudium login`
 
 Configures **only detected** harnesses (no churn elsewhere):
 
@@ -24,22 +24,22 @@ Configures **only detected** harnesses (no churn elsewhere):
 | **OpenCode** | `~/.config/opencode/skills/` | `~/.config/opencode/mcp.json` |
 | **Project** | — | `~/Studium/mcp.json` |
 
-Re-run is **idempotent**: `digicampus setup all -y` skips unchanged files. Force: `--force`.
+Re-run is **idempotent**: `imstudium setup all -y` skips unchanged files. Force: `--force`.
 
-Check: `digicampus setup status`
+Check: `imstudium setup status`
 
 ## Updates
 
 ```bash
-digicampus update              # upgrade CLI + refresh skills/MCP
-digicampus update --json       # same, machine-readable
+imstudium update              # upgrade CLI + refresh skills/MCP
+imstudium update --json       # same, machine-readable
 ```
 
 ## Visual comprehension (slides)
 
 **Never summarize slides from text alone.** After `studium_read_material`, read every `pageImages` PNG or open `viewerFileUrl` in Playwright/browser.
 
-Skill: `digicampus-visual` (installed by onboard)
+Skill: `imstudium-visual` (installed by onboard)
 
 ## MCP tools
 
@@ -60,29 +60,29 @@ Each line is JSON with `ref`, `text`, `pageImage`, `extractSlug`. Cite with `ref
 ## Daily loop (fast)
 
 ```bash
-digicampus sync --quiet --extract -o ~/Studium
+imstudium sync --quiet --extract -o ~/Studium
 ```
 
 No agent re-setup on daily sync.
 
 ## Paths
 
-- Manifest: `~/.config/digicampus/setup-manifest.json`
-- Workspace: `~/Studium` (`DIGICAMPUS_WORKSPACE`)
+- Manifest: `~/.config/imstudium/setup-manifest.json`
+- Workspace: `~/Studium` (`IMSTUDIUM_WORKSPACE`)
 
 ## Per harness
 
 | Surface | Install |
 |---------|---------|
-| **Cursor** | `npx -y digicampus onboard -y` or Cursor marketplace plugin |
-| **Claude Code** | `digicampus onboard -y` |
-| **Claude Desktop / Cowork** | `digicampus onboard -y` (shared `~/.claude/skills`, platform MCP path) |
-| **OpenAI Codex** | `digicampus onboard -y` or Codex plugin |
-| **Windsurf** | `digicampus onboard -y` |
-| **OpenCode** | `digicampus onboard -y` |
+| **Cursor** | `npx -y imstudium onboard -y` or Cursor marketplace plugin |
+| **Claude Code** | `imstudium onboard -y` |
+| **Claude Desktop / Cowork** | `imstudium onboard -y` (shared `~/.claude/skills`, platform MCP path) |
+| **OpenAI Codex** | `imstudium onboard -y` or Codex plugin |
+| **Windsurf** | `imstudium onboard -y` |
+| **OpenCode** | `imstudium onboard -y` |
 
 Multi-harness machine (install to every path, not only detected):
 
 ```bash
-digicampus setup all -y --all-agents
+imstudium setup all -y --all-agents
 ```

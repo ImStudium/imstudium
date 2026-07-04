@@ -1,4 +1,4 @@
-# Stud.IP JSON:API — DigiCampus capability matrix
+# Stud.IP JSON:API — ImStudium capability matrix
 
 **Instance:** `https://digicampus.uni-augsburg.de` · Stud.IP **5.4.11**  
 **API base:** `https://digicampus.uni-augsburg.de/jsonapi.php/v1/`  
@@ -6,9 +6,9 @@
 
 ## Authentication
 
-| Method | Header / cookie | DigiCampus Jul 2025+ |
+| Method | Header / cookie | ImStudium Jul 2025+ |
 |--------|-----------------|----------------------|
-| Session cookie | `Seminar_Session` | Yes — `digicampus login` (auto browser capture) |
+| Session cookie | `Seminar_Session` | Yes — `imstudium login` (auto browser capture) |
 | OAuth2 Bearer | `Authorization: Bearer` | Yes — preferred when instance OAuth is configured |
 | HTTP Basic | `Authorization: Basic` | No — blocked by Shibboleth/MFA at Uni Augsburg |
 
@@ -55,7 +55,7 @@ Pagination: default `page[limit]=30` — follow `links.next`.
 ## Discovery
 
 ```bash
-digicampus discover
+imstudium discover
 # or
 curl https://digicampus.uni-augsburg.de/jsonapi.php/v1/discovery
 ```

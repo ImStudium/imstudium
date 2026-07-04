@@ -1,11 +1,11 @@
 # Agent study workflow
 
-Example session for an LLM using DigiCampus MCP.
+Example session for an LLM using ImStudium MCP.
 
 ## 1. Orient
 
 ```
-Tool: digicampus_whoami
+Tool: imstudium_whoami
 → authenticated? workspace path?
 ```
 
@@ -35,10 +35,10 @@ Tool: studium_find_materials { course: "Analysis II", query: "klausur" }
 ## 4. Refresh (if needed)
 
 ```
-Tool: digicampus_sync_dry_run
+Tool: imstudium_sync_dry_run
 → preview downloads
 
-Tool: digicampus_sync
+Tool: imstudium_sync
 → full sync + rebuild studium.json
 ```
 
@@ -53,7 +53,7 @@ Agent should produce:
 ## Cron (host)
 
 ```cron
-0 8 * * * digicampus sync --quiet -o ~/Studium
+0 8 * * * imstudium sync --quiet -o ~/Studium
 ```
 
 After cron, agents can work offline from local workspace only.
