@@ -1,16 +1,16 @@
 ---
-name: digicampus-visual
+name: imstudium-visual
 description: |
-  MANDATORY when explaining slides, PDFs, diagrams, or formulas from DigiCampus materials.
+  MANDATORY when explaining slides, PDFs, diagrams, or formulas from ImStudium materials.
   Text extraction is incomplete — you MUST read page PNGs or open viewer.html in Playwright/browser before answering.
-  Use after studium_read_material, digicampus view, or when user asks about slide content.
+  Use after studium_read_material, imstudium view, or when user asks about slide content.
 allowed-tools:
-  - Bash(digicampus view *)
-  - Bash(digicampus extract *)
+  - Bash(imstudium view *)
+  - Bash(imstudium extract *)
   - Bash(npx playwright *)
 ---
 
-# digicampus visual comprehension
+# imstudium visual comprehension
 
 Slides are **visual**. `content.md` text misses diagrams, plots, formulas, tables, and layout.
 
@@ -26,10 +26,10 @@ Slides are **visual**. `content.md` text misses diagrams, plots, formulas, table
 | Harness | What to do |
 |---------|------------|
 | **Cursor / Claude / Codex / Windsurf / OpenCode with Read/vision** | `Read` each `pageImages` file |
-| **Playwright CLI** | `digicampus view --course "Analysis" --file "vorlesung 3"` → open printed `viewerFileUrl` |
+| **Playwright CLI** | `imstudium view --course "Analysis" --file "vorlesung 3"` → open printed `viewerFileUrl` |
 | **Browser MCP** (cursor-ide-browser) | `browser_navigate` to `viewerFileUrl`, `browser_take_screenshot` per slide |
 | **MCP only** | `studium_read_material` → follow `requiredAction` + `methods` in JSON response |
-| **Terminal** | `digicampus view --dir ~/Studium/.../extracted/foo-pdf` |
+| **Terminal** | `imstudium view --dir ~/Studium/.../extracted/foo-pdf` |
 
 ## MCP response fields
 
@@ -48,16 +48,16 @@ Follow `requiredAction` literally.
 ## Speed
 
 - `studium_read_material` reuses cached extraction (manifest mtime) — fast on repeat
-- `digicampus view` only writes `viewer.html` (~instant) — no re-render unless file changed
-- Bulk `digicampus extract` does NOT auto-open browser — agents opt in per file
+- `imstudium view` only writes `viewer.html` (~instant) — no re-render unless file changed
+- Bulk `imstudium extract` does NOT auto-open browser — agents opt in per file
 
 ## Playwright one-liner
 
 ```bash
-digicampus view --course "Analysis" --file "folien" --json
+imstudium view --course "Analysis" --file "folien" --json
 # → open viewerFileUrl in Playwright, screenshot each .slide img
 ```
 
 ## When pageImages is empty
 
-Tell user: `digicampus doctor` then `digicampus extract --course "..."`. Poppler renders PDF slides; LibreOffice renders PPTX.
+Tell user: `imstudium doctor` then `imstudium extract --course "..."`. Poppler renders PDF slides; LibreOffice renders PPTX.

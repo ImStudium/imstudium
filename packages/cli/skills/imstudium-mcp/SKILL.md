@@ -1,18 +1,18 @@
 ---
-name: digicampus-mcp
+name: imstudium-mcp
 description: |
-  DigiCampus MCP tools for all agent harnesses — studium overview, klausuren, course brief, find materials, sync.
+  ImStudium MCP tools for all agent harnesses — studium overview, klausuren, course brief, find materials, sync.
   Use when working inside an MCP-enabled agent instead of terminal.
 ---
 
-# digicampus mcp
+# imstudium mcp
 
-MCP server: `digicampus-mcp`
+MCP server: `imstudium-mcp`
 
 ## Install
 
 ```bash
-digicampus setup mcp
+imstudium setup mcp
 ```
 
 ## Tool selection
@@ -24,8 +24,8 @@ digicampus setup mcp
 | One course | `studium_course_brief` |
 | Find PDFs by filename | `studium_find_materials` |
 | **Read/see slide content** | `studium_read_material` |
-| Refresh | `digicampus_sync` |
-| Auth check | `digicampus_whoami` |
+| Refresh | `imstudium_sync` |
+| Auth check | `imstudium_whoami` |
 
 ## Finding content (use YOUR search tools)
 
@@ -47,12 +47,12 @@ Or semantic-search `corpus.jsonl` / `content.md` with your harness indexer.
 ## Workflow
 
 ```
-digicampus_whoami → studium_overview → studium_klausuren
+imstudium_whoami → studium_overview → studium_klausuren
   → grep corpus.jsonl OR studium_find_materials
   → studium_read_material → read pageImages
 ```
 
-Prefer local tools before `digicampus_sync` (network + auth).
+Prefer local tools before `imstudium_sync` (network + auth).
 
 ## Visual comprehension (important)
 

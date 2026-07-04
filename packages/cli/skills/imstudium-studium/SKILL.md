@@ -1,20 +1,20 @@
 ---
-name: digicampus-studium
+name: imstudium-studium
 description: |
   Read the Studium workspace — courses, file counts, schedule context from studium.json.
   Use after sync or when user asks "what courses am I in", "semester overview", "my Studium".
 ---
 
-# digicampus studium
+# imstudium studium
 
-Local semester map at `~/Studium/studium.json` (or `DIGICAMPUS_WORKSPACE`).
+Local semester map at `~/Studium/studium.json` (or `IMSTUDIUM_WORKSPACE`).
 
 **Default:** current calendar semester only (e.g. `SS2026/`), not all past enrollments.
 
 ## Read first (no network)
 
 ```bash
-digicampus --json studium
+imstudium --json studium
 ```
 
 Or MCP: `studium_overview`
@@ -29,5 +29,5 @@ Or MCP: `studium_overview`
 ## Refresh only when stale
 
 ```bash
-digicampus sync --quiet
+imstudium sync --quiet
 ```

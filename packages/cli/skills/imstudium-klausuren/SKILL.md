@@ -1,17 +1,17 @@
 ---
-name: digicampus-klausuren
+name: imstudium-klausuren
 description: |
   Klausur and exam timeline with days-remaining. Use when user asks about exams, Prüfungen, deadlines, "when is my Klausur".
 ---
 
-# digicampus klausuren
+# imstudium klausuren
 
 Exam planning from `klausuren.md` / `studium.json`.
 
 ## Read timeline
 
 ```bash
-digicampus --json klausuren
+imstudium --json klausuren
 ```
 
 Or MCP: `studium_klausuren`
