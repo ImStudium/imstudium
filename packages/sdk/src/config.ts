@@ -1,12 +1,13 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DigicampusConfig, SessionData } from "./types.js";
+import type { ImstudiumConfig, SessionData } from "./types.js";
 
 const DEFAULT_BASE = "https://digicampus.uni-augsburg.de/jsonapi.php/v1";
 const DEFAULT_ORIGIN = "https://digicampus.uni-augsburg.de";
-const CONFIG_DIR = join(homedir(), ".config", "digicampus");
-const DATA_DIR = join(homedir(), ".local", "share", "digicampus");
+const CONFIG_DIR = join(homedir(), ".config", "imstudium");
+const LEGACY_CONFIG_FILE = join(homedir(), ".config", "digicampus", "config.json");
+const DATA_DIR = join(homedir(), ".local", "share", "imstudium");
 
 export const paths = {
   configDir: CONFIG_DIR,
@@ -15,28 +16,32 @@ export const paths = {
   defaultWorkspace: join(homedir(), "Studium"),
 };
 
-export function getDefaultConfig(): DigicampusConfig {
+export function getDefaultConfig(): ImstudiumConfig {
   return {
-    baseUrl: process.env.DIGICAMPUS_BASE_URL || DEFAULT_BASE,
-    instanceOrigin: process.env.DIGICAMPUS_ORIGIN || DEFAULT_ORIGIN,
-    workspacePath: process.env.DIGICAMPUS_WORKSPACE || paths.defaultWorkspace,
+    baseUrl: process.env.IMSTUDIUM_BASE_URL || process.env.DIGICAMPUS_BASE_URL || DEFAULT_BASE,
+    instanceOrigin: process.env.IMSTUDIUM_ORIGIN || process.env.DIGICAMPUS_ORIGIN || DEFAULT_ORIGIN,
+    workspacePath:
+      process.env.IMSTUDIUM_WORKSPACE || process.env.DIGICAMPUS_WORKSPACE || paths.defaultWorkspace,
     oauth: {
-      clientId: process.env.DIGICAMPUS_OAUTH_CLIENT_ID,
+      clientId: process.env.IMSTUDIUM_OAUTH_CLIENT_ID || process.env.DIGICAMPUS_OAUTH_CLIENT_ID,
       redirectUri: "http://127.0.0.1:0/callback",
     },
   };
 }
 
-export async function loadConfig(): Promise<DigicampusConfig> {
-  try {
-    const raw = await readFile(paths.configFile, "utf-8");
-    return { ...getDefaultConfig(), ...JSON.parse(raw) };
-  } catch {
-    return getDefaultConfig();
+export async function loadConfig(): Promise<ImstudiumConfig> {
+  for (const file of [paths.configFile, LEGACY_CONFIG_FILE]) {
+    try {
+      const raw = await readFile(file, "utf-8");
+      return { ...getDefaultConfig(), ...JSON.parse(raw) };
+    } catch {
+      // try next path
+    }
   }
+  return getDefaultConfig();
 }
 
-export async function saveConfig(config: Partial<DigicampusConfig>): Promise<DigicampusConfig> {
+export async function saveConfig(config: Partial<ImstudiumConfig>): Promise<ImstudiumConfig> {
   const current = await loadConfig();
   const merged = { ...current, ...config };
   await mkdir(CONFIG_DIR, { recursive: true });
