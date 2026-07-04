@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,7 @@ import {
   resolveAgentProfiles,
   uniqueSkillsDirs,
 } from "./agents.js";
+import { convertLegacyManifest, ensureMigrated, legacyPaths } from "@imstudium/sdk";
 
 export type { AgentId } from "./agents.js";
 
@@ -47,10 +49,16 @@ const SKILLS_ROOT = join(PKG_ROOT, "skills");
 const WORKFLOWS_ROOT = join(SKILLS_ROOT, "workflows");
 const MANIFEST_FILE = join(paths.configDir, "setup-manifest.json");
 
-const IMSTUDIUM_MCP_SERVER = {
-  command: "npx",
-  args: ["-y", "@imstudium/mcp"],
-} as const;
+function resolveMcpLaunch(): { command: string; args: string[] } {
+  if (process.env.IMSTUDIUM_MCP_LAUNCH === "npx") {
+    return { command: "npx", args: ["-y", "@imstudium/mcp"] };
+  }
+  const local = join(homedir(), ".local", "bin", "imstudium-mcp");
+  if (existsSync(local)) {
+    return { command: local, args: [] };
+  }
+  return { command: "npx", args: ["-y", "@imstudium/mcp"] };
+}
 
 export function mergeMcpConfig(
   existing: Record<string, unknown>,
@@ -58,12 +66,14 @@ export function mergeMcpConfig(
 ): Record<string, unknown> {
   const servers =
     (existing.mcpServers as Record<string, Record<string, unknown>> | undefined) ?? {};
+  const { digicampus: _legacy, ...rest } = servers;
+  const launch = resolveMcpLaunch();
   return {
     ...existing,
     mcpServers: {
-      ...servers,
+      ...rest,
       imstudium: {
-        ...IMSTUDIUM_MCP_SERVER,
+        ...launch,
         env: { IMSTUDIUM_WORKSPACE: expandPath(workspace) },
       },
     },
@@ -104,7 +114,15 @@ async function loadManifest(): Promise<SetupManifest | null> {
   try {
     return JSON.parse(await readFile(MANIFEST_FILE, "utf-8")) as SetupManifest;
   } catch {
-    return null;
+    try {
+      const legacyFile = join(legacyPaths.configDir, "setup-manifest.json");
+      const raw = JSON.parse(await readFile(legacyFile, "utf-8")) as Record<string, unknown>;
+      const converted = convertLegacyManifest(raw) as unknown as SetupManifest;
+      await saveManifest(converted);
+      return converted;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -122,6 +140,16 @@ async function listSkillDirs(root: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+async function cleanupLegacySkills(skillsDir: string): Promise<string[]> {
+  const removed: string[] = [];
+  for (const name of await listSkillDirs(skillsDir)) {
+    if (!name.startsWith("digicampus-")) continue;
+    await rm(join(skillsDir, name), { recursive: true, force: true });
+    removed.push(name);
+  }
+  return removed;
 }
 
 export async function installSkillIfChanged(
@@ -201,6 +229,7 @@ async function installSkillsForAgents(
 
   for (const [skillsDir, group] of byDir) {
     await mkdir(skillsDir, { recursive: true });
+    await cleanupLegacySkills(skillsDir);
     for (const name of names) {
       if (name === "workflows") continue;
       const result = await installSkillIfChanged(
@@ -261,9 +290,10 @@ async function installMcpForAgents(
 }
 
 export async function runSetup(
-  what: "skills" | "mcp" | "workflows" | "all" | "status",
+  what: "skills" | "mcp" | "workflows" | "all" | "status" | "migrate",
   opts: SetupOptions = {},
 ): Promise<SetupResult> {
+  await ensureMigrated();
   const workspace = expandPath(opts.workspace ?? homedir() + "/Studium");
   const agents = resolveAgentProfiles(opts.agent, opts.allAgents || opts.agent === "all");
   const prev = await loadManifest();
@@ -279,6 +309,11 @@ export async function runSetup(
     workflows: [],
     manifest,
   };
+
+  if (what === "migrate") {
+    opts.force = true;
+    what = "all";
+  }
 
   if (what === "status") return result;
 
