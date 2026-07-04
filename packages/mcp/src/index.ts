@@ -5,7 +5,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createSdk, expandPath, extractSlug, type StudiumWorkspace } from "digicampus-sdk";
+import { createSdk, expandPath, extractSlug, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, type StudiumWorkspace } from "digicampus-sdk";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { MCP_TOOLS } from "./tools.js";
@@ -43,7 +43,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case "studium_overview": {
         const ws = await loadWorkspace(sdk);
-        return jsonText(ws);
+        const focusId = ws.activeSemester?.id;
+        return jsonText({
+          activeSemester: ws.activeSemester,
+          otherSemesters: ws.otherSemesters,
+          search: ws.search,
+          searchGuidance: agentSearchGuidance(workspacePath, ws),
+          focusCourses: ws.courses.filter((c) => !focusId || c.semesterId === focusId),
+          allCourses: ws.courses,
+          nextDeadlines: ws.nextDeadlines,
+          hint: "Default to focusCourses. Find content: grep/semantic-search corpus.jsonl (see searchGuidance). Paths: course.path + search/materials.json.",
+        });
       }
 
       case "studium_klausuren": {
@@ -57,40 +67,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "studium_course_brief": {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");
-        const course = ws.courses.find(
-          (c) =>
-            c.id === courseArg ||
-            c.title.toLowerCase().includes(courseArg.toLowerCase()) ||
-            c.slug.toLowerCase().includes(courseArg.toLowerCase()),
-        );
+        const course = pickCourse(ws, courseArg);
         if (!course) {
           return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
         }
+        const courseDir = resolveCourseDir(workspacePath, course, ws);
         let courseMd = "";
         try {
-          const { readFile } = await import("node:fs/promises");
-          courseMd = await readFile(
-            join(workspacePath, ws.workspaceFolder, course.slug, "COURSE.md"),
-            "utf-8",
-          );
+          courseMd = await readFile(join(courseDir, "COURSE.md"), "utf-8");
         } catch {
           // optional
         }
-        return jsonText({ course, courseMd });
+        let materials: unknown;
+        try {
+          materials = JSON.parse(await readFile(join(courseDir, "search", "materials.json"), "utf-8"));
+        } catch {
+          // not indexed yet
+        }
+        return jsonText({ course, courseMd, materials, activeSemester: ws.activeSemester });
       }
 
       case "studium_find_materials": {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");
         const query = String((args as { query?: string })?.query || "").toLowerCase();
-        const course = ws.courses.find((c) =>
-          c.title.toLowerCase().includes(courseArg.toLowerCase()),
-        );
+        const course = pickCourse(ws, courseArg);
         if (!course) return jsonText({ error: "Course not found" });
 
-        const filesDir = join(workspacePath, ws.workspaceFolder, course.slug, "files");
+        const filesDir = join(resolveCourseDir(workspacePath, course, ws), "files");
         const matches = await findFilesRecursive(filesDir, query);
-        return jsonText({ course: course.title, matches });
+        return jsonText({ course: course.title, path: course.path, matches });
       }
 
       case "studium_read_material": {
@@ -99,30 +105,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const fileArg = String((args as { file?: string })?.file || "").toLowerCase();
         const page = (args as { page?: number })?.page;
 
-        const course = ws.courses.find((c) =>
-          c.title.toLowerCase().includes(courseArg.toLowerCase()),
-        );
+        const course = pickCourse(ws, courseArg);
         if (!course) {
           return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
         }
 
-        const filesDir = join(workspacePath, ws.workspaceFolder, course.slug, "files");
+        const courseDir = resolveCourseDir(workspacePath, course, ws);
+        const filesDir = join(courseDir, "files");
         const candidates = await findFilesRecursive(filesDir, fileArg);
         if (candidates.length === 0) {
           return jsonText({
             error: `No file matching "${fileArg}" in ${course.title}`,
+            path: course.path,
             hint: "Use studium_find_materials to list files, or digicampus_sync to refresh",
           });
         }
         const src = candidates[0];
 
-        const outDir = join(
-          workspacePath,
-          ws.workspaceFolder,
-          course.slug,
-          "extracted",
-          extractSlug(basename(src)),
-        );
+        const outDir = join(courseDir, "extracted", extractSlug(basename(src)));
         const result = await sdk.extractor.extractFile(src, outDir);
         if (result.error) {
           return jsonText({ error: result.error, hint: result.hint, source: src });
@@ -151,6 +151,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           source: src,
           kind: result.kind,
           pages: result.pages,
+          ref: page ? pageRef(course.path || course.slug, basename(src), page) : undefined,
+          citation: page ? `${course.title} · ${basename(src)} · p.${page}` : undefined,
           content,
           pageImages,
           viewerHtml,
@@ -245,7 +247,7 @@ async function loadWorkspace(sdk: Awaited<ReturnType<typeof createSdk>>): Promis
       `No Studium workspace at ${workspacePath}. Run: digicampus init`,
     );
   }
-  return ws;
+  return normalizeStudiumWorkspace(ws);
 }
 
 async function findFilesRecursive(

@@ -23,7 +23,7 @@ export const MCP_TOOLS = [
   },
   {
     name: "studium_find_materials",
-    description: "Search synced files by course and optional filename query",
+    description: "List synced files by course and optional filename query. For content search, grep `<course.path>/search/corpus.jsonl` with your native tools.",
     inputSchema: {
       type: "object",
       properties: {
