@@ -303,25 +303,73 @@ export async function runSetup(
 
 export interface SetupStatusReport {
   detected: Array<{ id: string; label: string; skillsDir: string; mcpFiles: string[] }>;
+  configured: string[];
   manifest: SetupManifest | null;
   upToDate: boolean;
+  stale: boolean;
+  staleSkills: string[];
   workspace: string;
+}
+
+async function bundledSkillHashes(): Promise<Record<string, string>> {
+  const hashes: Record<string, string> = {};
+  const core = await listSkillDirs(SKILLS_ROOT);
+  for (const name of core) {
+    if (name === "workflows") continue;
+    const content = await readFile(join(SKILLS_ROOT, name, "SKILL.md"), "utf-8");
+    hashes[name] = hashContent(content);
+  }
+  const workflows = await listSkillDirs(WORKFLOWS_ROOT);
+  for (const name of workflows) {
+    const content = await readFile(join(WORKFLOWS_ROOT, name, "SKILL.md"), "utf-8");
+    hashes[name] = hashContent(content);
+  }
+  return hashes;
+}
+
+async function findStaleSkills(agents: AgentProfile[]): Promise<string[]> {
+  const bundled = await bundledSkillHashes();
+  const stale = new Set<string>();
+  const byDir = uniqueSkillsDirs(agents);
+
+  for (const [skillsDir] of byDir) {
+    for (const [name, expected] of Object.entries(bundled)) {
+      try {
+        const content = await readFile(join(skillsDir, name, "SKILL.md"), "utf-8");
+        if (hashContent(content) !== expected) stale.add(name);
+      } catch {
+        stale.add(name);
+      }
+    }
+  }
+  return [...stale].sort();
 }
 
 export async function getSetupStatus(workspace?: string): Promise<SetupStatusReport> {
   const ws = expandPath(workspace ?? homedir() + "/Studium");
   const manifest = await loadManifest();
-  const detected = detectAgents().map((a) => ({
+  const agentProfiles = detectAgents();
+  const detected = agentProfiles.map((a) => ({
     id: a.id,
     label: a.label,
     skillsDir: a.skillsDir(),
     mcpFiles: a.mcpFiles(),
   }));
-  const upToDate =
-    manifest?.digicampusVersion === DIGICAMPUS_SETUP_VERSION &&
-    manifest?.workspace === ws;
+  const configured = manifest
+    ? Object.keys(manifest.mcp).filter((id) => (manifest.mcp[id]?.length ?? 0) > 0)
+    : [];
+  const agentsToCheck =
+    configured.length > 0
+      ? resolveAgentProfiles("all", true).filter((a) => configured.includes(a.id))
+      : agentProfiles;
+  const staleSkills = await findStaleSkills(agentsToCheck.length > 0 ? agentsToCheck : agentProfiles);
+  const versionOk = manifest?.digicampusVersion === DIGICAMPUS_SETUP_VERSION;
+  const workspaceOk = manifest?.workspace === ws;
+  const skillsOk = staleSkills.length === 0;
+  const upToDate = Boolean(manifest && versionOk && workspaceOk && skillsOk);
+  const stale = !upToDate;
 
-  return { detected, manifest, upToDate, workspace: ws };
+  return { detected, configured, manifest, upToDate, stale, staleSkills, workspace: ws };
 }
 
 /** @deprecated use resolveAgentProfiles */

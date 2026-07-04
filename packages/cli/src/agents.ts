@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { getCliVersion } from "./version.js";
 
 export type AgentId =
   | "cursor"
@@ -122,7 +123,7 @@ export function hashContent(content: string): string {
 }
 
 export const SETUP_MANIFEST_VERSION = "1";
-export const DIGICAMPUS_SETUP_VERSION = "0.1.0";
+export const DIGICAMPUS_SETUP_VERSION = getCliVersion();
 
 export interface SetupManifest {
   schemaVersion: typeof SETUP_MANIFEST_VERSION;

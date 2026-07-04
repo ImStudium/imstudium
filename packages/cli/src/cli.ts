@@ -10,6 +10,9 @@ import {
   expandPath,
   extractSlug,
   probeOAuthServer,
+  pickCourse,
+  rebuildSearchIndexes,
+  resolveCourseDir,
   toolHints,
   type StudiumExamDate,
   type StudiumWorkspace,
@@ -78,8 +81,9 @@ function semesterSyncOptions(
 }
 
 function courseDirFor(ws: StudiumWorkspace, workspaceRoot: string, slug: string): string {
-  const folder = ws.workspaceFolder || ws.semesterSlug || ws.semesters[0] || "current";
-  return join(workspaceRoot, folder, slug);
+  const course = ws.courses.find((c) => c.slug === slug);
+  if (course) return resolveCourseDir(workspaceRoot, course, ws);
+  return join(workspaceRoot, ws.activeSemester?.slug || "current", slug);
 }
 
 async function runLogin(
@@ -216,7 +220,10 @@ program
   .description("First-time setup: login, sync workspace, wire agents (idempotent)")
   .option("-o, --output <dir>", "Workspace directory", "~/Studium")
   .option("-y, --yes", "Non-interactive")
-  .option("--agents-only", "Skip login/sync — only configure Cursor, Claude, Codex, etc.")
+  .option(
+    "--agents-only",
+    "Skip login/sync — only configure Cursor, Claude Code, Claude Desktop, Codex, Windsurf, OpenCode",
+  )
   .option("--skip-sync", "Login + agent setup, no file sync")
   .option("--force", "Re-install skills/MCP even when unchanged")
   .option("--all-agents", "Configure every harness path, not only detected ones")
@@ -302,9 +309,15 @@ program
           const results = await sdk.extractor.extractDir(
             join(courseDir, "files"),
             join(courseDir, "extracted"),
+            {
+              course: { title: course.title, path: course.path || `${workspace.activeSemester?.slug}/${course.slug}` },
+              workspaceRoot: out,
+            },
           );
           extracted += results.filter((r) => !r.error && !r.skipped).length;
         }
+        await rebuildSearchIndexes(out, workspace);
+        await sdk.studium.refreshSearchArtifacts(out, workspace);
       }
 
       output(
@@ -643,9 +656,15 @@ program
             const results = await sdk.extractor.extractDir(
               join(courseDir, "files"),
               join(courseDir, "extracted"),
+              {
+                course: { title: course.title, path: course.path || `${workspace.activeSemester?.slug}/${course.slug}` },
+                workspaceRoot: out,
+              },
             );
             extracted += results.filter((r) => !r.error && !r.skipped).length;
           }
+          await rebuildSearchIndexes(out, workspace);
+          await sdk.studium.refreshSearchArtifacts(out, workspace);
         }
       }
       output(
@@ -694,33 +713,72 @@ program
       const workspace = await sdk.studium.loadWorkspace(ws);
       if (!workspace) fail(new DigicampusError("No workspace. Run digicampus init", "NO_WORKSPACE"));
 
-      const courses = workspace.courses.filter((c) =>
-        !opts.course ||
-        c.title.toLowerCase().includes(opts.course.toLowerCase()) ||
-        c.slug.toLowerCase() === opts.course.toLowerCase(),
-      );
+      const courses = opts.course
+        ? [pickCourse(workspace, opts.course)].filter(Boolean)
+        : workspace.courses.filter((c) => c.semesterId === workspace.activeSemester?.id || !workspace.activeSemester?.id);
       if (courses.length === 0) fail(new DigicampusError("Course not found", "NOT_FOUND"));
 
       const tools = await sdk.extractor.getTools();
       const results = [];
       for (const course of courses) {
+        if (!course) continue;
         const courseDir = courseDirFor(workspace, ws, course.slug);
         const courseResults = await sdk.extractor.extractDir(
           join(courseDir, "files"),
           join(courseDir, "extracted"),
-          extractOpts,
+          {
+            ...extractOpts,
+            course: { title: course.title, path: course.path! },
+            workspaceRoot: ws,
+          },
         );
         results.push(...courseResults);
       }
+
+      const searchIndex = await rebuildSearchIndexes(ws, workspace);
+      if (searchIndex) await sdk.studium.refreshSearchArtifacts(ws, workspace);
 
       const done = results.filter((r) => !r.error && !r.skipped).length;
       const skipped = results.filter((r) => r.skipped).length;
       const failed = results.filter((r) => r.error).length;
       const hints = toolHints(tools);
       output(
-        { extracted: done, skipped, failed, hints, results },
-        `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${hints.length ? `\n${hints.join("\n")}` : ""}`,
+        { extracted: done, skipped, failed, hints, results, searchIndex },
+        `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}${hints.length ? `\n${hints.join("\n")}` : ""}`,
       );
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+program
+  .command("index")
+  .description("Build/rebuild page index (corpus.jsonl) — for agent grep / semantic search, not a custom search engine")
+  .option("--course <name>", "Only one course")
+  .option("-o, --output <dir>", "Workspace directory")
+  .action(async (opts: { course?: string; output?: string }) => {
+    try {
+      const sdk = await getSdk();
+      const ws = expandPath(opts.output || sdk.workspacePath);
+      const workspace = await sdk.studium.loadWorkspace(ws);
+      if (!workspace) fail(new DigicampusError("No workspace. Run digicampus init", "NO_WORKSPACE"));
+
+      if (opts.course) {
+        const course = pickCourse(workspace, opts.course);
+        if (!course?.path) fail(new DigicampusError("Course not found", "NOT_FOUND"));
+        const { buildCourseSearchIndex, buildMaterialsManifest } = await import("digicampus-sdk");
+        const idx = await buildCourseSearchIndex(join(ws, course.path), course, ws);
+        if (!idx) fail(new DigicampusError("No extractions for this course. Run: digicampus extract --course ...", "NO_CORPUS"));
+        await buildMaterialsManifest(join(ws, course.path), course);
+        await sdk.studium.refreshSearchArtifacts(ws, workspace);
+        output(idx, `Indexed ${idx.chunkCount} chunks from ${idx.materialCount} files → ${course.path}/search/corpus.jsonl`);
+        return;
+      }
+
+      const idx = await rebuildSearchIndexes(ws, workspace);
+      if (!idx) fail(new DigicampusError("No extractions yet. Run: digicampus extract", "NO_CORPUS"));
+      await sdk.studium.refreshSearchArtifacts(ws, workspace);
+      output(idx, `Indexed ${idx.chunkCount} chunks across ${idx.courseCount} courses → per-course search/corpus.jsonl + materials.json`);
     } catch (e) {
       fail(e);
     }
@@ -746,11 +804,9 @@ program
         const ws = expandPath(opts.output || sdk.workspacePath);
         const workspace = await sdk.studium.loadWorkspace(ws);
         if (!workspace) fail(new DigicampusError("No workspace. Run digicampus init", "NO_WORKSPACE"));
-        const course = workspace.courses.find((c) =>
-          c.title.toLowerCase().includes(opts.course!.toLowerCase()),
-        );
+        const course = pickCourse(workspace, opts.course!);
         if (!course) fail(new DigicampusError("Course not found", "NOT_FOUND"));
-        const courseDir = courseDirFor(workspace, ws, course.slug);
+        const courseDir = resolveCourseDir(ws, course, workspace);
         const filesDir = join(courseDir, "files");
         const { readdir: rd } = await import("node:fs/promises");
         const matches: string[] = [];
@@ -997,12 +1053,19 @@ setupCmd
         `Workspace: ${status.workspace}`,
         `Manifest: ${status.manifest ? status.manifest.updatedAt : "none"}`,
         `Up to date: ${status.upToDate ? "yes" : "no"}`,
+        `Stale: ${status.stale ? "yes" : "no"}`,
+        "",
+        `Configured agents: ${status.configured.length ? status.configured.join(", ") : "none"}`,
         "",
         "Detected agents:",
         ...status.detected.map(
           (a) => `  ${a.label} (${a.id}) — skills: ${a.skillsDir}`,
         ),
       ];
+      if (status.staleSkills.length) {
+        lines.push("", `Stale skills: ${status.staleSkills.join(", ")}`);
+        lines.push("Run: digicampus setup all -y");
+      }
       output(status, lines.join("\n"));
     } catch (e) {
       fail(e);
@@ -1012,15 +1075,17 @@ setupCmd
 setupCmd
   .command("skills")
   .option("--agent <agent>", AGENT_HELP)
+  .option("--all-agents", "Configure every harness, not only detected")
   .option("--force", "Overwrite unchanged skills")
   .option("-y, --yes", "Non-interactive")
-  .action(async (opts: { agent?: string; yes?: boolean; force?: boolean }) => {
+  .action(async (opts: { agent?: string; yes?: boolean; force?: boolean; allAgents?: boolean }) => {
     try {
       const sdk = await getSdk();
       const result = await runSetup("skills", {
         yes: opts.yes,
         agent: (opts.agent || undefined) as AgentId | "all" | undefined,
         workspace: sdk.workspacePath,
+        allAgents: opts.allAgents,
         force: opts.force,
       });
       output(result, formatSetupSummary(result));
@@ -1032,13 +1097,15 @@ setupCmd
 setupCmd
   .command("workflows")
   .option("--agent <agent>", AGENT_HELP)
+  .option("--all-agents", "Configure every harness, not only detected")
   .option("--force", "Overwrite unchanged workflows")
-  .action(async (opts: { agent?: string; force?: boolean }) => {
+  .action(async (opts: { agent?: string; force?: boolean; allAgents?: boolean }) => {
     try {
       const sdk = await getSdk();
       const result = await runSetup("workflows", {
         agent: (opts.agent || undefined) as AgentId | "all" | undefined,
         workspace: sdk.workspacePath,
+        allAgents: opts.allAgents,
         force: opts.force,
       });
       output(result, formatSetupSummary(result));
@@ -1050,14 +1117,16 @@ setupCmd
 setupCmd
   .command("mcp")
   .option("--agent <agent>", AGENT_HELP)
+  .option("--all-agents", "Configure every harness, not only detected")
   .option("-o, --workspace <dir>", "Studium workspace path")
   .option("--force", "Rewrite MCP config even if identical")
-  .action(async (opts: { agent?: string; workspace?: string; force?: boolean }) => {
+  .action(async (opts: { agent?: string; workspace?: string; force?: boolean; allAgents?: boolean }) => {
     try {
       const sdk = await getSdk();
       const result = await runSetup("mcp", {
         agent: (opts.agent || undefined) as AgentId | "all" | undefined,
         workspace: opts.workspace || sdk.workspacePath,
+        allAgents: opts.allAgents,
         force: opts.force,
       });
       output(result, formatSetupSummary(result));
