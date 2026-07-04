@@ -16,7 +16,8 @@ const server = new Server(
   { capabilities: { tools: {} } },
 );
 
-let workspacePath = process.env.IMSTUDIUM_WORKSPACE || "";
+let workspacePath =
+  process.env.IMSTUDIUM_WORKSPACE || process.env.DIGICAMPUS_WORKSPACE || "";
 let sdkPromise: ReturnType<typeof createSdk> | null = null;
 
 async function getSdk() {
