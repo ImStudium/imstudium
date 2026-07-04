@@ -1,7 +1,7 @@
 ---
 name: digicampus-mcp
 description: |
-  DigiCampus MCP tools for Cursor/Claude — studium overview, klausuren, course brief, find materials, sync.
+  DigiCampus MCP tools for all agent harnesses — studium overview, klausuren, course brief, find materials, sync.
   Use when working inside an MCP-enabled agent instead of terminal.
 ---
 
@@ -19,19 +19,37 @@ digicampus setup mcp
 
 | Intent | Tool |
 |--------|------|
-| Course map | `studium_overview` |
+| Course map + search guidance | `studium_overview` (read `searchGuidance`) |
 | Exams | `studium_klausuren` |
 | One course | `studium_course_brief` |
-| Find PDFs/slides | `studium_find_materials` |
+| Find PDFs by filename | `studium_find_materials` |
 | **Read/see slide content** | `studium_read_material` |
 | Refresh | `digicampus_sync` |
 | Auth check | `digicampus_whoami` |
+
+## Finding content (use YOUR search tools)
+
+**No custom search MCP tool.** Cursor/Codex/Claude already grep and semantic-search — the harness only prepares the index.
+
+After `studium_overview`, use `searchGuidance`:
+
+```
+rg -i "backprop" ~/Studium/SS2026/*/search/corpus.jsonl
+```
+
+Each JSONL line has `ref`, `text`, `pageImage`, `extractSlug`. Cite with `ref`, then read:
+
+- `extracted/<extractSlug>/content.md` (## Page N)
+- `extracted/<extractSlug>/pages/page-NNN.png` for slides
+
+Or semantic-search `corpus.jsonl` / `content.md` with your harness indexer.
 
 ## Workflow
 
 ```
 digicampus_whoami → studium_overview → studium_klausuren
-  → studium_find_materials → studium_read_material
+  → grep corpus.jsonl OR studium_find_materials
+  → studium_read_material → read pageImages
 ```
 
 Prefer local tools before `digicampus_sync` (network + auth).

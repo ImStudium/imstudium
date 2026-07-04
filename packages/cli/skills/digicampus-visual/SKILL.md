@@ -25,7 +25,7 @@ Slides are **visual**. `content.md` text misses diagrams, plots, formulas, table
 
 | Harness | What to do |
 |---------|------------|
-| **Cursor / Claude / Codex with Read/vision** | `Read` each `pageImages` file |
+| **Cursor / Claude / Codex / Windsurf / OpenCode with Read/vision** | `Read` each `pageImages` file |
 | **Playwright CLI** | `digicampus view --course "Analysis" --file "vorlesung 3"` → open printed `viewerFileUrl` |
 | **Browser MCP** (cursor-ide-browser) | `browser_navigate` to `viewerFileUrl`, `browser_take_screenshot` per slide |
 | **MCP only** | `studium_read_material` → follow `requiredAction` + `methods` in JSON response |

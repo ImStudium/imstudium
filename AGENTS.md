@@ -43,7 +43,19 @@ Skill: `digicampus-visual` (installed by onboard)
 
 ## MCP tools
 
-`studium_overview` → `studium_klausuren` → `studium_find_materials` → `studium_read_material` → **read pageImages**
+`studium_overview` → `studium_klausuren` → grep/semantic-search `*/search/corpus.jsonl` → `studium_read_material` → **read pageImages**
+
+`studium_overview` returns `searchGuidance` — use your harness grep/codebase search on `corpus.jsonl`, not a custom search tool.
+
+## Finding slide/PDF content
+
+The workspace ships a **page index** (`<course.path>/search/corpus.jsonl`), not a search engine. Agents should:
+
+```bash
+rg -i "keyword" ~/Studium/SS2026/*/search/corpus.jsonl
+```
+
+Each line is JSON with `ref`, `text`, `pageImage`, `extractSlug`. Cite with `ref`, read `content.md` or PNGs. See `~/Studium/llms.txt`.
 
 ## Daily loop (fast)
 
@@ -57,3 +69,20 @@ No agent re-setup on daily sync.
 
 - Manifest: `~/.config/digicampus/setup-manifest.json`
 - Workspace: `~/Studium` (`DIGICAMPUS_WORKSPACE`)
+
+## Per harness
+
+| Surface | Install |
+|---------|---------|
+| **Cursor** | `npx -y digicampus onboard -y` or Cursor marketplace plugin |
+| **Claude Code** | `digicampus onboard -y` |
+| **Claude Desktop / Cowork** | `digicampus onboard -y` (shared `~/.claude/skills`, platform MCP path) |
+| **OpenAI Codex** | `digicampus onboard -y` or Codex plugin |
+| **Windsurf** | `digicampus onboard -y` |
+| **OpenCode** | `digicampus onboard -y` |
+
+Multi-harness machine (install to every path, not only detected):
+
+```bash
+digicampus setup all -y --all-agents
+```

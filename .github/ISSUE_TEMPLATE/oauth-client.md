@@ -22,7 +22,7 @@ DigiCampus Studium OS needs an OAuth2 PKCE client for non-interactive auth (`dig
 | Redirect URI | `http://127.0.0.1:8745/callback` |
 | Grant type | Authorization Code + PKCE |
 | Scope | Stud.IP API access (same as web session) |
-| Homepage | https://github.com/patrick-schroeppel/digicampus |
+| Homepage | https://github.com/paddy-shrp/digicampus |
 
 ## After approval
 

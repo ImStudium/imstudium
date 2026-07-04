@@ -41,22 +41,26 @@ digicampus setup status          # what’s configured
 
 ```
 ~/Studium/
-├── studium.json       # machine-readable course map (for agents)
+├── llms.txt           # agent entry point — paths + search guidance
+├── studium.json       # machine-readable course map (schema v2)
 ├── STUDIUM.md         # semester overview
 ├── klausuren.md       # exam timeline with days-remaining
 ├── calendar.ics       # full schedule
-└── current/
+└── SS2026/            # active semester (slug from Stud.IP)
     └── Analysis-II/
         ├── COURSE.md
-        ├── files/       # synced PDFs, slides, sheets — all file types
-        ├── extracted/   # per file: content.md + pages/*.png (visual!)
-        │   └── Vorlesung-03-pdf/
-        │       ├── content.md      # text per page/slide
-        │       ├── pages/page-01.png ...  # LLMs read these to SEE the slides
-        │       └── manifest.json
-        ├── wiki/
-        └── news/
+        ├── search/
+        │   ├── materials.json   # file list + cite refs
+        │   └── corpus.jsonl     # page index — grep this with your agent tools
+        ├── files/       # synced PDFs, slides, sheets
+        └── extracted/   # per file: content.md + pages/*.png
+            └── Vorlesung-03-pdf/
+                ├── content.md
+                ├── pages/page-001.png ...
+                └── manifest.json
 ```
+
+Sync defaults to the **current semester**. Other terms: `digicampus sync --semester "WS 2025/26"`.
 
 ## Quick start
 
@@ -85,8 +89,9 @@ digicampus --json studium
 | `studium` | Overview (`--json` for studium.json) |
 | `klausuren` | Exam timeline |
 | `courses list` | Live course list |
-| `sync` | Sync files + rebuild workspace (`--extract` to also extract) |
+| `sync` | Sync files + rebuild workspace (`--extract` to also extract; `--semester` for other terms) |
 | `extract` | Text + page images from all synced materials |
+| `index` | Rebuild page index (`corpus.jsonl`) for agent grep / semantic search |
 | `view` | Build `viewer.html` for Playwright / browser agents (fast) |
 | `doctor` | Check extraction tools (poppler, LibreOffice) |
 | `update` | Upgrade CLI + refresh agent skills/MCP |
@@ -95,13 +100,17 @@ digicampus --json studium
 
 Global flags: `--json`, `--quiet`, `--instance <url>`
 
-## MCP (Cursor / Claude)
+## MCP (all agent harnesses)
 
 ```bash
-digicampus setup mcp    # merges into ~/.cursor/mcp.json
+digicampus setup mcp    # merges into each harness MCP config (see AGENTS.md)
 ```
 
-Or copy [mcp.json](mcp.json). Tools: `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium_find_materials`, `studium_read_material`, `digicampus_sync`, `digicampus_whoami`
+Or copy [mcp.json](mcp.json). See [AGENTS.md](AGENTS.md) for per-harness paths.
+
+Tools: `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium_find_materials`, `studium_read_material`, `digicampus_sync`, `digicampus_sync_dry_run`, `digicampus_list_courses`, `digicampus_whoami`
+
+**Content search:** grep or semantic-search `<course.path>/search/corpus.jsonl` with your agent — `studium_overview` returns `searchGuidance`. No custom search MCP tool.
 
 ## Extraction — agents that SEE your slides
 
@@ -150,7 +159,7 @@ digicampus setup all -y
 | `klausur-prep` | Exam prep workflow |
 | `semester-refresh` | Daily briefing workflow |
 
-See [packages/cli/skills/](packages/cli/skills/) · [CLAUDE.md](CLAUDE.md)
+See [packages/cli/skills/](packages/cli/skills/) · [AGENTS.md](AGENTS.md) · [CLAUDE.md](CLAUDE.md)
 
 ## Packages
 

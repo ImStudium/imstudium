@@ -2,6 +2,21 @@
 
 All notable changes to DigiCampus Studium OS.
 
+## [Unreleased]
+
+### Added
+
+- Semester-aware sync — defaults to current term; `{semesterSlug}/{course}/` layout with `course.path` in `studium.json` (schema v2)
+- Page search index — per-course `search/corpus.jsonl` with stable `ref` citations; `digicampus index` to rebuild
+- `llms.txt` workspace entry point for agents (navigation + native search guidance)
+- `studium_overview` returns `searchGuidance` — agents use grep/semantic search, not a custom search tool
+- Vitest unit tests for setup, agents, and search corpus
+
+### Changed
+
+- MCP and CLI no longer ship duplicate keyword search — harness-native search on `corpus.jsonl`
+- Consumer docs refreshed (`README`, `docs/STUDIUM.md`, skills)
+
 ## [0.1.0] — 2026-07-03
 
 ### Added
@@ -20,7 +35,7 @@ All notable changes to DigiCampus Studium OS.
 - `SyncEngine` — flat/tree file sync, wiki/news/calendar export, incremental state
 - `StudiumBuilder` — `studium.json`, `STUDIUM.md`, `klausuren.md`, per-course `COURSE.md`
 - `digicampus` CLI — init, login, sync, studium, klausuren, discover, watch
-- `digicampus-mcp` — 8 study-planning tools for Cursor / Claude
+- `digicampus-mcp` — 9 study-planning tools for all agent harnesses
 - Global `--json` output with `schemaVersion: 1`
 - CI workflow, AGENTS.md, API/STUDIUM/OAUTH docs
 
@@ -29,4 +44,4 @@ All notable changes to DigiCampus Studium OS.
 - OAuth2 PKCE requires university-registered client
 - Courseware plugin files not in JSON:API (Stud.IP 5.4)
 
-[0.1.0]: https://github.com/patrick-schroeppel/digicampus/releases/tag/v0.1.0
+[0.1.0]: https://github.com/paddy-shrp/digicampus/releases/tag/v0.1.0
