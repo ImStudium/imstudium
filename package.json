@@ -1,12 +1,12 @@
 {
-  "name": "digicampus-monorepo",
+  "name": "imstudium-monorepo",
   "private": true,
   "version": "0.1.0",
-  "description": "DigiCampus Studium OS — extraction harness + study workspace for Stud.IP",
+  "description": "ImStudium — extraction harness + study workspace for Stud.IP",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddy-shrp/digicampus.git"
+    "url": "https://github.com/paddy-shrp/imstudium.git"
   },
   "workspaces": [
     "packages/*"
