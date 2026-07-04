@@ -28,7 +28,7 @@ export * from "./viewer.js";
 export * from "./resources/courses.js";
 export * from "./resources/files.js";
 
-export interface DigicampusSdk {
+export interface ImstudiumSdk {
   client: StudIpClient;
   auth: AuthManager;
   courses: CoursesResource;
@@ -76,7 +76,7 @@ export async function createSdk(configOverride?: Partial<ReturnType<typeof getDe
       return saveConfig(partial);
     },
     workspacePath: expandPath(config.workspacePath),
-  } satisfies DigicampusSdk & {
+  } satisfies ImstudiumSdk & {
     saveConfig: typeof saveConfig;
     workspacePath: string;
   };

@@ -219,7 +219,7 @@ export interface SyncReport {
   files: Array<{ fileRefId: string; path: string; action: "download" | "skip" | "fail" }>;
 }
 
-export interface DigicampusConfig {
+export interface ImstudiumConfig {
   baseUrl: string;
   workspacePath: string;
   instanceOrigin: string;

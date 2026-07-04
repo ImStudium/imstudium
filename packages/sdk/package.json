@@ -1,20 +1,20 @@
 {
-  "name": "digicampus-sdk",
+  "name": "imstudium-sdk",
   "version": "0.1.0",
-  "description": "DigiCampus Stud.IP JSON:API client, auth, sync, and Studium workspace builder",
+  "description": "ImStudium Stud.IP JSON:API client, auth, sync, and Studium workspace builder",
   "license": "MIT",
   "type": "module",
   "author": "Patrick Schröppel",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddy-shrp/digicampus.git"
+    "url": "https://github.com/paddy-shrp/imstudium.git"
   },
-  "homepage": "https://github.com/paddy-shrp/digicampus#readme",
+  "homepage": "https://github.com/paddy-shrp/imstudium#readme",
   "bugs": {
-    "url": "https://github.com/paddy-shrp/digicampus/issues"
+    "url": "https://github.com/paddy-shrp/imstudium/issues"
   },
   "keywords": [
-    "digicampus",
+    "imstudium",
     "studip",
     "studium",
     "jsonapi"

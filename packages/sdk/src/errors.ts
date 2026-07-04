@@ -1,6 +1,6 @@
 import type { JsonApiDocument } from "./types.js";
 
-export class DigicampusError extends Error {
+export class ImstudiumError extends Error {
   constructor(
     message: string,
     public readonly code: string,
@@ -8,7 +8,7 @@ export class DigicampusError extends Error {
     public readonly hint?: string,
   ) {
     super(message);
-    this.name = "DigicampusError";
+    this.name = "ImstudiumError";
   }
 
   toJSON() {
@@ -23,18 +23,18 @@ export class DigicampusError extends Error {
   }
 }
 
-export function parseApiErrors(doc: JsonApiDocument): DigicampusError {
+export function parseApiErrors(doc: JsonApiDocument): ImstudiumError {
   const err = doc.errors?.[0];
   const status = err?.status ? parseInt(err.status, 10) : undefined;
-  return new DigicampusError(
+  return new ImstudiumError(
     err?.detail || err?.title || "Unknown API error",
     err?.code || "API_ERROR",
     status,
-    status === 401 ? "Run digicampus login first" : undefined,
+    status === 401 ? "Run imstudium login first" : undefined,
   );
 }
 
-export async function readResponseError(res: Response): Promise<DigicampusError> {
+export async function readResponseError(res: Response): Promise<ImstudiumError> {
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("json")) {
     try {
@@ -44,10 +44,10 @@ export async function readResponseError(res: Response): Promise<DigicampusError>
       // fall through
     }
   }
-  return new DigicampusError(
+  return new ImstudiumError(
     `HTTP ${res.status}: ${res.statusText}`,
     "HTTP_ERROR",
     res.status,
-    res.status === 401 ? "Run digicampus login first" : undefined,
+    res.status === 401 ? "Run imstudium login first" : undefined,
   );
 }
