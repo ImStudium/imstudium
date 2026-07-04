@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# DigiCampus end-user installer — Node/npm only. No Bun, no Playwright, no Chrome permissions.
+# ImStudium end-user installer — Node/npm only. No Bun, no Playwright, no Chrome permissions.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/paddy-shrp/digicampus/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/paddy-shrp/imstudium/main/scripts/install.sh | bash
 #   bash scripts/install.sh [--global] [--workspace DIR]
 set -euo pipefail
 
@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
 GLOBAL=0
-WORKSPACE="${DIGICAMPUS_WORKSPACE:-$HOME/Studium}"
+WORKSPACE="${IMSTUDIUM_WORKSPACE:-$HOME/Studium}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -18,13 +18,13 @@ while [[ $# -gt 0 ]]; do
     -o|--workspace) WORKSPACE="$2"; shift 2 ;;
     -h|--help)
       cat <<'EOF'
-DigiCampus install — Node.js only. No Bun or extra browser tools required.
+ImStudium install — Node.js only. No Bun or extra browser tools required.
 
   curl -fsSL .../scripts/install.sh | bash
   bash scripts/install.sh [--global] [-o ~/Studium]
 
 Options:
-  --global          npm install -g digicampus digicampus-mcp
+  --global          npm install -g imstudium imstudium-mcp
   -o, --workspace   Studium workspace path (default: ~/Studium)
 EOF
       exit 0
@@ -34,7 +34,7 @@ EOF
 done
 
 echo ""
-echo "DigiCampus Studium OS"
+echo "ImStudium"
 echo "====================="
 echo ""
 
@@ -69,8 +69,8 @@ install_optional_tools() {
 
 install_cli() {
   if [[ "$GLOBAL" -eq 1 ]]; then
-    log "Installing digicampus + digicampus-mcp globally..."
-    npm install -g digicampus digicampus-mcp
+    log "Installing imstudium + imstudium-mcp globally..."
+    npm install -g imstudium imstudium-mcp
   else
     log "Ready via npx (no global install needed)."
   fi
@@ -81,21 +81,21 @@ install_cli
 
 log "Wiring all agent harnesses (Cursor, Claude, Codex, Windsurf, OpenCode)..."
 if [[ "$GLOBAL" -eq 1 ]]; then
-  digicampus onboard --agents-only -y -o "$WORKSPACE"
+  imstudium onboard --agents-only -y -o "$WORKSPACE"
 else
-  npx -y digicampus onboard --agents-only -y -o "$WORKSPACE"
+  npx -y imstudium onboard --agents-only -y -o "$WORKSPACE"
 fi
 
 echo ""
-echo "✓ DigiCampus is installed."
+echo "✓ ImStudium is installed."
 echo ""
 echo "Next (one time, in your terminal):"
-echo "  digicampus login"
+echo "  imstudium login"
 echo "  # Opens your normal browser — sign in with your university account."
 echo ""
 echo "Then sync your courses:"
-echo "  digicampus init -o $WORKSPACE"
-echo "  digicampus sync --quiet --extract"
+echo "  imstudium init -o $WORKSPACE"
+echo "  imstudium sync --quiet --extract"
 echo ""
 echo "Workspace: $WORKSPACE"
 echo ""

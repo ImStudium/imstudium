@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for DigiCampus install / dev scripts.
+# Shared helpers for ImStudium install / dev scripts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -39,5 +39,5 @@ ensure_npm() {
     brew install node@22
     return 0
   fi
-  die "Install Node.js 20+ from https://nodejs.org (for npm install -g digicampus)"
+  die "Install Node.js 20+ from https://nodejs.org (for npm install -g imstudium)"
 }

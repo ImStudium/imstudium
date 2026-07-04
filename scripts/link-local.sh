@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Link local digicampus CLI into PATH via bun link. Run after build.
+# Link local imstudium CLI into PATH via bun link. Run after build.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -12,13 +12,13 @@ ensure_bun
 log "Building..."
 bun run build
 
-log "Linking digicampus-sdk + digicampus (bun link --global)..."
+log "Linking imstudium-sdk + imstudium (bun link --global)..."
 (cd packages/sdk && bun link)
 (cd packages/cli && bun link --global)
 
 log "Refreshing agent harness..."
-digicampus update
+imstudium update
 
-log "Done. $(digicampus --version 2>/dev/null || echo 'digicampus linked')"
-echo "  digicampus doctor"
-echo "  digicampus login"
+log "Done. $(imstudium --version 2>/dev/null || echo 'imstudium linked')"
+echo "  imstudium doctor"
+echo "  imstudium login"
