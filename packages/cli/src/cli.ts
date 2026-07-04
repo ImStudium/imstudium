@@ -15,6 +15,8 @@ import {
   rebuildSearchIndexes,
   resolveCourseDir,
   toolHints,
+  ensureMigrated,
+  archiveLegacyConfigDir,
   type StudiumExamDate,
   type StudiumWorkspace,
 } from "@imstudium/sdk";
@@ -1143,6 +1145,38 @@ setupCmd
         force: opts.force,
       });
       output(result, formatSetupSummary(result));
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+setupCmd
+  .command("migrate")
+  .description("Migrate DigiCampus config/skills/MCP to ImStudium (idempotent)")
+  .option("-o, --workspace <dir>", "Studium workspace path")
+  .option("--all-agents", "Configure every harness, not only detected")
+  .option("-y, --yes", "Non-interactive")
+  .action(async (opts: { workspace?: string; yes?: boolean; allAgents?: boolean }) => {
+    try {
+      const sdk = await getSdk();
+      const migration = await ensureMigrated();
+      const result = await runSetup("migrate", {
+        yes: opts.yes,
+        workspace: opts.workspace || sdk.workspacePath,
+        allAgents: opts.allAgents,
+        force: true,
+      });
+      const archived = await archiveLegacyConfigDir();
+      output(
+        { migration, setup: result, archivedLegacyConfig: archived },
+        [
+          `Migration: ${migration.migrated.length ? migration.migrated.join(", ") : "already up to date"}`,
+          formatSetupSummary(result),
+          archived ? "Archived ~/.config/digicampus → digicampus.archived" : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
     } catch (e) {
       fail(e);
     }
