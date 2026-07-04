@@ -5,18 +5,18 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createSdk, expandPath, extractSlug, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, type StudiumWorkspace } from "digicampus-sdk";
+import { createSdk, expandPath, extractSlug, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, type StudiumWorkspace } from "imstudium-sdk";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { MCP_TOOLS } from "./tools.js";
 import { materialVisualPayload } from "./visual.js";
 
 const server = new Server(
-  { name: "digicampus-studium", version: "0.1.0" },
+  { name: "imstudium-studium", version: "0.1.0" },
   { capabilities: { tools: {} } },
 );
 
-let workspacePath = process.env.DIGICAMPUS_WORKSPACE || "";
+let workspacePath = process.env.IMSTUDIUM_WORKSPACE || "";
 let sdkPromise: ReturnType<typeof createSdk> | null = null;
 
 async function getSdk() {
@@ -117,7 +117,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return jsonText({
             error: `No file matching "${fileArg}" in ${course.title}`,
             path: course.path,
-            hint: "Use studium_find_materials to list files, or digicampus_sync to refresh",
+            hint: "Use studium_find_materials to list files, or imstudium_sync to refresh",
           });
         }
         const src = candidates[0];
@@ -159,12 +159,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           requiredAction: visual.requiredAction,
           viewerFileUrl: visual.viewerFileUrl,
           methods: visual.methods,
-          hint: pageImages.length ? undefined : result.hint || "Install poppler for slide images: digicampus doctor",
+          hint: pageImages.length ? undefined : result.hint || "Install poppler for slide images: imstudium doctor",
           otherMatches: candidates.slice(1),
         });
       }
 
-      case "digicampus_sync": {
+      case "imstudium_sync": {
         const course = (args as { course?: string })?.course;
         const semOpts = { semesterId: sdk.config.semesterId };
         const report = await sdk.sync.sync({
@@ -187,7 +187,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
       }
 
-      case "digicampus_sync_dry_run": {
+      case "imstudium_sync_dry_run": {
         const course = (args as { course?: string })?.course;
         const semOpts = { semesterId: sdk.config.semesterId };
         const report = await sdk.sync.sync({
@@ -201,7 +201,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return jsonText(report);
       }
 
-      case "digicampus_list_courses": {
+      case "imstudium_list_courses": {
         const me = await sdk.courses.getMe();
         const ctx = await sdk.courses.resolveSemesterContext({ semesterId: sdk.config.semesterId });
         const courses = await sdk.courses.listMine(me.id, { semesterId: ctx?.semester.id });
@@ -218,9 +218,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
       }
 
-      case "digicampus_whoami": {
+      case "imstudium_whoami": {
         const session = await sdk.auth.loadSession();
-        if (!session) return jsonText({ authenticated: false, hint: "Run digicampus login" });
+        if (!session) return jsonText({ authenticated: false, hint: "Run imstudium login" });
         const me = await sdk.courses.getMe();
         return jsonText({
           authenticated: true,
@@ -235,7 +235,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   } catch (e) {
     return jsonText({
       error: e instanceof Error ? e.message : String(e),
-      hint: "Run digicampus login if not authenticated",
+      hint: "Run imstudium login if not authenticated",
     });
   }
 });
@@ -244,7 +244,7 @@ async function loadWorkspace(sdk: Awaited<ReturnType<typeof createSdk>>): Promis
   const ws = await sdk.studium.loadWorkspace(workspacePath);
   if (!ws) {
     throw new Error(
-      `No Studium workspace at ${workspacePath}. Run: digicampus init`,
+      `No Studium workspace at ${workspacePath}. Run: imstudium init`,
     );
   }
   return normalizeStudiumWorkspace(ws);

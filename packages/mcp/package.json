@@ -1,20 +1,20 @@
 {
-  "name": "digicampus-mcp",
+  "name": "imstudium-mcp",
   "version": "0.1.0",
-  "description": "DigiCampus Studium OS MCP server — study planning tools for LLMs",
+  "description": "ImStudium MCP server — study planning tools for LLMs",
   "license": "MIT",
   "type": "module",
   "author": "Patrick Schröppel",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddy-shrp/digicampus.git"
+    "url": "https://github.com/paddy-shrp/imstudium.git"
   },
-  "homepage": "https://github.com/paddy-shrp/digicampus#readme",
+  "homepage": "https://github.com/paddy-shrp/imstudium#readme",
   "bugs": {
-    "url": "https://github.com/paddy-shrp/digicampus/issues"
+    "url": "https://github.com/paddy-shrp/imstudium/issues"
   },
   "keywords": [
-    "digicampus",
+    "imstudium",
     "studip",
     "studium",
     "mcp",
@@ -25,7 +25,7 @@
     "opencode"
   ],
   "bin": {
-    "digicampus-mcp": "./dist/index.js"
+    "imstudium-mcp": "./dist/index.js"
   },
   "files": ["dist"],
   "scripts": {
@@ -35,7 +35,7 @@
     "prepublishOnly": "bun run build && bun run typecheck"
   },
   "dependencies": {
-    "digicampus-sdk": "workspace:*",
+    "imstudium-sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.1"
   },
   "devDependencies": {

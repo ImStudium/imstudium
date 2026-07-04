@@ -48,8 +48,8 @@ export const MCP_TOOLS = [
     },
   },
   {
-    name: "digicampus_sync",
-    description: "Refresh workspace from live DigiCampus (requires login). Full sync + rebuild.",
+    name: "imstudium_sync",
+    description: "Refresh workspace from live Stud.IP (requires login). Full sync + rebuild.",
     inputSchema: {
       type: "object",
       properties: {
@@ -58,7 +58,7 @@ export const MCP_TOOLS = [
     },
   },
   {
-    name: "digicampus_sync_dry_run",
+    name: "imstudium_sync_dry_run",
     description: "Preview pending file downloads without downloading",
     inputSchema: {
       type: "object",
@@ -68,12 +68,12 @@ export const MCP_TOOLS = [
     },
   },
   {
-    name: "digicampus_list_courses",
-    description: "Live course list from DigiCampus API (when workspace is stale)",
+    name: "imstudium_list_courses",
+    description: "Live course list from Stud.IP API (when workspace is stale)",
     inputSchema: { type: "object", properties: {} },
   },
   {
-    name: "digicampus_whoami",
+    name: "imstudium_whoami",
     description: "Check authentication status and current user",
     inputSchema: { type: "object", properties: {} },
   },
