@@ -1,6 +1,6 @@
 {
   "name": "@imstudium/mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ImStudium MCP server — study planning tools for LLMs",
   "license": "MIT",
   "type": "module",
