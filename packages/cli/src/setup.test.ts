@@ -1,8 +1,35 @@
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
+import { afterEach, beforeEach, describe, it } from "vitest";
 import { imstudiumMcpEntry, mcpEntryMatches, mergeMcpConfig } from "./setup.js";
 
 describe("mergeMcpConfig", () => {
+  beforeEach(() => {
+    process.env.IMSTUDIUM_MCP_LAUNCH = "npx";
+  });
+
+  afterEach(() => {
+    delete process.env.IMSTUDIUM_MCP_LAUNCH;
+  });
+  it("removes legacy digicampus MCP server", () => {
+    const merged = mergeMcpConfig(
+      {
+        mcpServers: {
+          digicampus: {
+            command: "npx",
+            args: ["-y", "digicampus-mcp"],
+            env: { DIGICAMPUS_WORKSPACE: "/old" },
+          },
+          other: { command: "echo", args: ["hi"] },
+        },
+      },
+      "~/Studium",
+    ) as { mcpServers: Record<string, unknown> };
+
+    assert.equal(merged.mcpServers.digicampus, undefined);
+    assert.ok(merged.mcpServers.other);
+    assert.ok(merged.mcpServers.imstudium);
+  });
+
   it("adds imstudium server without removing existing servers", () => {
     const merged = mergeMcpConfig(
       {
@@ -44,6 +71,14 @@ describe("mergeMcpConfig", () => {
 });
 
 describe("mcpEntryMatches", () => {
+  beforeEach(() => {
+    process.env.IMSTUDIUM_MCP_LAUNCH = "npx";
+  });
+
+  afterEach(() => {
+    delete process.env.IMSTUDIUM_MCP_LAUNCH;
+  });
+
   it("matches identical entries regardless of key order", () => {
     const desired = imstudiumMcpEntry("~/Studium");
     const d = desired as { command: string; args: string[]; env: Record<string, string> };
