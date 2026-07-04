@@ -14,6 +14,7 @@ All notable changes to DigiCampus Studium OS.
 
 ### Changed
 
+- Monorepo tooling is Bun-only (lockfile, CI, dev scripts). End-user install via `npx digicampus` unchanged.
 - MCP and CLI no longer ship duplicate keyword search — harness-native search on `corpus.jsonl`
 - Consumer docs refreshed (`README`, `docs/STUDIUM.md`, skills)
 

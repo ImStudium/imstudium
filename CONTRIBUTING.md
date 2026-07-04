@@ -4,21 +4,24 @@ Thanks for contributing to DigiCampus Studium OS.
 
 ## Setup
 
+Requires [Bun](https://bun.sh) 1.2+.
+
 ```bash
 git clone https://github.com/paddy-shrp/digicampus.git
 cd digicampus
-bash scripts/install-dev.sh   # auto: Bun → pnpm → npm
+bash scripts/install-dev.sh
 ```
 
 Or manually:
 
 ```bash
-pnpm install && pnpm run validate
+bun install
+bun run validate
 ```
 
 ## Before a PR
 
-1. `pnpm run validate` must pass (typecheck + build + test)
+1. `bun run validate` must pass (typecheck + build + test)
 2. Update [CHANGELOG.md](./CHANGELOG.md) under `[Unreleased]`
 3. Update [AGENTS.md](./AGENTS.md) or [docs/](./docs/) if behavior changes for end users
 
@@ -41,9 +44,11 @@ Do not commit session files or cookies.
 ## Release (maintainers)
 
 ```bash
-pnpm run validate
-pnpm publish -r --dry-run
-pnpm publish -r --access public
+bun run validate
+bun run build
+cd packages/sdk && bun publish --access public
+cd packages/cli && bun publish --access public
+cd packages/mcp && bun publish --access public
 git tag vX.Y.Z && git push origin vX.Y.Z
 gh release create vX.Y.Z --generate-notes
 ```

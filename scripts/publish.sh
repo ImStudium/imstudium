@@ -5,22 +5,15 @@ cd "$(dirname "$0")/.."
 # shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 
-PM="$(detect_pm)"
-[[ -n "$PM" ]] || die "Need bun, pnpm, or npm"
+ensure_bun
 
-log "Building with $PM..."
-case "$PM" in
-  bun)  bun run build ;;
-  pnpm) pnpm run build ;;
-  npm)  npm run build ;;
-esac
+log "Building..."
+bun run build
 
 echo ""
-echo "Ready to publish v0.1.0"
-echo "  $PM publish -r --access public --no-git-checks"
-echo ""
-echo "Or per package:"
-echo "  cd packages/sdk && npm publish --access public"
-echo "  cd packages/cli && npm publish --access public"
-echo "  cd packages/mcp && npm publish --access public"
+echo "Ready to publish"
+echo "  bun run validate"
+echo "  cd packages/sdk && bun publish --access public"
+echo "  cd packages/cli && bun publish --access public"
+echo "  cd packages/mcp && bun publish --access public"
 echo ""

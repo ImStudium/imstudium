@@ -32,7 +32,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build && npm run typecheck"
+    "prepublishOnly": "bun run build && bun run typecheck"
   },
   "dependencies": {
     "digicampus-sdk": "workspace:*",

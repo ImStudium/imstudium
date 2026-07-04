@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
-# Link local digicampus CLI into PATH (pnpm global). Run after build.
+# Link local digicampus CLI into PATH via bun link. Run after build.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-log() { printf '→ %s\n' "$*"; }
+# shellcheck source=lib/common.sh
+source "$(dirname "$0")/lib/common.sh"
+
+ensure_bun
 
 log "Building..."
-bun run build 2>/dev/null || pnpm run build
+bun run build
 
-log "Linking digicampus-sdk + digicampus (pnpm global)..."
-(cd packages/sdk && pnpm link --global)
-(cd packages/cli && pnpm link --global)
+log "Linking digicampus-sdk + digicampus (bun link --global)..."
+(cd packages/sdk && bun link)
+(cd packages/cli && bun link --global)
 
 log "Refreshing agent harness..."
 digicampus update

@@ -12,7 +12,7 @@ globs:
 - SDK has no Commander imports; CLI has no raw fetch — use `digicampus-sdk`.
 - MCP tools are defined in `packages/mcp/src/tools.ts`.
 - Extraction lives in `packages/sdk/src/extract.ts` — external tools (poppler/LibreOffice) are optional; every kind must degrade gracefully with a `hint`. Never add heavy npm deps for parsing (no pdfjs, no mammoth); shell out or use native XML.
-- Run `pnpm validate` before proposing ship.
+- Run `bun run validate` before proposing ship.
 - Do not ship a custom search engine — build `search/corpus.jsonl` indexes; agents grep/semantic-search natively (see `agentSearchGuidance`).
 - Exam dates from achievement text are `confirmed: false` — preserve that semantics.
 - Slide answers require visual inspection: agents must read `pageImages` or `viewerFileUrl` (see `digicampus-visual` skill). Never ship slide summaries from `content.md` text only.
