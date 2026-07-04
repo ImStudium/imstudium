@@ -1,7 +1,7 @@
 ---
 name: OAuth2 client registration
 about: Request Stud.IP OAuth2 client from university IT (RZ)
-title: "[OAuth] Register client for DigiCampus CLI"
+title: "[OAuth] Register client for ImStudium CLI"
 labels: enhancement
 ---
 
@@ -12,23 +12,23 @@ labels: enhancement
 
 ## Purpose
 
-DigiCampus Studium OS needs an OAuth2 PKCE client for non-interactive auth (`digicampus login --oauth`).
+ImStudium needs an OAuth2 PKCE client for non-interactive auth (`imstudium login --oauth`).
 
 ## Request details for RZ
 
 | Field | Value |
 |-------|-------|
-| Application name | DigiCampus Studium OS |
+| Application name | ImStudium |
 | Redirect URI | `http://127.0.0.1:8745/callback` |
 | Grant type | Authorization Code + PKCE |
 | Scope | Stud.IP API access (same as web session) |
-| Homepage | https://github.com/paddy-shrp/digicampus |
+| Homepage | https://github.com/paddy-shrp/imstudium |
 
 ## After approval
 
-1. Add `clientId` to `~/.config/digicampus/config.json`
+1. Add `clientId` to `~/.config/imstudium/config.json`
 2. Document in `docs/OAUTH.md`
-3. Test `digicampus login --oauth`
+3. Test `imstudium login --oauth`
 
 ## References
 
