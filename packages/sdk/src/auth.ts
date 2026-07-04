@@ -1,8 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { BrowserContext } from "playwright";
+import { join } from "node:path";
+import type { BrowserContext, Page } from "playwright";
 import type { SessionData } from "./types.js";
 import { paths } from "./config.js";
-import { DigicampusError } from "./errors.js";
+import { ImstudiumError } from "./errors.js";
 import {
   type BrowserProfileMode,
   isChromeMissingError,
@@ -28,7 +29,8 @@ import {
   refreshOAuthToken,
 } from "./oauth.js";
 
-const KEYTAR_SERVICE = "digicampus";
+const KEYTAR_SERVICE = "imstudium";
+const LEGACY_KEYTAR_SERVICE = "digicampus";
 const KEYTAR_ACCOUNT = "session";
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
 
@@ -38,6 +40,7 @@ export interface BrowserLoginOptions {
   headless?: boolean;
   profile?: BrowserProfileMode;
   profileDirectory?: string;
+  force?: boolean;
   onMessage?: (text: string) => void;
 }
 
@@ -70,25 +73,35 @@ export class AuthManager {
 
     const keytar = await getKeytar();
     if (keytar?.getPassword) {
-      try {
-        const raw = await keytar.getPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT);
-        if (raw) {
-          this.session = JSON.parse(raw) as SessionData;
-          return this.session;
+      for (const service of [KEYTAR_SERVICE, LEGACY_KEYTAR_SERVICE]) {
+        try {
+          const raw = await keytar.getPassword(service, KEYTAR_ACCOUNT);
+          if (raw) {
+            this.session = JSON.parse(raw) as SessionData;
+            if (service === LEGACY_KEYTAR_SERVICE) {
+              await this.saveSession(this.session);
+            }
+            return this.session;
+          }
+        } catch {
+          // try next storage
         }
-      } catch {
-        // fall through to file storage
       }
     }
 
-    try {
-      const { readFile } = await import("node:fs/promises");
-      const raw = await readFile(`${paths.configDir}/session.json`, "utf-8");
-      this.session = JSON.parse(raw) as SessionData;
-      return this.session;
-    } catch {
-      return null;
+    for (const dir of [paths.configDir, join(paths.configDir, "..", "digicampus")]) {
+      try {
+        const { readFile } = await import("node:fs/promises");
+        const raw = await readFile(join(dir, "session.json"), "utf-8");
+        this.session = JSON.parse(raw) as SessionData;
+        await this.saveSession(this.session);
+        return this.session;
+      } catch {
+        // try next path
+      }
     }
+
+    return null;
   }
 
   async saveSession(session: SessionData): Promise<void> {
@@ -211,11 +224,9 @@ export class AuthManager {
     if (options.cookieValue) {
       return this.finishCookieLogin(origin, parseSeminarSessionCookie(options.cookieValue));
     }
-    if (process.env.DIGICAMPUS_SESSION_COOKIE) {
-      return this.finishCookieLogin(
-        origin,
-        parseSeminarSessionCookie(process.env.DIGICAMPUS_SESSION_COOKIE),
-      );
+    const envCookie = process.env.IMSTUDIUM_SESSION_COOKIE || process.env.DIGICAMPUS_SESSION_COOKIE;
+    if (envCookie) {
+      return this.finishCookieLogin(origin, parseSeminarSessionCookie(envCookie));
     }
 
     return this.runGuidedLogin(origin, options);
@@ -223,17 +234,17 @@ export class AuthManager {
 
   private async finishCookieLogin(origin: string, seminarSession: string): Promise<SessionData> {
     if (!seminarSession) {
-      throw new DigicampusError(
+      throw new ImstudiumError(
         "Empty session cookie.",
         "LOGIN_INVALID_COOKIE",
         undefined,
-        "Provide Seminar_Session after logging in at DigiCampus.",
+        "Provide Seminar_Session after logging in at Stud.IP.",
       );
     }
     const ok = await this.isCookieValid(origin, seminarSession);
     if (!ok) {
-      throw new DigicampusError(
-        "Session cookie was rejected by DigiCampus.",
+      throw new ImstudiumError(
+        "Session cookie was rejected by Stud.IP.",
         "LOGIN_INVALID_COOKIE",
         undefined,
         "Log in again and copy a fresh Seminar_Session value.",
@@ -297,11 +308,11 @@ export class AuthManager {
       const timer = setTimeout(() => {
         finish(() =>
           reject(
-            new DigicampusError(
+            new ImstudiumError(
               "Login timed out.",
               "LOGIN_TIMEOUT",
               undefined,
-              "Run digicampus login again.",
+              "Run imstudium login again.",
             ),
           ),
         );
@@ -311,7 +322,7 @@ export class AuthManager {
         const addr = server.address();
         if (!addr || typeof addr === "string") {
           finish(() =>
-            reject(new DigicampusError("Could not start login page.", "LOGIN_FAILED")),
+            reject(new ImstudiumError("Could not start login page.", "LOGIN_FAILED")),
           );
           return;
         }
@@ -321,14 +332,14 @@ export class AuthManager {
           [
             "Manual login helper opened in your browser.",
             `If it did not open: ${helperUrl}`,
-            "Prefer automatic login: run digicampus login (without --manual)",
+            "Prefer automatic login: run imstudium login (without --manual)",
           ].join("\n"),
         );
         if (options.openBrowser !== false) void openInSystemBrowser(helperUrl);
       });
 
       server.on("error", (err) => {
-        finish(() => reject(new DigicampusError(err.message, "LOGIN_FAILED")));
+        finish(() => reject(new ImstudiumError(err.message, "LOGIN_FAILED")));
       });
     });
   }
@@ -366,7 +377,7 @@ export class AuthManager {
         res.end(buildLoginSuccessHtml());
       } catch (err) {
         const message =
-          err instanceof DigicampusError ? err.message : "Invalid session — try again.";
+          err instanceof ImstudiumError ? err.message : "Invalid session — try again.";
         res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
         res.end(
           buildLoginHelperHtml({
@@ -389,7 +400,7 @@ export class AuthManager {
         res.end(buildLoginSuccessHtml());
       } catch (err) {
         const message =
-          err instanceof DigicampusError ? err.message : "Invalid session — try again.";
+          err instanceof ImstudiumError ? err.message : "Invalid session — try again.";
         res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
         res.end(
           buildLoginHelperHtml({
@@ -409,17 +420,26 @@ export class AuthManager {
 
   /** Opens Chrome, waits for Shibboleth login, auto-captures Seminar_Session. */
   async loginWithBrowser(options: BrowserLoginOptions): Promise<SessionData> {
-    const playwright = await loadPlaywright(options.onMessage);
-
     const origin = options.instanceOrigin.replace(/\/$/, "");
     const loginUrl = buildShibbolethLoginUrl(origin);
     const profile = options.profile ?? "isolated";
     const profileDirectory = options.profileDirectory ?? "Default";
 
+    if (!options.force) {
+      const stored = await this.loadSession();
+      const storedCookie = stored?.cookies?.Seminar_Session;
+      if (storedCookie && (await this.isCookieValid(origin, storedCookie))) {
+        options.onMessage?.("Already signed in — reusing saved session.");
+        return stored;
+      }
+    }
+
+    const playwright = await loadPlaywright(options.onMessage);
+
     options.onMessage?.(
       profile === "system"
-        ? "Sign in in the browser window (saved passwords work). We'll detect when you're done."
-        : "Sign in in the browser window. We'll detect when you're done — no copy/paste needed.",
+        ? "Sign in once in the browser (saved passwords work). We'll detect when you're done."
+        : "Sign in once in the browser. We'll detect when you're done — no copy/paste needed.",
     );
 
     const context = await this.launchLoginContext(playwright, {
@@ -428,31 +448,37 @@ export class AuthManager {
       headless: options.headless ?? false,
     });
 
-    try {
-      const pages = context.pages();
-      const page = pages[0] ?? (await context.newPage());
+    if (process.platform === "darwin") {
+      const { exec } = await import("node:child_process");
+      exec('osascript -e \'tell application "Google Chrome" to activate\'');
+    }
 
-      // Reuse an existing isolated-profile session when possible.
-      await page.goto(`${origin}/dispatch.php/my_courses`, {
-        waitUntil: "domcontentloaded",
-        timeout: 60_000,
-      });
-      let seminarSession = await this.extractSeminarSession(context, origin);
-      if (!seminarSession) {
-        await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    try {
+      let seminarSession: string | null = null;
+      if (!options.force) {
+        seminarSession = await this.extractSeminarSession(context, origin);
+        if (seminarSession) {
+          return this.persistCookieSession(seminarSession);
+        }
       }
+
+      const page = await this.openLoginPage(context, loginUrl);
 
       const deadline = Date.now() + (options.timeoutMs ?? LOGIN_TIMEOUT_MS);
       let lastProgress = 0;
 
       while (Date.now() < deadline) {
-        if (context.pages().length === 0) {
-          throw new DigicampusError(
+        if (context.pages().every((p) => p.isClosed())) {
+          throw new ImstudiumError(
             "Browser window was closed before login finished.",
             "LOGIN_CANCELLED",
             undefined,
-            "Run digicampus login again and keep the browser window open until you see success.",
+            "Run imstudium login again and keep the browser window open until you see success.",
           );
+        }
+
+        for (const p of context.pages()) {
+          if (!p.isClosed()) await this.assistLoginFlow(p);
         }
 
         seminarSession = await this.extractSeminarSession(context, origin);
@@ -464,36 +490,31 @@ export class AuthManager {
           options.onMessage?.("Still waiting for sign-in in the browser window…");
         }
 
-        try {
-          await page.waitForTimeout(1500);
-        } catch {
-          throw new DigicampusError(
-            "Browser window was closed before login finished.",
-            "LOGIN_CANCELLED",
-            undefined,
-            "Run digicampus login again and keep the browser window open until you see success.",
-          );
-        }
+        await this.sleep(1500);
       }
 
       if (!seminarSession) {
-        throw new DigicampusError(
+        throw new ImstudiumError(
           "Login timed out. Complete sign-in in the browser window.",
           "LOGIN_TIMEOUT",
           undefined,
-          "Run digicampus login again. Keep the browser window open until you reach DigiCampus.",
+          "Run imstudium login again. Keep the browser window open until you reach your Stud.IP home page.",
         );
       }
 
-      const session: SessionData = {
-        type: "cookie",
-        cookies: { Seminar_Session: seminarSession },
-      };
-      await this.saveSession(session);
+      const session = await this.persistCookieSession(seminarSession);
 
       try {
-        await page.setContent(buildLoginSuccessHtml(), { waitUntil: "domcontentloaded" });
-        await page.waitForTimeout(1200);
+        const donePage = context.pages().find((p) => !p.isClosed()) ?? page;
+        const userName = await this.fetchUserDisplayName(origin, seminarSession);
+        await donePage.setContent(
+          buildLoginSuccessHtml({
+            userName: userName ?? undefined,
+            host: new URL(origin).hostname,
+          }),
+          { waitUntil: "domcontentloaded" },
+        );
+        await this.sleep(2800);
       } catch {
         // window may already be closing
       }
@@ -501,6 +522,87 @@ export class AuthManager {
       return session;
     } finally {
       await context.close();
+    }
+  }
+
+  private async fetchUserDisplayName(
+    origin: string,
+    seminarSession: string,
+  ): Promise<string | null> {
+    try {
+      const res = await fetch(`${origin}/jsonapi.php/v1/users/me`, {
+        headers: {
+          Accept: "application/vnd.api+json",
+          Cookie: `Seminar_Session=${seminarSession}`,
+        },
+      });
+      if (!res.ok) return null;
+      const payload = (await res.json()) as {
+        data?: { attributes?: Record<string, string> };
+      };
+      return payload.data?.attributes?.["formatted-name"] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async persistCookieSession(seminarSession: string): Promise<SessionData> {
+    const session: SessionData = {
+      type: "cookie",
+      cookies: { Seminar_Session: seminarSession },
+    };
+    await this.saveSession(session);
+    return session;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** One tab at the Shibboleth URL — close spare blank tabs only (never SSO popups). */
+  private async openLoginPage(context: BrowserContext, loginUrl: string): Promise<Page> {
+    for (const p of context.pages()) {
+      if (p.isClosed()) continue;
+      const url = p.url();
+      if (url === "about:blank" || url === "chrome://newtab/") {
+        if (context.pages().filter((x) => !x.isClosed()).length > 1) {
+          await p.close().catch(() => {});
+        }
+      }
+    }
+
+    const page = context.pages().find((p) => !p.isClosed()) ?? (await context.newPage());
+    await page.bringToFront().catch(() => {});
+    await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.bringToFront().catch(() => {});
+    return page;
+  }
+
+  /** Optional: confirm Microsoft "Stay signed in?" only — never touch login/password forms. */
+  private async assistLoginFlow(page: Page): Promise<void> {
+    if (page.isClosed()) return;
+    const url = page.url();
+    if (!url.includes("microsoftonline.com")) return;
+
+    // Never click while email/password/MFA fields are on screen.
+    const hasAuthInput =
+      (await page
+        .locator(
+          'input[type="password"], input[type="email"], input[name="loginfmt"], input[name="passwd"], input[type="tel"]',
+        )
+        .count()) > 0;
+    if (hasAuthInput) return;
+
+    const body = await page.locator("body").innerText().catch(() => "");
+    const isKmsi =
+      /stay signed in\?/i.test(body) ||
+      /angemeldet bleiben\?/i.test(body) ||
+      url.includes("kmsi");
+    if (!isKmsi) return;
+
+    const yes = page.locator('input[type="submit"][id="idSIButton9"]').first();
+    if (await yes.isVisible().catch(() => false)) {
+      await yes.click({ timeout: 3000 }).catch(() => {});
     }
   }
 
@@ -579,11 +681,11 @@ export class AuthManager {
 
         if (options.profile === "system" && attempt.channel === "chrome") {
           if (isProfileInUseError(message)) {
-            throw new DigicampusError(
+            throw new ImstudiumError(
               "Your Chrome profile is in use.",
               "CHROME_PROFILE_LOCKED",
               undefined,
-              "Quit Google Chrome completely, then run digicampus login again.",
+              "Quit Google Chrome completely, then run imstudium login again.",
             );
           }
           if (isChromeMissingError(message)) {
@@ -594,11 +696,11 @@ export class AuthManager {
     }
 
     const message = lastError instanceof Error ? lastError.message : String(lastError);
-    throw new DigicampusError(
+    throw new ImstudiumError(
       `Could not launch browser for login: ${message}`,
       "BROWSER_LAUNCH_FAILED",
       undefined,
-      "Install Google Chrome, then run digicampus login again.",
+      "Install Google Chrome, then run imstudium login again.",
     );
   }
 
@@ -681,14 +783,14 @@ function startCallbackServer(): Promise<{
       if (error) {
         res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
         res.end(
-          `<h1>Sign-in failed</h1><p>${errorDescription || error}</p><p>Close this tab and run digicampus login again.</p>`,
+          `<h1>Sign-in failed</h1><p>${errorDescription || error}</p><p>Close this tab and run imstudium login again.</p>`,
         );
         reject(
-          new DigicampusError(
+          new ImstudiumError(
             errorDescription || error,
             "OAUTH_DENIED",
             undefined,
-            "Run digicampus login again.",
+            "Run imstudium login again.",
           ),
         );
         server.close();
