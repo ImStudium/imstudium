@@ -6,15 +6,14 @@ globs:
 
 # DigiCampus agent rules
 
-- Read `CONTEXT.md` and `AGENTS.md` before changing behavior.
-- Release truth: `implementation-status.md`.
+- Read [AGENTS.md](../AGENTS.md) and [docs/STUDIUM.md](../docs/STUDIUM.md) before changing behavior.
 - All CLI `--json` output must include `schemaVersion: "1"`.
 - Errors use `DigicampusError` with `code`, `message`, `hint`.
 - SDK has no Commander imports; CLI has no raw fetch — use `digicampus-sdk`.
 - MCP tools are defined in `packages/mcp/src/tools.ts`.
 - Extraction lives in `packages/sdk/src/extract.ts` — external tools (poppler/LibreOffice) are optional; every kind must degrade gracefully with a `hint`. Never add heavy npm deps for parsing (no pdfjs, no mammoth); shell out or use native XML.
 - Run `pnpm validate` before proposing ship.
-- Auth uses OAuth when registered; the local helper is only a temporary fallback. Do not add browser process control for login.
+- Do not ship a custom search engine — build `search/corpus.jsonl` indexes; agents grep/semantic-search natively (see `agentSearchGuidance`).
 - Exam dates from achievement text are `confirmed: false` — preserve that semantics.
 - Slide answers require visual inspection: agents must read `pageImages` or `viewerFileUrl` (see `digicampus-visual` skill). Never ship slide summaries from `content.md` text only.
 - `viewer.html` is generated on read/view only — not during bulk extract (keep sync fast).

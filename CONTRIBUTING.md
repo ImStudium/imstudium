@@ -13,15 +13,14 @@ bash scripts/install-dev.sh   # auto: Bun → pnpm → npm
 Or manually:
 
 ```bash
-bun install && bun run validate    # preferred
-# pnpm install && pnpm run validate
+pnpm install && pnpm run validate
 ```
 
 ## Before a PR
 
-1. `bun run validate` or `pnpm run validate` must pass (typecheck + build)
-2. Update `implementation-status.md` if shipping a feature
-4. Update `CHANGELOG.md` under `[Unreleased]` or version section
+1. `pnpm run validate` must pass (typecheck + build + test)
+2. Update [CHANGELOG.md](./CHANGELOG.md) under `[Unreleased]`
+3. Update [AGENTS.md](./AGENTS.md) or [docs/](./docs/) if behavior changes for end users
 
 ## Auth development
 
@@ -41,4 +40,10 @@ Do not commit session files or cookies.
 
 ## Release (maintainers)
 
-See [implementation-status.md](./implementation-status.md) ship checklist.
+```bash
+pnpm run validate
+pnpm publish -r --dry-run
+pnpm publish -r --access public
+git tag vX.Y.Z && git push origin vX.Y.Z
+gh release create vX.Y.Z --generate-notes
+```
