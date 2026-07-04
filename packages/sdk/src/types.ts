@@ -124,6 +124,10 @@ export interface StudiumCourse {
   folderCount: number;
   lastSynced?: string;
   slug: string;
+  /** Relative path under workspace root, e.g. `SS2026/Data-Engineering`. */
+  path?: string;
+  /** Page index for agent grep/semantic search — `<course.path>/search/corpus.jsonl`. */
+  search?: { corpusPath: string; chunkCount: number; indexedAt?: string };
 }
 
 export interface StudiumScheduleEntry {
@@ -188,6 +192,8 @@ export interface StudiumWorkspace {
   semesterSlug?: string;
   courses: StudiumCourse[];
   nextDeadlines: StudiumExamDate[];
+  /** Search index stats — corpora live per course at `{course.path}/search/corpus.jsonl`. */
+  search?: { chunkCount: number; courseCount: number; indexedAt?: string };
 }
 
 export interface SyncStateEntry {

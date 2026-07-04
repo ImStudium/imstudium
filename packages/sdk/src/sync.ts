@@ -5,7 +5,7 @@ import { CoursesResource } from "./resources/courses.js";
 import { FilesResource, NewsResource, WikiResource } from "./resources/files.js";
 import { ScheduleResource } from "./resources/courses.js";
 import { paths, ensureDir, slugify } from "./config.js";
-import { migrateLegacyCurrentFolder, resolveWorkspaceFolder } from "./semesters.js";
+import { semesterFolderSlug } from "./workspace-path.js";
 import type { SyncReport, SyncState, SyncStateEntry } from "./types.js";
 
 export interface SyncOptions {
@@ -74,8 +74,7 @@ export class SyncEngine {
       semesterId: options.semesterId ?? semesterCtx?.semester.id,
       allSemesters: options.allSemesters,
     });
-    const semesterFolder = resolveWorkspaceFolder(semesterCtx, options.allSemesters);
-    if (!options.dryRun) await migrateLegacyCurrentFolder(options.outputDir, semesterFolder);
+    const semesterFolder = semesterFolderSlug(semesterCtx, options.allSemesters);
     const layout = options.layout ?? "flat";
     const concurrency = options.concurrency ?? 8;
 

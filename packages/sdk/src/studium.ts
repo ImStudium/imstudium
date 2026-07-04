@@ -6,10 +6,10 @@ import { FilesResource } from "./resources/files.js";
 import { ensureDir, slugify } from "./config.js";
 import {
   computeSemesterProgress,
-  migrateLegacyCurrentFolder,
-  resolveWorkspaceFolder,
   semesterSlug,
 } from "./semesters.js";
+import { courseRelativePath, semesterFolderSlug } from "./workspace-path.js";
+import { agentSearchGuidance, type CourseSearchIndex, type WorkspaceSearchIndex } from "./search-corpus.js";
 import type {
   StudiumCourse,
   StudiumExamDate,
@@ -63,9 +63,8 @@ export class StudiumBuilder {
       semesterId: options?.semesterId ?? semesterCtx?.semester.id,
       allSemesters: options?.allSemesters,
     });
-    const semesterFolder = resolveWorkspaceFolder(semesterCtx, options?.allSemesters);
+    const semesterFolder = semesterFolderSlug(semesterCtx, options?.allSemesters);
     const semesterTitle = semesterCtx?.title || semesterFolder;
-    await migrateLegacyCurrentFolder(workspacePath, semesterFolder);
     const scheduleEntries = await this.schedule.getSchedule(me.id);
 
     const studiumCourses: StudiumCourse[] = [];
@@ -95,6 +94,9 @@ export class StudiumBuilder {
       const examDates = extractExamDates(c.id, title, events, c.attributes);
       allExams.push(...examDates);
 
+      const courseSlug = slugify(title);
+      const relPath = courseRelativePath(semesterFolder, courseSlug);
+
       const course: StudiumCourse = {
         id: c.id,
         title,
@@ -111,11 +113,12 @@ export class StudiumBuilder {
         fileCount: fileRefs.length,
         folderCount: folders.length,
         lastSynced: new Date().toISOString(),
-        slug: slugify(title),
+        slug: courseSlug,
+        path: relPath,
       };
       studiumCourses.push(course);
 
-      const courseDir = join(workspacePath, semesterFolder, course.slug);
+      const courseDir = join(workspacePath, relPath);
       await ensureDir(courseDir);
       await this.writeCourseBrief(courseDir, course);
     }
@@ -158,9 +161,12 @@ export class StudiumBuilder {
       nextDeadlines: allExams.filter((e) => e.date && (e.daysRemaining ?? 999) >= 0).slice(0, 10),
     };
 
+    await this.attachSearchMetadata(workspacePath, workspace);
+
     await writeFile(join(workspacePath, "studium.json"), JSON.stringify(workspace, null, 2));
     await this.writeStudiumMd(workspacePath, workspace);
     await this.writeKlausurenMd(workspacePath, allExams);
+    await writeLlmsTxt(workspacePath, workspace);
 
     return workspace;
   }
@@ -168,9 +174,47 @@ export class StudiumBuilder {
   async loadWorkspace(workspacePath: string): Promise<StudiumWorkspace | null> {
     try {
       const raw = await readFile(join(workspacePath, "studium.json"), "utf-8");
-      return JSON.parse(raw) as StudiumWorkspace;
+      return normalizeStudiumWorkspace(JSON.parse(raw) as StudiumWorkspace);
     } catch {
       return null;
+    }
+  }
+
+  /** Re-attach search metadata and rewrite studium.json + llms.txt after (re)indexing. */
+  async refreshSearchArtifacts(workspacePath: string, workspace: StudiumWorkspace): Promise<void> {
+    await this.attachSearchMetadata(workspacePath, workspace);
+    await writeFile(join(workspacePath, "studium.json"), JSON.stringify(workspace, null, 2));
+    await writeLlmsTxt(workspacePath, workspace);
+  }
+
+  /** Attach existing search/index.json metadata without rebuilding corpora. */
+  private async attachSearchMetadata(workspacePath: string, workspace: StudiumWorkspace): Promise<void> {
+    try {
+      const idx = JSON.parse(
+        await readFile(join(workspacePath, "search/index.json"), "utf-8"),
+      ) as WorkspaceSearchIndex;
+      workspace.search = {
+        chunkCount: idx.chunkCount,
+        courseCount: idx.courseCount,
+        indexedAt: idx.indexedAt,
+      };
+    } catch {
+      // no workspace corpus yet
+    }
+    for (const course of workspace.courses) {
+      if (!course.path) continue;
+      try {
+        const cidx = JSON.parse(
+          await readFile(join(workspacePath, course.path, "search/index.json"), "utf-8"),
+        ) as CourseSearchIndex;
+        course.search = {
+          corpusPath: `${course.path}/${cidx.corpusPath}`,
+          chunkCount: cidx.chunkCount,
+          indexedAt: cidx.indexedAt,
+        };
+      } catch {
+        // course not indexed
+      }
     }
   }
 
@@ -205,6 +249,12 @@ export class StudiumBuilder {
       `- **Type:** ${course.courseType || "—"}`,
       `- **ECTS:** ${course.credits ?? "—"}`,
       `- **Files synced:** ${course.fileCount}`,
+      "",
+      "## Navigate",
+      "",
+      "- `search/materials.json` — file list, extract slugs, cite refs",
+      "- `search/corpus.jsonl` — page index for your grep / semantic search (one JSON line per page)",
+      "- `extracted/<slug>/content.md` — full text; `pages/` — slide images (read before explaining visuals)",
       "",
     ];
 
@@ -379,4 +429,95 @@ async function readNotesSection(filePath: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Workspace-root llms.txt — the navigation contract for any LLM/agent
+ * landing in ~/Studium without harness-specific skills installed.
+ */
+export async function writeLlmsTxt(workspacePath: string, ws: StudiumWorkspace): Promise<void> {
+  const sem = ws.activeSemester;
+  const guidance = agentSearchGuidance(workspacePath, ws);
+  const lines = [
+    `# Studium — ${ws.user?.name || "student"}`,
+    "",
+    `> Local mirror of DigiCampus (Stud.IP) course materials, optimized for LLM navigation.`,
+    `> Active semester: ${sem.title}${sem.weekNumber != null ? ` (week ${sem.weekNumber}, ${sem.progressPercent}% elapsed)` : ""}. Generated: ${ws.generatedAt}`,
+    "",
+    "## Start here",
+    "",
+    "- [studium.json](studium.json): machine-readable index — courses, exam dates, `course.path` for every folder. Always resolve paths from here, never guess.",
+    "- [STUDIUM.md](STUDIUM.md): human overview of the semester.",
+    "- [klausuren.md](klausuren.md): exam dates with days remaining.",
+  ];
+
+  if (guidance.chunkCount) {
+    lines.push(
+      "",
+      "## Finding content (use YOUR search tools)",
+      "",
+      "This workspace does not ship a custom search command. Use the harness you already have:",
+      "",
+      `- **Grep:** \`${guidance.grepExample.replace("your terms", "keyword")}\``,
+      "- **Semantic / codebase search:** index or search \`*/search/corpus.jsonl\` and \`extracted/*/content.md\`",
+      `- **Fields per JSONL line:** ${guidance.corpusFields.join(", ")}`,
+      `- **Cite with:** \`${guidance.citeWith}\``,
+      `- **Then read:** ${guidance.resolveHit.pageText} · ${guidance.resolveHit.pageImage}`,
+      "",
+      `${guidance.chunkCount} indexed pages across ${guidance.courseCount} courses.`,
+    );
+  }
+
+  lines.push("", "## Courses", "");
+  for (const c of ws.courses) {
+    const search = c.search ? ` — ${c.search.chunkCount} indexed pages` : "";
+    lines.push(`- [${c.path}/](${c.path}/): **${c.title}** (${c.fileCount} files${search})`);
+  }
+
+  lines.push(
+    "",
+    "## Per-course layout",
+    "",
+    "- `COURSE.md` — brief: type, ECTS, exams, description",
+    "- `search/materials.json` — file list + extract slugs + cite refs",
+    "- `files/` — original downloads (PDF, PPTX, …)",
+    "- `extracted/<slug>/content.md` — full extracted text, one `## Page N` per page",
+    "- `extracted/<slug>/pages/page-NN.png` — rendered page images",
+    "- `search/corpus.jsonl` — page index for grep / semantic search",
+    "",
+    "## Rules for agents",
+    "",
+    "1. Search with your native tools on corpus.jsonl — do not expect a digicampus search MCP tool.",
+    "2. Cite pages with `ref` from JSONL hits or materials.json.",
+    "3. Slides/diagrams: read `pages/page-NNN.png` before explaining visual content.",
+    "4. Refresh: `digicampus sync --quiet --extract` (daily), `digicampus index` (rebuild page index).",
+    "",
+  );
+
+  await writeFile(join(workspacePath, "llms.txt"), lines.join("\n"));
+}
+
+/** Backfill path + activeSemester from older studium.json snapshots. */
+export function normalizeStudiumWorkspace(ws: StudiumWorkspace): StudiumWorkspace {
+  const legacy = ws as StudiumWorkspace & {
+    semesters?: string[];
+    semesterId?: string;
+    semesterSlug?: string;
+    workspaceFolder?: string;
+  };
+  if (!ws.activeSemester) {
+    ws.activeSemester = {
+      id: legacy.semesterId || "unknown",
+      title: legacy.semesters?.[0] || legacy.workspaceFolder || "current",
+      slug: legacy.semesterSlug || legacy.workspaceFolder || legacy.semesters?.[0] || "current",
+      isCurrent: true,
+    };
+  }
+  if (!ws.otherSemesters) ws.otherSemesters = [];
+  for (const c of ws.courses) {
+    if (!c.path) {
+      c.path = `${ws.activeSemester.slug}/${c.slug}`;
+    }
+  }
+  return ws;
 }
