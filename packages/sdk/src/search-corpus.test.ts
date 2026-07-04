@@ -80,5 +80,7 @@ describe("agentSearchGuidance", () => {
     expect(g.useNativeSearch).toBe(true);
     expect(g.grepExample).toContain("corpus.jsonl");
     expect(g.corpusFields).toContain("ref");
+    expect(g.extractionLimits.length).toBeGreaterThan(0);
+    expect(g.extractionLimits.some((l) => l.includes("LaTeX"))).toBe(true);
   });
 });

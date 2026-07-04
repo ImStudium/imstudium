@@ -10,6 +10,7 @@ import {
 } from "./semesters.js";
 import { courseRelativePath, semesterFolderSlug } from "./workspace-path.js";
 import { agentSearchGuidance, type CourseSearchIndex, type WorkspaceSearchIndex } from "./search-corpus.js";
+import { EXTRACTION_LIMITS_FOR_AGENTS } from "./extraction-guidance.js";
 import type {
   StudiumCourse,
   StudiumExamDate,
@@ -489,8 +490,12 @@ export async function writeLlmsTxt(workspacePath: string, ws: StudiumWorkspace):
     "",
     "1. Search with your native tools on corpus.jsonl — do not expect an ImStudium search MCP tool.",
     "2. Cite pages with `ref` from JSONL hits or materials.json.",
-    "3. Slides/diagrams: read `pages/page-NNN.png` before explaining visual content.",
+    "3. Slides/diagrams/formulas: read `pages/page-NNN.png` before explaining visual content — text alone is insufficient.",
     "4. Refresh: `imstudium sync --quiet --extract` (daily), `imstudium index` (rebuild page index).",
+    "",
+    "## Extraction limits (local poppler + Tesseract)",
+    "",
+    ...EXTRACTION_LIMITS_FOR_AGENTS.map((line) => `- ${line}`),
     "",
   );
 

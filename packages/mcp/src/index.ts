@@ -53,7 +53,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           focusCourses: ws.courses.filter((c) => !focusId || c.semesterId === focusId),
           allCourses: ws.courses,
           nextDeadlines: ws.nextDeadlines,
-          hint: "Default to focusCourses. Find content: grep/semantic-search corpus.jsonl (see searchGuidance). Paths: course.path + search/materials.json.",
+          hint: "Default to focusCourses. Find content: grep/semantic-search corpus.jsonl (see searchGuidance). Paths: course.path + search/materials.json. Text extraction has no LaTeX — see searchGuidance.extractionLimits.",
         });
       }
 

@@ -24,6 +24,7 @@ export * from "./oauth.js";
 export * from "./sync.js";
 export * from "./studium.js";
 export * from "./extract.js";
+export * from "./extraction-guidance.js";
 export * from "./viewer.js";
 export * from "./migrate.js";
 export * from "./resources/courses.js";

@@ -36,7 +36,7 @@ export const MCP_TOOLS = [
   {
     name: "studium_read_material",
     description:
-      "Extract one course file (PDF/PPTX/DOCX/images). Returns text + pageImages + viewerHtml. MANDATORY for agents: read every pageImage OR open viewerFileUrl in Playwright/browser before explaining slides — text alone misses diagrams and formulas.",
+      "Extract one course file (PDF/PPTX/DOCX/images). Returns text + pageImages + viewerHtml. Text is poppler/OCR only — not LaTeX; read every pageImage for formulas/diagrams before explaining.",
     inputSchema: {
       type: "object",
       properties: {

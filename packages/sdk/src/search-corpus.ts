@@ -1,6 +1,7 @@
 import { access, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 import { ensureDir } from "./config.js";
+import { EXTRACTION_LIMITS_FOR_AGENTS } from "./extraction-guidance.js";
 import type { MaterialKind, StudiumCourse, StudiumWorkspace } from "./types.js";
 
 /** Slim search record — text lives here for keyword search; full page also in content.md. */
@@ -431,6 +432,8 @@ export interface AgentSearchGuidance {
   };
   chunkCount?: number;
   courseCount?: number;
+  /** What local extraction can and cannot do — especially formulas / LaTeX. */
+  extractionLimits: readonly string[];
 }
 
 /** Tell agents how to search — do not reimplement grep/semantic search in MCP/CLI. */
@@ -454,6 +457,7 @@ export function agentSearchGuidance(
     },
     chunkCount: workspace.search?.chunkCount,
     courseCount: workspace.search?.courseCount,
+    extractionLimits: EXTRACTION_LIMITS_FOR_AGENTS,
   };
 }
 
