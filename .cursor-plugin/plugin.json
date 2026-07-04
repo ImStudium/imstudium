@@ -5,9 +5,14 @@
   "version": "0.1.0",
   "author": {
     "name": "Patrick Schröppel",
-    "url": "https://github.com/patrick-schroeppel"
+    "url": "https://github.com/paddy-shrp"
   },
-  "repository": "https://github.com/patrick-schroeppel/digicampus",
+  "repository": "https://github.com/paddy-shrp/digicampus",
+  "homepage": "https://github.com/paddy-shrp/digicampus#readme",
   "license": "MIT",
-  "keywords": ["digicampus", "studip", "studium", "klausur", "mcp", "education"]
+  "category": "education",
+  "keywords": ["digicampus", "studip", "studium", "klausur", "mcp", "education"],
+  "skills": "packages/cli/skills",
+  "rules": "rules",
+  "mcpServers": "mcp.json"
 }

@@ -1,0 +1,47 @@
+---
+description: DigiCampus Studium OS — study workspace, MCP tools, and slide comprehension
+globs:
+  - "**/*"
+---
+
+# DigiCampus Studium OS
+
+## Workspace
+
+- Default workspace: `~/Studium` (`DIGICAMPUS_WORKSPACE`)
+- Agent entry point: `llms.txt` — navigation + search guidance
+- Machine-readable map: `studium.json`
+- Exam timeline: `klausuren.md`
+- Per-course briefs: `<semesterSlug>/<Course>/COURSE.md`
+
+## Daily loop
+
+```bash
+digicampus sync --quiet --extract -o ~/Studium
+digicampus setup status
+```
+
+Re-run agent wiring after upgrades: `digicampus setup all -y`
+
+## MCP tools (use in order)
+
+`studium_overview` → `studium_klausuren` → **grep/semantic-search corpus.jsonl** → `studium_find_materials` → `studium_read_material` → **read pageImages**
+
+`studium_overview` returns `searchGuidance` — use your native grep or codebase search on `corpus.jsonl`.
+
+Other tools: `studium_course_brief`, `digicampus_sync`, `digicampus_sync_dry_run`, `digicampus_list_courses`, `digicampus_whoami`
+
+## Slides and PDFs — visual comprehension required
+
+**Never summarize slides from extracted text alone.**
+
+After `studium_read_material`:
+
+1. Read every `pageImages` PNG, or
+2. Open `viewerFileUrl` in a browser / Playwright
+
+Diagrams, formulas, and layout are lost in text extraction. Skill: `digicampus-visual`.
+
+## Exam dates
+
+Dates parsed from achievement text are **unconfirmed** — tell the student to verify in Stud.IP.

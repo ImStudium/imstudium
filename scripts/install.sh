@@ -79,7 +79,7 @@ install_cli() {
 install_optional_tools
 install_cli
 
-log "Wiring Cursor / Claude / Codex agents..."
+log "Wiring all agent harnesses (Cursor, Claude, Codex, Windsurf, OpenCode)..."
 if [[ "$GLOBAL" -eq 1 ]]; then
   digicampus onboard --agents-only -y -o "$WORKSPACE"
 else
@@ -91,7 +91,7 @@ echo "✓ DigiCampus is installed."
 echo ""
 echo "Next (one time, in your terminal):"
 echo "  digicampus login"
-echo "  # Opens your normal browser — saved passwords work. Paste one cookie when done."
+echo "  # Opens your normal browser — sign in with your university account."
 echo ""
 echo "Then sync your courses:"
 echo "  digicampus init -o $WORKSPACE"
