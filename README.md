@@ -24,6 +24,8 @@ imstudium login
 
 One command: login → sync → wire **Cursor, Claude Code, Claude Desktop/Cowork, Codex, Windsurf, OpenCode** (only detected harnesses). **Idempotent** — re-running skips unchanged skills and MCP.
 
+**Upgrading from DigiCampus?** Migration is automatic — `imstudium setup migrate -y` copies your session, config, and rewires agents.
+
 Daily use:
 
 ```bash
