@@ -1,10 +1,10 @@
 import {
   createSdk,
-  DigicampusError,
+  ImstudiumError,
   expandPath,
   OnboardUI,
   type StudiumWorkspace,
-} from "digicampus-sdk";
+} from "imstudium-sdk";
 import { formatSetupSummary, runSetup, type SetupResult } from "./setup.js";
 
 export interface OnboardFlowOpts {
@@ -62,11 +62,11 @@ export async function runOnboardFlow(opts: OnboardFlowOpts): Promise<OnboardFlow
       const session = await sdk.auth.loadSession();
       if (!session) {
         if (opts.yes) {
-          throw new DigicampusError(
+          throw new ImstudiumError(
             "Not logged in.",
             "NO_SESSION",
             undefined,
-            "Run: digicampus login",
+            "Run: imstudium login",
           );
         }
         ui?.updateStep("login", { status: "active" });
@@ -79,7 +79,7 @@ export async function runOnboardFlow(opts: OnboardFlowOpts): Promise<OnboardFlow
 
       if (!opts.skipSync) {
         ui?.updateStep("sync", { status: "active" });
-        ui?.setLiveMessage("Downloading course files from DigiCampus…");
+        ui?.setLiveMessage("Downloading course files from Stud.IP…");
         const semOpts = {
           semesterId: sdk.config.semesterId,
         };
@@ -130,7 +130,7 @@ export async function runOnboardFlow(opts: OnboardFlowOpts): Promise<OnboardFlow
     return { workspace: out, report, studium, setup, summary };
   } catch (err) {
     const message =
-      err instanceof DigicampusError
+      err instanceof ImstudiumError
         ? err.message
         : err instanceof Error
           ? err.message

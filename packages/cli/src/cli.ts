@@ -6,9 +6,10 @@ import {
   buildSlideViewer,
   createSdk,
   detectTools,
-  DigicampusError,
+  ImstudiumError,
   expandPath,
   extractSlug,
+  isChromeRunning,
   probeOAuthServer,
   pickCourse,
   rebuildSearchIndexes,
@@ -16,7 +17,7 @@ import {
   toolHints,
   type StudiumExamDate,
   type StudiumWorkspace,
-} from "digicampus-sdk";
+} from "imstudium-sdk";
 import {
   formatSetupSummary,
   getSetupStatus,
@@ -51,9 +52,9 @@ function output(data: unknown, text?: string) {
 
 function fail(err: unknown): never {
   const error =
-    err instanceof DigicampusError
+    err instanceof ImstudiumError
       ? err
-      : new DigicampusError(err instanceof Error ? err.message : String(err), "UNKNOWN");
+      : new ImstudiumError(err instanceof Error ? err.message : String(err), "UNKNOWN");
   if (globalOpts.json) {
     console.error(JSON.stringify(error.toJSON(), null, 2));
   } else {
@@ -93,6 +94,9 @@ async function runLogin(
     manual?: boolean;
     chromeProfile?: boolean;
     profileDirectory?: string;
+    relogin?: boolean;
+    /** Always open the sign-in browser — do not assume an existing session. */
+    force?: boolean;
     onMessage?: (text: string) => void;
   },
 ) {
@@ -104,12 +108,25 @@ async function runLogin(
     },
   };
 
+  const forceBrowser = opts.force ?? opts.relogin ?? false;
+
+  if (!forceBrowser && !opts.manual) {
+    const valid = await sdk.auth.ensureValidSession({
+      instanceOrigin: sdk.config.instanceOrigin,
+      clientId: sdk.config.oauth?.clientId,
+    });
+    if (valid) {
+      if (!globalOpts.quiet) output(null, "Already signed in — session is valid.");
+      return;
+    }
+  }
+
   const clientId = sdk.config.oauth?.clientId;
   const useOAuth = opts.oauth || Boolean(clientId);
 
   if (useOAuth && !opts.manual) {
     if (!clientId) {
-      fail(new DigicampusError("Set DIGICAMPUS_OAUTH_CLIENT_ID or config oauth.clientId", "NO_CLIENT_ID"));
+      fail(new ImstudiumError("Set IMSTUDIUM_OAUTH_CLIENT_ID or config oauth.clientId", "NO_CLIENT_ID"));
     }
 
     const probe = await probeOAuthServer(sdk.config.instanceOrigin, clientId);
@@ -133,16 +150,16 @@ async function runLogin(
       }
     } else if (probe.status === "no_client") {
       fail(
-        new DigicampusError(
+        new ImstudiumError(
           "OAuth client_id was rejected by Stud.IP.",
           "OAUTH_CLIENT_INVALID",
           undefined,
-          "Check oauth.clientId in ~/.config/digicampus/config.json",
+          "Check oauth.clientId in ~/.config/imstudium/config.json",
         ),
       );
     } else if (opts.oauth) {
       fail(
-        new DigicampusError(
+        new ImstudiumError(
           probe.message || "OAuth is unavailable on this Stud.IP instance.",
           "OAUTH_UNAVAILABLE",
         ),
@@ -164,40 +181,34 @@ async function runLogin(
     return;
   }
 
-  const browserOpts = {
+  const browserBase = {
     instanceOrigin: sdk.config.instanceOrigin,
-    profile: (opts.chromeProfile ? "system" : "isolated") as "system" | "isolated",
     profileDirectory: opts.profileDirectory,
+    force: forceBrowser,
     onMessage: loginOpts.onMessage,
   };
 
   if (!globalOpts.quiet) {
-    output(
-      null,
-      opts.chromeProfile
-        ? "Opening Chrome with your saved passwords…"
-        : "Opening sign-in browser…",
-    );
+    output(null, "Opening sign-in browser…");
   }
 
   if (opts.chromeProfile) {
-    try {
-      await sdk.auth.loginWithBrowser(browserOpts);
-      return;
-    } catch (firstErr) {
-      if (!(firstErr instanceof DigicampusError)) throw firstErr;
-      if (firstErr.code === "CHROME_PROFILE_LOCKED") {
-        if (!globalOpts.quiet) {
-          output(null, "Chrome is open — using a separate sign-in browser instead…");
-        }
-        await sdk.auth.loginWithBrowser({ ...browserOpts, profile: "isolated" });
-        return;
-      }
-      throw firstErr;
+    if (await isChromeRunning()) {
+      fail(
+        new ImstudiumError(
+          "Google Chrome is still running.",
+          "CHROME_PROFILE_LOCKED",
+          undefined,
+          "Quit Chrome completely, then run: imstudium login --chrome-profile",
+        ),
+      );
     }
+    await sdk.auth.loginWithBrowser({ ...browserBase, profile: "system" });
+    return;
   }
 
-  await sdk.auth.loginWithBrowser(browserOpts);
+  // One dedicated Playwright window — never probe the user's open Chrome profile.
+  await sdk.auth.loginWithBrowser({ ...browserBase, profile: "isolated" });
 }
 
 const CLI_ENTRY = fileURLToPath(import.meta.url);
@@ -205,8 +216,8 @@ const CLI_ENTRY = fileURLToPath(import.meta.url);
 const program = new Command();
 
 program
-  .name("digicampus")
-  .description("DigiCampus Studium OS — extract, sync, and plan your studies")
+  .name("imstudium")
+  .description("ImStudium — extract, sync, and plan your studies")
   .version(getCliVersion())
   .option("--json", "JSON output for agents")
   .option("--quiet", "Minimal output")
@@ -287,7 +298,7 @@ program
       if (!session || opts.relogin) {
         if (opts.yes && !session) {
           fail(
-            new DigicampusError("Not logged in.", "NO_SESSION", undefined, "Run: digicampus login"),
+            new ImstudiumError("Not logged in.", "NO_SESSION", undefined, "Run: imstudium login"),
           );
         }
         await runLogin(sdk, { chromeProfile: opts.chromeProfile });
@@ -321,8 +332,8 @@ program
       }
 
       output(
-        { workspace, report, extracted: opts.extract ? extracted : undefined, next: "digicampus onboard --agents-only" },
-        `Studium workspace ready at ${out} — ${workspace.activeSemester.title} in ${workspace.workspaceFolder}/${opts.extract ? ` · ${extracted} extracted` : ""}\nRun: digicampus onboard --agents-only  (once, idempotent)`,
+        { workspace, report, extracted: opts.extract ? extracted : undefined, next: "imstudium onboard --agents-only" },
+        `Studium workspace ready at ${out} — ${workspace.activeSemester.title} in ${workspace.workspaceFolder}/${opts.extract ? ` · ${extracted} extracted` : ""}\nRun: imstudium onboard --agents-only  (once, idempotent)`,
       );
     } catch (e) {
       fail(e);
@@ -331,20 +342,22 @@ program
 
 program
   .command("login")
-  .description("Sign in via browser — auto-detects session, no copy/paste")
+  .description("Sign in via browser — opens Stud.IP login every time")
   .option("--oauth", "Use OAuth2 PKCE (requires registered client_id)")
   .option("--chrome-profile", "Use your Chrome profile with saved passwords (quit Chrome first)")
   .option("--profile-directory <name>", "Chrome profile folder with --chrome-profile", "Default")
   .option("--manual", "Expert fallback: local helper page with manual session paste")
+  .option("--relogin", "Alias for login (browser sign-in always runs)")
   .action(async (opts: {
     oauth?: boolean;
     manual?: boolean;
     chromeProfile?: boolean;
     profileDirectory?: string;
+    relogin?: boolean;
   }) => {
     try {
       const sdk = await getSdk();
-      await runLogin(sdk, opts);
+      await runLogin(sdk, { ...opts, force: true });
       const me = await sdk.courses.getMe();
       const name = (me.attributes?.["formatted-name"] as string) || me.id;
       output({ user: { id: me.id, name } }, `Logged in as ${name}`);
@@ -382,16 +395,16 @@ program
             oauth: {
               status: oauth.status,
               message: oauth.message,
-              recommended: oauth.status === "ready" ? "digicampus login --oauth" : "digicampus login",
+              recommended: oauth.status === "ready" ? "imstudium login --oauth" : "imstudium login",
               adminUrl: oauth.endpoints.admin,
             },
           },
           [
-            "Not logged in. Run: digicampus login",
+            "Not logged in. Run: imstudium login",
             oauth.status === "broken_setup"
               ? "Note: Stud.IP OAuth is not configured on this instance — browser sign-in is used."
               : oauth.status === "ready" && sdk.config.oauth?.clientId
-                ? "OAuth is ready — digicampus login will use it automatically."
+                ? "OAuth is ready — imstudium login will use it automatically."
                 : oauth.status === "ready"
                   ? "OAuth is available — register a client (see docs/OAUTH.md) for one-click login."
                   : "",
@@ -414,7 +427,7 @@ program
           status: oauth.status,
           adminUrl: oauth.endpoints.admin,
         },
-        next: "digicampus update",
+        next: "imstudium update",
       });
     } catch (e) {
       fail(e);
@@ -436,7 +449,7 @@ program
         const result = await runGlobalUpdate();
         if (!result.ok) {
           fail(
-            new DigicampusError(
+            new ImstudiumError(
               "npm global upgrade failed",
               "UPDATE_FAILED",
               undefined,
@@ -458,7 +471,7 @@ program
       const summary = formatSetupSummary(setup);
       const text =
         before.installMode === "npx" && before.updateAvailable
-          ? `${summary}\nTip: npx -y digicampus@latest for newest CLI`
+          ? `${summary}\nTip: npx -y imstudium@latest for newest CLI`
           : `${upgradeNote}${summary}`.trim();
 
       output({ ...after, upgraded, setup, summary }, text);
@@ -477,7 +490,7 @@ program
       const dir = expandPath(opts.output || sdk.workspacePath);
       if (globalOpts.json) {
         const ws = await sdk.studium.loadWorkspace(dir);
-        if (!ws) fail(new DigicampusError("No workspace. Run digicampus init", "NO_WORKSPACE"));
+        if (!ws) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
         output(ws);
       } else {
         const md = await readFile(join(dir, "STUDIUM.md"), "utf-8");
@@ -498,7 +511,7 @@ program
       const dir = expandPath(opts.output || sdk.workspacePath);
       if (globalOpts.json) {
         const ws = await sdk.studium.loadWorkspace(dir);
-        if (!ws) fail(new DigicampusError("No workspace", "NO_WORKSPACE"));
+        if (!ws) fail(new ImstudiumError("No workspace", "NO_WORKSPACE"));
         const exams: StudiumExamDate[] = ws.courses.flatMap((c) => c.examDates);
         output({ exams, nextDeadlines: ws.nextDeadlines });
       } else {
@@ -560,7 +573,7 @@ courses
         list.find((c) =>
           (c.attributes?.title || "").toLowerCase().includes(idOrName.toLowerCase()),
         );
-      if (!course) fail(new DigicampusError("Course not found", "NOT_FOUND"));
+      if (!course) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
       const full = await sdk.courses.get(course.id);
       const fileCount = (await sdk.files.listAllFileRefs(course.id)).length;
       output({ course: full, fileCount });
@@ -584,7 +597,7 @@ files
           c.id === courseName ||
           (c.attributes?.title || "").toLowerCase().includes(courseName.toLowerCase()),
       );
-      if (!course) fail(new DigicampusError("Course not found", "NOT_FOUND"));
+      if (!course) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
       const tree = await sdk.files.buildFolderTree(course.id);
       output({ courseId: course.id, tree });
     } catch (e) {
@@ -711,12 +724,12 @@ program
 
       const ws = expandPath(opts.output || sdk.workspacePath);
       const workspace = await sdk.studium.loadWorkspace(ws);
-      if (!workspace) fail(new DigicampusError("No workspace. Run digicampus init", "NO_WORKSPACE"));
+      if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
 
       const courses = opts.course
         ? [pickCourse(workspace, opts.course)].filter(Boolean)
         : workspace.courses.filter((c) => c.semesterId === workspace.activeSemester?.id || !workspace.activeSemester?.id);
-      if (courses.length === 0) fail(new DigicampusError("Course not found", "NOT_FOUND"));
+      if (courses.length === 0) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
 
       const tools = await sdk.extractor.getTools();
       const results = [];
@@ -761,14 +774,14 @@ program
       const sdk = await getSdk();
       const ws = expandPath(opts.output || sdk.workspacePath);
       const workspace = await sdk.studium.loadWorkspace(ws);
-      if (!workspace) fail(new DigicampusError("No workspace. Run digicampus init", "NO_WORKSPACE"));
+      if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
 
       if (opts.course) {
         const course = pickCourse(workspace, opts.course);
-        if (!course?.path) fail(new DigicampusError("Course not found", "NOT_FOUND"));
-        const { buildCourseSearchIndex, buildMaterialsManifest } = await import("digicampus-sdk");
+        if (!course?.path) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
+        const { buildCourseSearchIndex, buildMaterialsManifest } = await import("imstudium-sdk");
         const idx = await buildCourseSearchIndex(join(ws, course.path), course, ws);
-        if (!idx) fail(new DigicampusError("No extractions for this course. Run: digicampus extract --course ...", "NO_CORPUS"));
+        if (!idx) fail(new ImstudiumError("No extractions for this course. Run: imstudium extract --course ...", "NO_CORPUS"));
         await buildMaterialsManifest(join(ws, course.path), course);
         await sdk.studium.refreshSearchArtifacts(ws, workspace);
         output(idx, `Indexed ${idx.chunkCount} chunks from ${idx.materialCount} files → ${course.path}/search/corpus.jsonl`);
@@ -776,7 +789,7 @@ program
       }
 
       const idx = await rebuildSearchIndexes(ws, workspace);
-      if (!idx) fail(new DigicampusError("No extractions yet. Run: digicampus extract", "NO_CORPUS"));
+      if (!idx) fail(new ImstudiumError("No extractions yet. Run: imstudium extract", "NO_CORPUS"));
       await sdk.studium.refreshSearchArtifacts(ws, workspace);
       output(idx, `Indexed ${idx.chunkCount} chunks across ${idx.courseCount} courses → per-course search/corpus.jsonl + materials.json`);
     } catch (e) {
@@ -798,14 +811,14 @@ program
 
       if (!outDir) {
         if (!opts.course || !opts.file) {
-          fail(new DigicampusError("Provide --dir OR both --course and --file", "MISSING_ARG"));
+          fail(new ImstudiumError("Provide --dir OR both --course and --file", "MISSING_ARG"));
         }
         const sdk = await getSdk();
         const ws = expandPath(opts.output || sdk.workspacePath);
         const workspace = await sdk.studium.loadWorkspace(ws);
-        if (!workspace) fail(new DigicampusError("No workspace. Run digicampus init", "NO_WORKSPACE"));
+        if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
         const course = pickCourse(workspace, opts.course!);
-        if (!course) fail(new DigicampusError("Course not found", "NOT_FOUND"));
+        if (!course) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
         const courseDir = resolveCourseDir(ws, course, workspace);
         const filesDir = join(courseDir, "files");
         const { readdir: rd } = await import("node:fs/promises");
@@ -819,7 +832,7 @@ program
           }
         }
         await walk(filesDir);
-        if (!matches.length) fail(new DigicampusError("File not found", "NOT_FOUND"));
+        if (!matches.length) fail(new ImstudiumError("File not found", "NOT_FOUND"));
         const src = matches[0];
         title = basename(src);
         outDir = join(courseDir, "extracted", extractSlug(title));
@@ -832,7 +845,7 @@ program
         { ...visual, viewerHtml, viewerFileUrl: `file://${viewerHtml}` },
         pageImages.length
           ? `Viewer: file://${viewerHtml}\n${pageImages.length} slide(s) — agents must read pageImages or open viewer in Playwright`
-          : `No page images in ${outDir}. Run: digicampus extract --file <path>`,
+          : `No page images in ${outDir}. Run: imstudium extract --file <path>`,
       );
     } catch (e) {
       fail(e);
@@ -850,9 +863,9 @@ program
       const hints = toolHints(tools);
       const update = await checkForUpdates(CLI_ENTRY);
       const lines = [
-        `digicampus:  ${getCliVersion()} (${update.installMode})`,
+        `imstudium:  ${getCliVersion()} (${update.installMode})`,
         update.updateAvailable
-          ? `update:      ${update.current} → ${update.latest} — run: digicampus update`
+          ? `update:      ${update.current} → ${update.latest} — run: imstudium update`
           : `update:      up to date`,
         "",
         `oauth:       ${oauth.status}${oauth.message ? ` — ${oauth.message}` : ""}`,
@@ -927,7 +940,7 @@ program
   .action(async () => {
     try {
       const sdk = await getSdk();
-      const { SemestersResource, computeSemesterProgress } = await import("digicampus-sdk");
+      const { SemestersResource, computeSemesterProgress } = await import("imstudium-sdk");
       const semesters = new SemestersResource(sdk.client);
       const all = await semesters.listAll();
       const current = await semesters.getCurrent();
@@ -996,7 +1009,7 @@ sessionCmd
         const content = await readFile(opts.file, "utf-8");
         await sdk.auth.importFromNetscapeCookieFile(content);
       } else {
-        fail(new DigicampusError("Provide --cookie or --file", "MISSING_ARG"));
+        fail(new ImstudiumError("Provide --cookie or --file", "MISSING_ARG"));
       }
       output({ ok: true }, "Session imported");
     } catch (e) {
@@ -1027,7 +1040,7 @@ configCmd
       } else if (key === "workspace") {
         await sdk.saveConfig({ workspacePath: value });
       } else {
-        fail(new DigicampusError(`Unknown key: ${key}`, "INVALID_KEY"));
+        fail(new ImstudiumError(`Unknown key: ${key}`, "INVALID_KEY"));
       }
       output({ ok: true }, `Set ${key}`);
     } catch (e) {
@@ -1064,7 +1077,7 @@ setupCmd
       ];
       if (status.staleSkills.length) {
         lines.push("", `Stale skills: ${status.staleSkills.join(", ")}`);
-        lines.push("Run: digicampus setup all -y");
+        lines.push("Run: imstudium setup all -y");
       }
       output(status, lines.join("\n"));
     } catch (e) {

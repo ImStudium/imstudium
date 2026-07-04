@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 
 export type InstallMode = "global" | "npx" | "development";
 
-const CLI_PACKAGES = ["digicampus", "digicampus-mcp"] as const;
+const CLI_PACKAGES = ["imstudium", "imstudium-mcp"] as const;
 
 export function getCliVersion(): string {
   try {
@@ -22,7 +22,7 @@ export function getCliVersion(): string {
 export function detectInstallMode(entryPath: string): InstallMode {
   try {
     const resolved = realpathSync(entryPath);
-    if (resolved.includes(`${join("digicampus", "packages", "cli")}`)) {
+    if (resolved.includes(join("packages", "cli"))) {
       return "development";
     }
     const globalRoot = execSync("npm root -g", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] }).trim();
@@ -77,10 +77,10 @@ export async function checkForUpdates(entryPath: string): Promise<UpdateCheckRes
 
   for (const name of CLI_PACKAGES) {
     const latest = await fetchNpmLatest(name);
-    if (name === "digicampus") latestMain = latest;
+    if (name === "imstudium") latestMain = latest;
     packages.push({
       name,
-      current: name === "digicampus" ? current : current,
+      current: name === "imstudium" ? current : current,
       latest,
       updateAvailable: latest ? semverLt(current, latest) : false,
     });
@@ -95,13 +95,13 @@ export async function checkForUpdates(entryPath: string): Promise<UpdateCheckRes
     updateAvailable,
     installMode,
     packages,
-    recommendedAction: "digicampus update",
+    recommendedAction: "imstudium update",
   };
 }
 
 export async function runGlobalUpdate(): Promise<{ ok: boolean; output: string }> {
   try {
-    const out = execSync("npm install -g digicampus@latest digicampus-mcp@latest", {
+    const out = execSync("npm install -g imstudium@latest imstudium-mcp@latest", {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });
