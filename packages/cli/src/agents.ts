@@ -123,11 +123,11 @@ export function hashContent(content: string): string {
 }
 
 export const SETUP_MANIFEST_VERSION = "1";
-export const DIGICAMPUS_SETUP_VERSION = getCliVersion();
+export const IMSTUDIUM_SETUP_VERSION = getCliVersion();
 
 export interface SetupManifest {
   schemaVersion: typeof SETUP_MANIFEST_VERSION;
-  digicampusVersion: string;
+  imstudiumVersion: string;
   workspace: string;
   skills: Record<string, Record<string, string>>;
   mcp: Record<string, string[]>;
@@ -137,7 +137,7 @@ export interface SetupManifest {
 export function emptyManifest(workspace: string): SetupManifest {
   return {
     schemaVersion: SETUP_MANIFEST_VERSION,
-    digicampusVersion: DIGICAMPUS_SETUP_VERSION,
+    imstudiumVersion: IMSTUDIUM_SETUP_VERSION,
     workspace,
     skills: {},
     mcp: {},

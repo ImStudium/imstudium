@@ -2,12 +2,12 @@ import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expandPath, paths } from "digicampus-sdk";
+import { expandPath, paths } from "imstudium-sdk";
 import {
   type AgentId,
   type AgentProfile,
   type SetupManifest,
-  DIGICAMPUS_SETUP_VERSION,
+  IMSTUDIUM_SETUP_VERSION,
   detectAgents,
   emptyManifest,
   hashContent,
@@ -47,9 +47,9 @@ const SKILLS_ROOT = join(PKG_ROOT, "skills");
 const WORKFLOWS_ROOT = join(SKILLS_ROOT, "workflows");
 const MANIFEST_FILE = join(paths.configDir, "setup-manifest.json");
 
-const DIGICAMPUS_MCP_SERVER = {
+const IMSTUDIUM_MCP_SERVER = {
   command: "npx",
-  args: ["-y", "digicampus-mcp"],
+  args: ["-y", "imstudium-mcp"],
 } as const;
 
 export function mergeMcpConfig(
@@ -62,17 +62,17 @@ export function mergeMcpConfig(
     ...existing,
     mcpServers: {
       ...servers,
-      digicampus: {
-        ...DIGICAMPUS_MCP_SERVER,
-        env: { DIGICAMPUS_WORKSPACE: expandPath(workspace) },
+      imstudium: {
+        ...IMSTUDIUM_MCP_SERVER,
+        env: { IMSTUDIUM_WORKSPACE: expandPath(workspace) },
       },
     },
   };
 }
 
-export function digicampusMcpEntry(workspace: string): Record<string, unknown> {
+export function imstudiumMcpEntry(workspace: string): Record<string, unknown> {
   const merged = mergeMcpConfig({}, workspace) as { mcpServers: Record<string, unknown> };
-  return merged.mcpServers.digicampus as Record<string, unknown>;
+  return merged.mcpServers.imstudium as Record<string, unknown>;
 }
 
 export function mcpEntryMatches(
@@ -163,7 +163,7 @@ export async function installMcpFile(
   workspace: string,
   force: boolean,
 ): Promise<SetupItemResult> {
-  const desired = digicampusMcpEntry(workspace);
+  const desired = imstudiumMcpEntry(workspace);
   let existing: Record<string, unknown> = {};
   try {
     existing = JSON.parse(await readFile(file, "utf-8")) as Record<string, unknown>;
@@ -172,14 +172,14 @@ export async function installMcpFile(
   }
 
   const servers = (existing.mcpServers as Record<string, Record<string, unknown>>) ?? {};
-  if (!force && mcpEntryMatches(servers.digicampus, desired)) {
+  if (!force && mcpEntryMatches(servers.imstudium, desired)) {
     return { action: "skipped", path: file };
   }
 
   const merged = mergeMcpConfig(existing, workspace);
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(merged, null, 2)}\n`);
-  return { action: servers.digicampus ? "updated" : "installed", path: file };
+  return { action: servers.imstudium ? "updated" : "installed", path: file };
 }
 
 export async function installProjectMcp(
@@ -271,7 +271,7 @@ export async function runSetup(
     ? { ...prev, workspace }
     : emptyManifest(workspace);
 
-  manifest.digicampusVersion = DIGICAMPUS_SETUP_VERSION;
+  manifest.imstudiumVersion = IMSTUDIUM_SETUP_VERSION;
   const result: SetupResult = {
     agents: agents.map((a) => a.id),
     skills: [],
@@ -363,7 +363,7 @@ export async function getSetupStatus(workspace?: string): Promise<SetupStatusRep
       ? resolveAgentProfiles("all", true).filter((a) => configured.includes(a.id))
       : agentProfiles;
   const staleSkills = await findStaleSkills(agentsToCheck.length > 0 ? agentsToCheck : agentProfiles);
-  const versionOk = manifest?.digicampusVersion === DIGICAMPUS_SETUP_VERSION;
+  const versionOk = manifest?.imstudiumVersion === IMSTUDIUM_SETUP_VERSION;
   const workspaceOk = manifest?.workspace === ws;
   const skillsOk = staleSkills.length === 0;
   const upToDate = Boolean(manifest && versionOk && workspaceOk && skillsOk);

@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "digicampus": {
+    "imstudium": {
       "command": "npx",
-      "args": ["-y", "digicampus-mcp"],
+      "args": ["-y", "imstudium-mcp"],
       "env": {
-        "DIGICAMPUS_WORKSPACE": "~/Studium"
+        "IMSTUDIUM_WORKSPACE": "~/Studium"
       }
     }
   }
