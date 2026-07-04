@@ -38,7 +38,7 @@ export const DEFAULT_ONBOARD_STEPS: OnboardStep[] = [
   {
     id: "login",
     title: "Sign in",
-    description: "Authenticate with DigiCampus — MFA is supported",
+    description: "Authenticate with Stud.IP — MFA is supported",
     status: "pending",
   },
   {
@@ -64,16 +64,16 @@ export const DEFAULT_ONBOARD_STEPS: OnboardStep[] = [
 function renderStep(step: OnboardStep): string {
   const icon =
     step.status === "done" || step.status === "error"
-      ? `<div class="dc-ring"></div>`
+      ? `<div class="is-ring"></div>`
       : step.status === "active"
-        ? `<div class="dc-ring"></div>`
-        : `<div class="dc-ring"></div>`;
+        ? `<div class="is-ring"></div>`
+        : `<div class="is-ring"></div>`;
   const detail = step.detail
-    ? `<div class="dc-step-detail">${escapeHtml(step.detail)}</div>`
+    ? `<div class="is-step-detail">${escapeHtml(step.detail)}</div>`
     : "";
-  return `<li class="dc-step ${step.status}">
-    <div class="dc-step-icon">${icon}</div>
-    <div class="dc-step-body">
+  return `<li class="is-step ${step.status}">
+    <div class="is-step-icon">${icon}</div>
+    <div class="is-step-body">
       <h3>${escapeHtml(step.title)}</h3>
       <p>${escapeHtml(step.description)}</p>
       ${detail}
@@ -90,19 +90,19 @@ export function buildOnboardHtml(state: OnboardUIState): string {
         : "Setting up your Studium workspace — this page updates live as each step completes.";
 
   const live = state.liveMessage
-    ? `<p class="dc-live">${escapeHtml(state.liveMessage)}</p>`
-    : `<p class="dc-live"></p>`;
+    ? `<p class="is-live">${escapeHtml(state.liveMessage)}</p>`
+    : `<p class="is-live"></p>`;
 
   const statusBanner =
     state.phase === "complete"
-      ? `<div class="dc-status success">${checkIcon()}<p>Setup complete</p></div>`
+      ? `<div class="is-status success">${checkIcon()}<p>Setup complete</p></div>`
       : state.phase === "error"
-        ? `<div class="dc-status error"><p>${escapeHtml(state.error || "Setup failed")}</p></div>`
+        ? `<div class="is-status error"><p>${escapeHtml(state.error || "Setup failed")}</p></div>`
         : "";
 
   const summary =
     state.phase === "complete" && state.summary
-      ? `<div class="dc-summary">
+      ? `<div class="is-summary">
           <strong>Ready to study</strong>
           ${state.summary.workspacePath ? `Workspace: <code>${escapeHtml(state.summary.workspacePath)}</code><br/>` : ""}
           ${state.summary.courses != null ? `${state.summary.courses} courses · ` : ""}
@@ -111,14 +111,14 @@ export function buildOnboardHtml(state: OnboardUIState): string {
         </div>`
       : "";
 
-  const body = `<main class="dc-card">
+  const body = `<main class="is-card">
     ${brandHeader("Studium OS setup")}
-    <p class="dc-lead">${lead}</p>
+    <p class="is-lead">${lead}</p>
     ${statusBanner}
     ${live}
-    <ol class="dc-steps">${state.steps.map(renderStep).join("")}</ol>
+    <ol class="is-steps">${state.steps.map(renderStep).join("")}</ol>
     ${summary}
-    <p class="dc-footer">Runs only on your machine — materials stay local.</p>
+    <p class="is-footer">Runs only on your machine — materials stay local.</p>
   </main>
   <script>
     (function () {
@@ -129,7 +129,7 @@ export function buildOnboardHtml(state: OnboardUIState): string {
     })();
   </script>`;
 
-  return pageShell("DigiCampus — Setup", body);
+  return pageShell("ImStudium — Setup", body);
 }
 
 export class OnboardUI {
