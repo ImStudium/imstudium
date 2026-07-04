@@ -30,7 +30,6 @@ import {
 } from "./oauth.js";
 
 const KEYTAR_SERVICE = "imstudium";
-const LEGACY_KEYTAR_SERVICE = "digicampus";
 const KEYTAR_ACCOUNT = "session";
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
 
@@ -73,35 +72,25 @@ export class AuthManager {
 
     const keytar = await getKeytar();
     if (keytar?.getPassword) {
-      for (const service of [KEYTAR_SERVICE, LEGACY_KEYTAR_SERVICE]) {
-        try {
-          const raw = await keytar.getPassword(service, KEYTAR_ACCOUNT);
-          if (raw) {
-            this.session = JSON.parse(raw) as SessionData;
-            if (service === LEGACY_KEYTAR_SERVICE) {
-              await this.saveSession(this.session);
-            }
-            return this.session;
-          }
-        } catch {
-          // try next storage
-        }
-      }
-    }
-
-    for (const dir of [paths.configDir, join(paths.configDir, "..", "digicampus")]) {
       try {
-        const { readFile } = await import("node:fs/promises");
-        const raw = await readFile(join(dir, "session.json"), "utf-8");
-        this.session = JSON.parse(raw) as SessionData;
-        await this.saveSession(this.session);
-        return this.session;
+        const raw = await keytar.getPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT);
+        if (raw) {
+          this.session = JSON.parse(raw) as SessionData;
+          return this.session;
+        }
       } catch {
-        // try next path
+        // fall through to file storage
       }
     }
 
-    return null;
+    try {
+      const { readFile } = await import("node:fs/promises");
+      const raw = await readFile(join(paths.configDir, "session.json"), "utf-8");
+      this.session = JSON.parse(raw) as SessionData;
+      return this.session;
+    } catch {
+      return null;
+    }
   }
 
   async saveSession(session: SessionData): Promise<void> {
@@ -224,9 +213,11 @@ export class AuthManager {
     if (options.cookieValue) {
       return this.finishCookieLogin(origin, parseSeminarSessionCookie(options.cookieValue));
     }
-    const envCookie = process.env.IMSTUDIUM_SESSION_COOKIE || process.env.DIGICAMPUS_SESSION_COOKIE;
-    if (envCookie) {
-      return this.finishCookieLogin(origin, parseSeminarSessionCookie(envCookie));
+    if (process.env.IMSTUDIUM_SESSION_COOKIE) {
+      return this.finishCookieLogin(
+        origin,
+        parseSeminarSessionCookie(process.env.IMSTUDIUM_SESSION_COOKIE),
+      );
     }
 
     return this.runGuidedLogin(origin, options);
