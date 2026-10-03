@@ -325,7 +325,7 @@ export async function runSetup(
   if (what === "workflows" || what === "all") {
     result.workflows = await installWorkflowsForAgents(agents, force);
   }
-  if (what === "mcp" || what === "all") {
+  if (what === "mcp") { // CLI-first: `setup all` = skills only; MCP is opt-in via `setup mcp`
     result.mcp = await installMcpForAgents(agents, workspace, manifest, force);
     if (opts.project !== false) {
       result.project = [await installProjectMcp(workspace, force)];
