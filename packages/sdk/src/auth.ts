@@ -70,6 +70,30 @@ export class AuthManager {
   async loadSession(): Promise<SessionData | null> {
     if (this.session) return this.session;
 
+    // Prefer ImSicheren (global credential plane; optional peer)
+    if (process.env.IMSTUDIUM_PLAIN_SESSION !== "1") {
+      try {
+        const mod = (await import(
+          /* webpackIgnore: true */ "@imsicheren/sdk" as string
+        )) as {
+          createSecureContext: (o: {
+            app: string;
+            enforceAccessMode?: boolean;
+          }) => {
+            getRaw: (k: string, id: string) => Promise<unknown>;
+          };
+        };
+        const secure = mod.createSecureContext({ app: "imstudium", enforceAccessMode: false });
+        const raw = await secure.getRaw("generic_json", "session");
+        if (raw && typeof raw === "object") {
+          this.session = raw as SessionData;
+          return this.session;
+        }
+      } catch {
+        // fall through
+      }
+    }
+
     const keytar = await getKeytar();
     if (keytar?.getPassword) {
       try {
@@ -97,6 +121,30 @@ export class AuthManager {
     this.session = session;
     const raw = JSON.stringify(session);
 
+    if (process.env.IMSTUDIUM_PLAIN_SESSION !== "1") {
+      try {
+        const mod = (await import(
+          /* webpackIgnore: true */ "@imsicheren/sdk" as string
+        )) as {
+          createSecureContext: (o: {
+            app: string;
+            enforceAccessMode?: boolean;
+          }) => {
+            set: (k: string, id: string, v: unknown) => Promise<void>;
+          };
+        };
+        const secure = mod.createSecureContext({ app: "imstudium", enforceAccessMode: false });
+        await secure.set("generic_json", "session", session as unknown as Record<string, unknown>);
+        // still mirror file for offline tooling
+        const { mkdir, writeFile } = await import("node:fs/promises");
+        await mkdir(paths.configDir, { recursive: true });
+        await writeFile(`${paths.configDir}/session.json`, raw, { mode: 0o600 });
+        return;
+      } catch {
+        // fall through
+      }
+    }
+
     const keytar = await getKeytar();
     if (keytar?.setPassword) {
       try {
@@ -114,6 +162,24 @@ export class AuthManager {
 
   async clearSession(): Promise<void> {
     this.session = null;
+    if (process.env.IMSTUDIUM_PLAIN_SESSION !== "1") {
+      try {
+        const mod = (await import(
+          /* webpackIgnore: true */ "@imsicheren/sdk" as string
+        )) as {
+          createSecureContext: (o: {
+            app: string;
+            enforceAccessMode?: boolean;
+          }) => {
+            delete: (k: string, id: string) => Promise<void>;
+          };
+        };
+        const secure = mod.createSecureContext({ app: "imstudium", enforceAccessMode: false });
+        await secure.delete("generic_json", "session");
+      } catch {
+        // ignore
+      }
+    }
     const keytar = await getKeytar();
     if (keytar?.deletePassword) {
       try {
