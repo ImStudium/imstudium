@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Command } from "commander";
 import {
@@ -35,7 +34,8 @@ import {
 } from "./version.js";
 import { fileURLToPath } from "node:url";
 
-import { act, fail, getSdk, globalOpts, output, type GlobalOpts } from "./runtime.js";
+import { act, fail, getSdk, globalOpts, note, output, type GlobalOpts } from "./runtime.js";
+import { runSync, writeEchoSnapshot } from "./pipeline.js";
 import { registerCommands } from "./commands/index.js";
 
 function semesterSyncOptions(
@@ -275,30 +275,16 @@ program
 
       await sdk.saveConfig({ workspacePath: out });
       const semOpts = semesterSyncOptions(sdk, {});
-      const report = await sdk.sync.sync({
-        outputDir: out,
-        include: ["wiki", "news", "calendar"],
+      const result = await runSync(sdk, {
+        out,
         ...semOpts,
+        include: ["wiki", "news", "calendar"],
+        extract: opts.extract,
+        onProgress: (m) => note(m),
       });
-      const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin, semOpts);
-
-      let extracted = 0;
-      if (opts.extract) {
-        for (const course of workspace.courses) {
-          const courseDir = courseDirFor(workspace, out, course.slug);
-          const results = await sdk.extractor.extractDir(
-            join(courseDir, "files"),
-            join(courseDir, "extracted"),
-            {
-              course: { title: course.title, path: course.path || `${workspace.activeSemester?.slug}/${course.slug}` },
-              workspaceRoot: out,
-            },
-          );
-          extracted += results.filter((r) => !r.error && !r.skipped).length;
-        }
-        await rebuildSearchIndexes(out, workspace);
-        await sdk.studium.refreshSearchArtifacts(out, workspace);
-      }
+      const workspace = result.workspace!;
+      const report = { ...result.report, files: undefined };
+      const extracted = result.extracted;
 
       output(
         { workspace, report, extracted: opts.extract ? extracted : undefined, next: "imstudium onboard --agents-only" },
@@ -502,29 +488,13 @@ program
       const dir = expandPath(opts.output || sdk.workspacePath);
       const ws = await sdk.studium.loadWorkspace(dir);
       if (!ws) fail(new ImstudiumError("No workspace", "NO_WORKSPACE"));
-      const next = ws.nextDeadlines[0];
-      const metrics = {
-        courses: ws.courses.length,
-        exams: ws.courses.reduce((n, c) => n + (c.examDates?.length ?? 0), 0),
-        nextDate: next?.date ?? null,
-        nextDays: next?.daysRemaining ?? null,
+      const snapshot = await writeEchoSnapshot(dir, ws);
+      const metrics = JSON.parse(await readFile(snapshot, "utf-8")).metrics as {
+        courses: number;
+        exams: number;
+        nextDate: string | null;
+        nextDays: number | null;
       };
-      mkdirSync(join(dir, "snapshots"), { recursive: true });
-      const snapshot = join(dir, "snapshots", "studium.json");
-      writeFileSync(
-        snapshot,
-        JSON.stringify(
-          {
-            schemaVersion: 1,
-            pack: "studium",
-            asOf: new Date().toISOString(),
-            metrics,
-            modules: ["studium.courses", "studium.exams"],
-          },
-          null,
-          2,
-        ) + "\n",
-      );
       console.log(
         JSON.stringify(
           {
@@ -670,15 +640,15 @@ files
 
 program
   .command("sync")
-  .description("Sync files and rebuild Studium workspace")
+  .description("Sync files and rebuild the Studium workspace (current semester by default)")
   .option("-o, --output <dir>", "Output directory")
   .option("--course <name>", "Sync single course")
   .option("--semester <label>", "Semester title or slug (e.g. SS2026, WS2025-26)")
-  .option("--all-semesters", "Sync every enrollment (all semesters)")
-  .option("--layout <mode>", "flat or tree", "flat")
+  .option("--all-semesters", "Every enrolled semester: current at the root, the rest under archive/")
+  .option("--layout <mode>", "tree (mirror Stud.IP folders) or flat", "tree")
   .option("--dry-run", "List changes without downloading")
-  .option("--include <items>", "Comma-separated: wiki,news,calendar")
-  .option("--extract", "Extract text + page images from new/changed files after sync")
+  .option("--include <items>", "Comma-separated: calendar,wiki,news (default: calendar)")
+  .option("--extract", "Extract new/changed files to markdown and rebuild the search index")
   .action(async (opts: {
     output?: string;
     course?: string;
@@ -694,41 +664,29 @@ program
       const out = expandPath(opts.output || sdk.workspacePath);
       const include = opts.include?.split(",").map((s) => s.trim()) as Array<"wiki" | "news" | "calendar"> | undefined;
       const semOpts = semesterSyncOptions(sdk, opts);
-      const report = await sdk.sync.sync({
-        outputDir: out,
-        layout: (opts.layout as "flat" | "tree") || "flat",
+      const result = await runSync(sdk, {
+        out,
+        ...semOpts,
+        course: opts.course,
+        layout: (opts.layout as "flat" | "tree") || "tree",
         dryRun: opts.dryRun,
         include,
-        ...semOpts,
-        courseFilter: opts.course
-          ? (c) => c.title.toLowerCase().includes(opts.course!.toLowerCase()) || c.id === opts.course
-          : undefined,
+        extract: opts.extract,
+        onProgress: (m) => note(m),
       });
-      let extracted = 0;
-      let folderNote = "";
-      if (!opts.dryRun) {
-        const workspace = await sdk.studium.build(out, sdk.config.instanceOrigin, semOpts);
-        folderNote = ` — ${workspace.activeSemester.title} in ${workspace.workspaceFolder}/`;
-        if (opts.extract) {
-          for (const course of workspace.courses) {
-            const courseDir = courseDirFor(workspace, out, course.slug);
-            const results = await sdk.extractor.extractDir(
-              join(courseDir, "files"),
-              join(courseDir, "extracted"),
-              {
-                course: { title: course.title, path: course.path || `${workspace.activeSemester?.slug}/${course.slug}` },
-                workspaceRoot: out,
-              },
-            );
-            extracted += results.filter((r) => !r.error && !r.skipped).length;
-          }
-          await rebuildSearchIndexes(out, workspace);
-          await sdk.studium.refreshSearchArtifacts(out, workspace);
-        }
-      }
+      const { report } = result;
+      const fresh = result.changes.filter((c) => c.change === "new").length;
+      const updated = result.changes.length - fresh;
+      const where = result.semesters.map((s) => `${s.title} → ${s.folder}/`).join(", ");
+      const lines = [
+        `Sync: ${report.downloaded} downloaded (${fresh} new, ${updated} updated), ${report.skipped} unchanged, ${report.failed} failed${opts.extract ? `, ${result.extracted} extracted` : ""}`,
+        where ? `      ${where}` : "",
+        ...(report.courseErrors ?? []).map((e) => `      ⚠ ${e.courseTitle}: ${e.message}`),
+        result.changes.length ? "      What's new: imstudium changes · NEW.md" : "",
+      ];
       output(
-        { ...report, extracted: opts.extract ? extracted : undefined },
-        `Sync: ${report.downloaded} downloaded, ${report.skipped} skipped, ${report.failed} failed${opts.extract ? `, ${extracted} extracted` : ""}${folderNote}`,
+        { ...report, files: undefined, semesters: result.semesters, changes: result.changes, extracted: opts.extract ? result.extracted : undefined },
+        lines.filter(Boolean).join("\n"),
       );
     } catch (e) {
       fail(e);

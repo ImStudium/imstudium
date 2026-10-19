@@ -1,0 +1,196 @@
+import type { Command } from "commander";
+import {
+  applyRollover,
+  computeSemesterProgress,
+  expandPath,
+  findCurrentSemester,
+  ImstudiumError,
+  listArchivedSemesters,
+  planRollover,
+  resolveSemesterByLabel,
+  semesterSlug,
+  type SemesterResource,
+} from "@imstudium/sdk";
+import { act, getSdk, note, output } from "../runtime.js";
+import { readChanges, runSync } from "../pipeline.js";
+import { resetCourseCache } from "../course-arg.js";
+
+const fmtDate = (iso?: string) =>
+  iso
+    ? new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" })
+    : "?";
+
+/** "7d", "24h", "2w", "30m" or an ISO date → epoch ms. */
+export function parseSince(value: string | undefined, fallbackDays = 7): number {
+  if (!value) return Date.now() - fallbackDays * 86_400_000;
+  const m = value.trim().match(/^(\d+)\s*([mhdw])$/i);
+  if (m) {
+    const n = Number(m[1]);
+    const unit = { m: 60_000, h: 3_600_000, d: 86_400_000, w: 7 * 86_400_000 }[m[2]!.toLowerCase() as "m" | "h" | "d" | "w"];
+    return Date.now() - n * unit;
+  }
+  const t = Date.parse(value);
+  if (Number.isNaN(t)) throw new ImstudiumError(`Can't read --since "${value}"`, "BAD_ARGS", undefined, "Use 7d, 24h, 2w or 2026-10-01");
+  return t;
+}
+
+export function registerSemester(program: Command): void {
+  const semester = program
+    .command("semester")
+    .description("Where you are in the semester; start a new one (archive the last, sync the new)")
+    .option("-o, --output <dir>", "Workspace directory")
+    .action(
+      act(async (opts: { output?: string }) => {
+        const sdk = await getSdk();
+        const out = expandPath(opts.output || sdk.workspacePath);
+        // /semesters is public: this works before login and offline from cache below.
+        let all: SemesterResource[] = [];
+        try {
+          all = await sdk.courses.semesters.listAll();
+        } catch {
+          // offline
+        }
+        const now = all.length ? findCurrentSemester(all) : null;
+        const ws = await sdk.studium.loadWorkspace(out);
+        const archive = await listArchivedSemesters(out);
+        const nowSlug = now ? semesterSlug(String(now.attributes?.title)) : undefined;
+        const needsRollover = !!(nowSlug && ws && ws.activeSemester.slug !== nowSlug);
+        const progress = now ? computeSemesterProgress(now) : undefined;
+        const lectures = now?.attributes as Record<string, string> | undefined;
+
+        const lines = [
+          now
+            ? `Stud.IP now  ${now.attributes?.title} · week ${progress?.weekNumber ?? "?"} · lectures ${fmtDate(lectures?.["start-of-lectures"])} – ${fmtDate(lectures?.["end-of-lectures"])}`
+            : "Stud.IP now  (offline — could not read /semesters)",
+          ws
+            ? `Workspace    ${ws.activeSemester.title} in ${ws.workspaceFolder}/ · ${ws.courses.length} courses · built ${fmtDate(ws.generatedAt)}`
+            : "Workspace    none yet — imstudium init",
+          archive.length
+            ? `Archive      ${archive.map((a) => `${a.title ?? a.slug} (${a.courses})`).join(" · ")}`
+            : "Archive      empty",
+          "",
+          needsRollover
+            ? `→ New semester. Run: imstudium semester start   (archives ${ws!.activeSemester.slug}/, syncs ${now!.attributes?.title})`
+            : ws
+              ? "→ Up to date. Daily: imstudium sync --extract"
+              : "→ imstudium login && imstudium semester start",
+        ];
+        output(
+          {
+            current: now
+              ? {
+                  id: now.id,
+                  title: now.attributes?.title,
+                  slug: nowSlug,
+                  start: now.attributes?.start,
+                  end: now.attributes?.end,
+                  startOfLectures: lectures?.["start-of-lectures"],
+                  endOfLectures: lectures?.["end-of-lectures"],
+                  ...progress,
+                }
+              : null,
+            workspace: ws
+              ? { title: ws.activeSemester.title, slug: ws.activeSemester.slug, folder: ws.workspaceFolder, courses: ws.courses.length, generatedAt: ws.generatedAt }
+              : null,
+            archive,
+            needsRollover,
+            next: needsRollover ? "imstudium semester start" : ws ? "imstudium sync --extract" : "imstudium semester start",
+          },
+          lines.join("\n"),
+        );
+      }),
+    );
+
+  semester
+    .command("start")
+    .description("Archive the previous semester folder and sync the new semester")
+    .option("-o, --output <dir>", "Workspace directory")
+    .option("--semester <label>", "Target semester (default: the one running now)")
+    .option("--extract", "Extract materials and build the search index after syncing")
+    .option("--dry-run", "Show what would move and download")
+    .action(
+      act(async (opts: { output?: string; semester?: string; extract?: boolean; dryRun?: boolean }) => {
+        const sdk = await getSdk();
+        const out = expandPath(opts.output || sdk.workspacePath);
+        const all = await sdk.courses.semesters.listAll();
+        const target = opts.semester ? resolveSemesterByLabel(all, opts.semester) : findCurrentSemester(all);
+        if (!target) {
+          throw new ImstudiumError(
+            opts.semester ? `No semester matches "${opts.semester}"` : "No semester is running right now",
+            "NO_SEMESTER",
+            undefined,
+            "imstudium semester start --semester \"WS 2026/27\"",
+          );
+        }
+        const title = String(target.attributes?.title);
+        const slug = semesterSlug(title);
+        const plan = await planRollover(out, slug);
+
+        note(`Semester start: ${title} → ${slug}/`);
+        for (const m of plan.moves) note(`  archive ${m.slug}/ → archive/${m.slug}/`);
+        for (const c of plan.conflicts) note(`  ⚠ archive/${c}/ already exists — leaving ${c}/ in place`);
+
+        if (opts.dryRun) {
+          const preview = await runSync(sdk, { out, semesterId: target.id, dryRun: true, onProgress: note });
+          output(
+            { semester: { id: target.id, title, slug }, plan, downloads: preview.report.downloaded },
+            `Dry run: ${plan.moves.length} folder(s) to archive, ${preview.report.downloaded} file(s) to download.`,
+          );
+          return;
+        }
+
+        // Make sure we can reach Stud.IP as you before moving anything.
+        await sdk.courses.getMe();
+        const rolled = await applyRollover(plan);
+        resetCourseCache();
+        const result = await runSync(sdk, {
+          out,
+          semesterId: target.id,
+          include: ["calendar", "wiki", "news"],
+          extract: opts.extract,
+          onProgress: note,
+        });
+        const ws = result.workspace;
+        output(
+          { semester: { id: target.id, title, slug }, rollover: rolled, report: { ...result.report, files: undefined }, extracted: result.extracted },
+          [
+            `${title} ready in ${slug}/ — ${ws?.courses.length ?? 0} courses, ${result.report.downloaded} files downloaded${opts.extract ? `, ${result.extracted} extracted` : ""}.`,
+            rolled.moved.length ? `Archived: ${rolled.moved.map((s) => `archive/${s}/`).join(", ")}` : "",
+            ...(result.report.courseErrors ?? []).map((e) => `⚠ ${e.courseTitle}: ${e.message}`),
+            "",
+            "Next: imstudium today · imstudium week · imstudium changes",
+            opts.extract ? "" : "      imstudium sync --extract   (markdown + search index for agents)",
+          ]
+            .filter((l, i, a) => l !== "" || a[i - 1] !== "")
+            .join("\n"),
+        );
+      }),
+    );
+
+  program
+    .command("changes")
+    .description("What arrived from Stud.IP recently (new and updated files)")
+    .option("--since <when>", "7d, 24h, 2w or a date", "7d")
+    .option("--course <name>", "Only one course (title fragment)")
+    .option("-o, --output <dir>", "Workspace directory")
+    .action(
+      act(async (opts: { since: string; course?: string; output?: string }) => {
+        const sdk = await getSdk();
+        const out = expandPath(opts.output || sdk.workspacePath);
+        const since = parseSince(opts.since);
+        const q = opts.course?.toLowerCase();
+        const seen = new Set<string>();
+        const changes = (await readChanges(out, since))
+          .reverse()
+          .filter((c) => !q || (c.courseTitle ?? "").toLowerCase().includes(q))
+          .filter((c) => (seen.has(c.path) ? false : (seen.add(c.path), true)));
+        const lines = changes.length
+          ? changes.map(
+              (c) =>
+                `${new Date(c.at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Berlin" })}  ${c.change === "new" ? "new    " : "updated"}  ${(c.courseTitle ?? "").slice(0, 34).padEnd(34)}  ${c.name ?? c.path}`,
+            )
+          : [`Nothing new since ${new Date(since).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}. Run imstudium sync to check Stud.IP.`];
+        output({ since: new Date(since).toISOString(), count: changes.length, changes }, lines.join("\n"));
+      }),
+    );
+}
