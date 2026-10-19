@@ -1,5 +1,25 @@
 export const MCP_TOOLS = [
   {
+    name: "imstudium",
+    description:
+      "Run any read-only ImStudium command and get its JSON — the same as `imstudium --json <args>` in a terminal. " +
+      "Start every session with [\"context\"]. Examples: [\"today\"], [\"week\",\"--next\"], [\"tasks\",\"--open\"], " +
+      "[\"search\",\"gradient descent\"], [\"news\",\"statistik\",\"--since\",\"7d\"], [\"courseware\",\"datenbanken\"], " +
+      "[\"sprechstunden\",\"statistik\"], [\"catalog\",\"search\",\"machine learning\"], [\"routes\",\"forum\"], " +
+      "[\"api\",\"/users/me/courses\",\"--flat\"]. Writes (--write, --save, semester start, login, setup) are refused — use a terminal.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        args: {
+          type: "array",
+          items: { type: "string" },
+          description: "Command and arguments, e.g. [\"today\"] or [\"search\", \"Erwartungswert\", \"--archive\"]",
+        },
+      },
+      required: ["args"],
+    },
+  },
+  {
     name: "studium_overview",
     description:
       "Full course map and semester context from local studium.json. Call this first for study planning.",

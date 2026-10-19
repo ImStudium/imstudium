@@ -9,9 +9,10 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { MCP_TOOLS } from "./tools.js";
 import { materialVisualPayload } from "./visual.js";
+import { checkArgs, runCli } from "./cli-bridge.js";
 
 const server = new Server(
-  { name: "imstudium-studium", version: "0.1.0" },
+  { name: "imstudium", version: "0.2.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -36,6 +37,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+
+  if (name === "imstudium") {
+    const cliArgs = ((args as { args?: unknown })?.args ?? []) as unknown[];
+    const list = cliArgs.map(String);
+    const refused = checkArgs(list);
+    if (refused) return { content: [{ type: "text" as const, text: refused }], isError: true };
+    const res = await runCli(list);
+    return { ...jsonText(res.json), ...(res.ok ? {} : { isError: true }) };
+  }
 
   try {
     const sdk = await getSdk();
