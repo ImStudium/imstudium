@@ -1,5 +1,5 @@
 import { cp, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { basename, extname, join, relative } from "node:path";
 import { ensureDir, slugify } from "./config.js";
 import { convertLocalDocument, probeLocalIngest } from "./ingest/local-docs.js";
 import { buildCourseSearchIndex } from "./search-corpus.js";
@@ -123,7 +123,8 @@ export class Extractor {
     const results: ExtractResult[] = [];
     for (const f of files) {
       if (detectKind(f) === "unsupported") continue;
-      const outDir = join(outRoot, extractSlug(basename(f)));
+      // Folder-qualified slug: Übungen/Blatt01.pdf and Lösungen/Blatt01.pdf stay apart.
+      const outDir = join(outRoot, extractSlug(relative(filesDir, f)));
       results.push(await this.extractFile(f, outDir, opts));
     }
 

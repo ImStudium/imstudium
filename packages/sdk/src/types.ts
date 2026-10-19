@@ -216,7 +216,18 @@ export interface SyncReport {
   failed: number;
   bytes: number;
   errors: Array<{ fileRefId: string; message: string }>;
-  files: Array<{ fileRefId: string; path: string; action: "download" | "skip" | "fail" }>;
+  files: Array<{
+    fileRefId: string;
+    path: string;
+    action: "download" | "skip" | "fail";
+    /** For downloads: first time seen, or a newer version of a known file. */
+    change?: "new" | "updated";
+    courseId?: string;
+    courseTitle?: string;
+    name?: string;
+  }>;
+  /** Courses whose listing failed — the rest of the sync still ran. */
+  courseErrors?: Array<{ courseId: string; courseTitle: string; message: string }>;
 }
 
 export interface ImstudiumConfig {

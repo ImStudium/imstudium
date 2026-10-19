@@ -1,5 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { StudIpClient } from "./client.js";
 import { CoursesResource } from "./resources/courses.js";
 import { FilesResource, NewsResource, WikiResource } from "./resources/files.js";
@@ -21,6 +21,11 @@ export interface SyncOptions {
   semesterLabel?: string;
   /** Sync every enrollment across all semesters. */
   allSemesters?: boolean;
+  /**
+   * Relative folder per course (e.g. "WS2026-27" or "archive/SS2026").
+   * Default: the resolved semester's slug for every course.
+   */
+  folderForCourse?: (course: { id: string; title: string; startSemesterId?: string }) => string;
 }
 
 export class SyncEngine {
@@ -76,7 +81,7 @@ export class SyncEngine {
     });
     const semesterFolder = semesterFolderSlug(semesterCtx, options.allSemesters);
     const layout = options.layout ?? "flat";
-    const concurrency = options.concurrency ?? 8;
+    const concurrency = options.concurrency ?? 4;
 
     const filtered = allCourses.filter((c) => {
       if (!options.courseFilter) return true;
@@ -103,7 +108,15 @@ export class SyncEngine {
     for (const course of filtered) {
       const title = course.attributes?.title || course.id;
       const courseSlug = slugify(title);
-      const courseDir = join(options.outputDir, semesterFolder, courseSlug);
+      const startRel = course.relationships?.["start-semester"]?.data;
+      const folder = options.folderForCourse
+        ? options.folderForCourse({
+            id: course.id,
+            title,
+            startSemesterId: startRel && !Array.isArray(startRel) ? startRel.id : undefined,
+          })
+        : semesterFolder;
+      const courseDir = join(options.outputDir, folder, courseSlug);
 
       if (options.include?.includes("wiki")) {
         try {
@@ -131,9 +144,22 @@ export class SyncEngine {
         }
       }
 
-      const fileRefs = await this.files.listAllFileRefs(course.id);
-      const folders = layout === "tree" ? await this.files.listAllFolders(course.id) : [];
-      const folderPaths = layout === "tree" ? this.files.folderPathMap(folders) : new Map();
+      let fileRefs: Awaited<ReturnType<FilesResource["listAllFileRefs"]>>;
+      let folderPaths = new Map<string, string>();
+      try {
+        fileRefs = await this.files.listAllFileRefs(course.id);
+        if (layout === "tree") {
+          folderPaths = this.files.folderPathMap(await this.files.listAllFolders(course.id));
+        }
+      } catch (e) {
+        // One locked or broken course must not stop the other twenty.
+        (report.courseErrors ??= []).push({
+          courseId: course.id,
+          courseTitle: title,
+          message: e instanceof Error ? e.message : String(e),
+        });
+        continue;
+      }
 
       const tasks = fileRefs.map((fr) => async () => {
         const name = fr.attributes?.name || fr.id;
@@ -148,42 +174,50 @@ export class SyncEngine {
 
         const chdate = fr.attributes?.chdate;
         const existing = state.entries[fr.id];
+        const meta = { courseId: course.id, courseTitle: title, name };
         if (existing && existing.chdate === chdate && existing.localPath === destPath) {
           report.skipped++;
-          report.files.push({ fileRefId: fr.id, path: destPath, action: "skip" });
+          report.files.push({ fileRefId: fr.id, path: destPath, action: "skip", ...meta });
           return;
         }
+        // Same version, new place (layout change or rollover): move instead of re-download.
+        if (existing && existing.chdate === chdate && existing.localPath !== destPath && !options.dryRun) {
+          try {
+            await ensureDir(dirname(destPath));
+            await rename(existing.localPath, destPath);
+            state.entries[fr.id] = { ...existing, localPath: destPath };
+            report.skipped++;
+            report.files.push({ fileRefId: fr.id, path: destPath, action: "skip", ...meta });
+            return;
+          } catch {
+            // old copy gone — download below
+          }
+        }
+        const change = existing ? ("updated" as const) : ("new" as const);
 
         if (options.dryRun) {
-          report.files.push({ fileRefId: fr.id, path: destPath, action: "download" });
+          report.files.push({ fileRefId: fr.id, path: destPath, action: "download", change, ...meta });
           report.downloaded++;
           return;
         }
 
         try {
           const bytes = await this.files.downloadFileRef(fr.id, destPath);
-          let etag: string | undefined;
-          try {
-            etag = await this.files.headFileRef(fr.id);
-          } catch {
-            // optional
-          }
           const entry: SyncStateEntry = {
             fileRefId: fr.id,
             chdate,
-            etag,
             localPath: destPath,
             downloadedAt: new Date().toISOString(),
           };
           state.entries[fr.id] = entry;
           report.downloaded++;
           report.bytes += bytes;
-          report.files.push({ fileRefId: fr.id, path: destPath, action: "download" });
+          report.files.push({ fileRefId: fr.id, path: destPath, action: "download", change, ...meta });
         } catch (e) {
           report.failed++;
           const msg = e instanceof Error ? e.message : String(e);
           report.errors.push({ fileRefId: fr.id, message: msg });
-          report.files.push({ fileRefId: fr.id, path: destPath, action: "fail" });
+          report.files.push({ fileRefId: fr.id, path: destPath, action: "fail", ...meta });
         }
       });
 
