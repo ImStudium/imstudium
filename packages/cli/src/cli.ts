@@ -17,6 +17,7 @@ import {
   toolHints,
   ensureMigrated,
   archiveLegacyConfigDir,
+  formatFileTree,
   type StudiumExamDate,
   type StudiumWorkspace,
 } from "@imstudium/sdk";
@@ -37,6 +38,7 @@ import { fileURLToPath } from "node:url";
 import { act, fail, getSdk, globalOpts, note, output, type GlobalOpts } from "./runtime.js";
 import { runSync, writeEchoSnapshot } from "./pipeline.js";
 import { registerCommands } from "./commands/index.js";
+import { resolveCourse } from "./course-arg.js";
 
 function semesterSyncOptions(
   sdk: Awaited<ReturnType<typeof createSdk>>,
@@ -601,24 +603,25 @@ const files = program.command("files").description("File commands");
 
 files
   .command("tree <course>")
-  .description("Folder/file tree for a course")
-  .action(async (courseName: string) => {
-    try {
+  .description("Folder/file tree of a course with sizes and change dates")
+  .option("--depth <n>", "Only show folders down to this depth")
+  .action(
+    act(async (courseName: string, opts: { depth?: string }) => {
       const sdk = await getSdk();
-      const me = await sdk.courses.getMe();
-      const list = await sdk.courses.listMine(me.id);
-      const course = list.find(
-        (c) =>
-          c.id === courseName ||
-          (c.attributes?.title || "").toLowerCase().includes(courseName.toLowerCase()),
-      );
-      if (!course) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
+      const course = await resolveCourse(sdk, courseName);
       const tree = await sdk.files.buildFolderTree(course.id);
-      output({ courseId: course.id, tree });
-    } catch (e) {
-      fail(e);
-    }
-  });
+      const files = tree.reduce((n, r) => n + (r.fileCount ?? 0), 0);
+      const bytes = tree.reduce((n, r) => n + r.size, 0);
+      const lines = formatFileTree(tree, {
+        rootLabel: course.title,
+        maxDepth: opts.depth ? Number(opts.depth) : undefined,
+      });
+      output(
+        { courseId: course.id, courseTitle: course.title, files, bytes, tree },
+        files ? [...lines, "", `Download one: imstudium files download <id> · all: imstudium sync --course "${courseName}" --layout tree`].join("\n") : `${course.title}: no files`,
+      );
+    }),
+  );
 
 files
   .command("download <fileRefId>")
