@@ -41,6 +41,8 @@ export * from "./resources/files.js";
 export * from "./resources/communication.js";
 export * from "./resources/courseware.js";
 export * from "./content/index.js";
+export * from "./berlin.js";
+export * from "./ics.js";
 
 export interface ImstudiumSdk {
   client: StudIpClient;
