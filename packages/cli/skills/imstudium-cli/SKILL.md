@@ -34,30 +34,51 @@ imstudium init -o ~/Studium
 imstudium update --json   # upgrade + refresh harness; use --json for agents
 ```
 
-## Quick commands
+## Command map
 
 ```bash
-imstudium status --json
-imstudium --json studium
-imstudium --json klausuren
-imstudium sync --quiet --extract
-imstudium extract --course "Analysis"
-imstudium ingest --file ~/Downloads/slides.pptx
-imstudium doctor --json
-imstudium files tree --course "Analysis"
+# orient
+imstudium context --json            # one briefing: semester, today, new, deadlines, news
+imstudium semester                  # Stud.IP term vs workspace; says when to roll over
+imstudium semester start            # archive last term, sync the new one
+# time
+imstudium today | week [--next] | stundenplan | holidays
+# what's new
+imstudium changes --since 7d        # files that arrived (also NEW.md)
+imstudium news [course] --since 7d  | feed --since 7d | inbox --unread | message <id>
+# material
+imstudium search <words> [--course x] [--archive]
+imstudium courseware [course] | tasks [--open] | wiki [course] [page] | forum [course]
+imstudium files tree <course>
+# people & planning
+imstudium people <course> | sprechstunden <course> | catalog search <q> --semester "SS 2027"
+# exams
+imstudium klausuren
+# sync
+imstudium sync --extract            # files → markdown → search index (tree layout)
+imstudium sync --all-semesters      # past terms into archive/
+# everything else Stud.IP has
+imstudium routes [topic]            # the instance's JSON:API catalog
+imstudium api <path> --flat         # any GET route; /users/me/... expands to you
+# health
+imstudium status --json · doctor --json · update --json
 ```
+
+Global flags: `--json` (stable keys for agents), `--quiet`, `--instance <url>` (other Stud.IP).
 
 ## Reading slides
 
-After `extract`, each file has `extracted/<file>/content.md` and `pages/*.png`.
+After `extract`, each file has `extracted/<file>/content.md` (pages as `## Page N` sections); photos are copied to `pages/`.
 
 **Limits:** one pipeline — pdf-inspector (PDF) + AnyDoc (Office). No Tesseract. Image-only pages have no text; open the original. See `imstudium-visual`.
 
 ## Auth
 
 ```bash
-imstudium login   # local helper fallback until OAuth is registered
+imstudium login   # the student signs in once in a browser window; later renewals run silently
 ```
+
+Never handle the student's password. If a command reports an expired session and silent renewal fails, ask the student to run `imstudium login`.
 
 ## Escalation
 
