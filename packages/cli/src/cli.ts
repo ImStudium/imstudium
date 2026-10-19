@@ -255,7 +255,7 @@ program
   .option("-y, --yes", "Non-interactive (skip prompts)")
   .option("--relogin", "Sign in again even if a session is already stored")
   .option("--chrome-profile", "Use your Chrome profile with saved passwords (quit Chrome first)")
-  .option("--extract", "Extract text + slide images after sync")
+  .option("--extract", "Extract new/changed files to markdown and rebuild the search index")
   .action(async (opts: {
     output?: string;
     yes?: boolean;
@@ -699,18 +699,16 @@ program
 program
   .command("extract")
   .alias("ingest")
-  .description("Smart local ingest: AnyDoc + pdf-inspector → content.md + page images")
+  .description("Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md; photos copied to pages/")
   .option("--course <name>", "Only one course (title substring or slug)")
   .option("--file <path>", "Extract a single file to <file>-extracted/")
-  .option("--no-images", "Text only, skip page image rendering")
-  .option("--dpi <n>", "Image resolution", "144")
+  .option("--no-images", "Don't copy photos into pages/")
   .option("--force", "Re-extract even if unchanged")
   .option("-o, --output <dir>", "Workspace directory")
   .action(async (opts: {
     course?: string;
     file?: string;
     images?: boolean;
-    dpi?: string;
     force?: boolean;
     output?: string;
   }) => {
@@ -718,7 +716,6 @@ program
       const sdk = await getSdk();
       const extractOpts = {
         images: opts.images,
-        dpi: parseInt(opts.dpi || "144", 10),
         force: opts.force,
       };
 
@@ -927,13 +924,19 @@ program
     const semOpts = semesterSyncOptions(sdk, {});
     for (;;) {
       try {
-        const report = await sdk.sync.sync({ outputDir: out, include: ["wiki", "news", "calendar"], ...semOpts });
-        await sdk.studium.build(out, sdk.config.instanceOrigin, semOpts);
+        // Same pipeline as sync: files, news, forum, courseware, wiki, Abgaben, change log, NEW.md.
+        const result = await runSync(sdk, { out, ...semOpts, extract: true });
         if (!globalOpts.quiet) {
-          output(report, `[${new Date().toISOString()}] ${report.downloaded} new files`);
+          const fresh = result.changes.length;
+          output(
+            { at: new Date().toISOString(), changes: result.changes, downloaded: result.report.downloaded, failed: result.report.failed },
+            `[${new Date().toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}] ${fresh ? `${fresh} new/updated file(s)` : "nothing new"}`,
+          );
         }
       } catch (e) {
-        console.error(e);
+        const err = e as { code?: string; message?: string };
+        console.error(`[watch] ${err.code ?? "ERROR"}: ${err.message ?? String(e)}`);
+        if (err.code === "SESSION_EXPIRED" || err.code === "HTTP_ERROR") console.error("[watch] sign in again with: imstudium login");
       }
       await sleep(ms);
     }
@@ -1187,7 +1190,7 @@ setupCmd
 
 setupCmd
   .command("all")
-  .description("Skills + workflows + MCP (idempotent — skips unchanged)")
+  .description("Skills + workflows (idempotent — skips unchanged). MCP is opt-in: setup mcp")
   .option("--agent <agent>", AGENT_HELP)
   .option("-o, --workspace <dir>", "Studium workspace path")
   .option("--all-agents", "Configure every harness, not only detected")
