@@ -13,6 +13,8 @@ import { meId } from "../me.js";
 import { currentCourses, resolveCourse, type CourseRef } from "../course-arg.js";
 import { optionalSince } from "../since.js";
 import {
+  formatBlubberComments,
+  formatBlubberThreads,
   formatDiscussions,
   formatMessage,
   formatMessages,
@@ -229,6 +231,44 @@ export function registerCommunication(program: Command): void {
         output(
           { courses: overviews.map((o) => ({ ...courseJson(o.course), available: o.value.available })), since: since?.toISOString() ?? null, count: discussions.length, discussions },
           formatDiscussions(discussions, { showCourse: true }),
+        );
+      }),
+    );
+
+  // ── blubber ─────────────────────────────────────────────────────────────────
+  program
+    .command("blubber")
+    .description("Blubber chats: a course's threads with latest comments, or your stream")
+    .argument("[course]", "Course (default: your Blubber stream)")
+    .option("--thread <id>", "Show the latest comments of one thread")
+    .option("--since <when>", "Only since 7d, today or a date")
+    .option("--limit <n>", "Threads (stream) or comments per thread (default 10)")
+    .action(
+      act(async (query: string | undefined, opts: { thread?: string; since?: string; limit?: string }) => {
+        const sdk = await getSdk();
+        const since = optionalSince(opts.since);
+        const limit = intOpt(opts.limit, "limit", 10);
+
+        if (opts.thread) {
+          const comments = await sdk.blubber.comments(opts.thread, { limit: intOpt(opts.limit, "limit", 30), since });
+          output({ threadId: opts.thread, count: comments.length, comments }, formatBlubberComments(comments));
+          return;
+        }
+        if (query) {
+          const course = await resolveCourse(sdk, query);
+          const threads = await sdk.blubber.courseWithComments(course.id, { limit, since });
+          output(
+            { course: courseJson(course), count: threads.length, threads },
+            threads.length
+              ? threads.map((t) => `${formatBlubberThreads([t])}\n${formatBlubberComments(t.comments)}`).join("\n\n")
+              : `${course.title} has no Blubber threads.`,
+          );
+          return;
+        }
+        const threads = await sdk.blubber.mine({ limit, since });
+        output(
+          { since: since?.toISOString() ?? null, count: threads.length, threads },
+          formatBlubberThreads(threads) + (threads.length ? "\n\nRead one: imstudium blubber --thread <id>" : ""),
         );
       }),
     );

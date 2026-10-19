@@ -3,6 +3,8 @@ import {
   excerpt,
   isoDay,
   isoMinute,
+  type BlubberComment,
+  type BlubberThread,
   type ForumDiscussion,
   type ForumThread,
   type MessageItem,
@@ -107,4 +109,19 @@ export function formatThread(thread: ForumThread): string {
   ]
     .join("\n")
     .trimEnd();
+}
+
+export function formatBlubberThreads(items: BlubberThread[]): string {
+  if (items.length === 0) return "No Blubber threads.";
+  return items
+    .map((t) => {
+      const unseen = t.unseenComments ? ` — ${t.unseenComments} unseen` : "";
+      return block(`${isoDay(t.lastActivity)} · ${t.name}${unseen}  [${t.id}]`, excerpt(t.text));
+    })
+    .join("\n");
+}
+
+export function formatBlubberComments(items: BlubberComment[]): string {
+  if (items.length === 0) return `${INDENT}(no comments)`;
+  return items.map((c) => block(`${INDENT}${isoMinute(c.date)} · ${displayName(c.author)}`, `${INDENT}${excerpt(c.text, 300, 4)}`)).join("\n");
 }
