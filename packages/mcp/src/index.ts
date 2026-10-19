@@ -108,7 +108,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "studium_course_brief": {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");
-        const course = pickCourse(ws, courseArg);
+        const course = pickCourse(ws, courseArg, sdk.config.courseAliases);
         if (!course) {
           return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
         }
@@ -132,7 +132,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");
         const query = String((args as { query?: string })?.query || "").toLowerCase();
-        const course = pickCourse(ws, courseArg);
+        const course = pickCourse(ws, courseArg, sdk.config.courseAliases);
         if (!course) return jsonText({ error: "Course not found" });
 
         const filesDir = join(resolveCourseDir(workspacePath, course, ws), "files");
@@ -146,7 +146,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const fileArg = String((args as { file?: string })?.file || "").toLowerCase();
         const page = (args as { page?: number })?.page;
 
-        const course = pickCourse(ws, courseArg);
+        const course = pickCourse(ws, courseArg, sdk.config.courseAliases);
         if (!course) {
           return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
         }

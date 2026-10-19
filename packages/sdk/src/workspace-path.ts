@@ -24,15 +24,26 @@ export function resolveCourseDir(
   return join(workspaceRoot, folder, course.slug);
 }
 
-const COURSE_ALIASES: Record<string, string> = {
-  nlp: "natural language processing",
-  de: "data engineering",
-  gki: "generative",
-};
+/**
+ * Personal shortcuts ("nlp" → "natural language processing") come from
+ * config.courseAliases or IMSTUDIUM_COURSE_ALIASES ("nlp=natural language processing,de=data engineering").
+ */
+function courseAliases(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const pair of (process.env.IMSTUDIUM_COURSE_ALIASES ?? "").split(",")) {
+    const i = pair.indexOf("=");
+    if (i > 0) out[pair.slice(0, i).trim().toLowerCase()] = pair.slice(i + 1).trim().toLowerCase();
+  }
+  return out;
+}
 
-export function pickCourse(ws: StudiumWorkspace, query: string): StudiumCourse | undefined {
+export function pickCourse(
+  ws: StudiumWorkspace,
+  query: string,
+  aliases: Record<string, string> = {},
+): StudiumCourse | undefined {
   const q = query.trim().toLowerCase();
-  const expanded = COURSE_ALIASES[q] ?? q;
+  const expanded = aliases[q] ?? courseAliases()[q] ?? q;
   const matches = ws.courses.filter(
     (c) =>
       c.id === query ||

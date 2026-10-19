@@ -240,6 +240,8 @@ export interface ImstudiumConfig {
   };
   /** Override Stud.IP semester id for sync/studium (default: calendar current). */
   semesterId?: string;
+  /** Your own course shortcuts, e.g. { "nlp": "natural language processing" }. */
+  courseAliases?: Record<string, string>;
   user?: { id: string; name: string };
 }
 

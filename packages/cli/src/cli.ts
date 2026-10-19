@@ -732,7 +732,7 @@ program
       if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
 
       const courses = opts.course
-        ? [pickCourse(workspace, opts.course)].filter(Boolean)
+        ? [pickCourse(workspace, opts.course, sdk.config.courseAliases)].filter(Boolean)
         : workspace.courses.filter((c) => c.semesterId === workspace.activeSemester?.id || !workspace.activeSemester?.id);
       if (courses.length === 0) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
 
@@ -782,7 +782,7 @@ program
       if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
 
       if (opts.course) {
-        const course = pickCourse(workspace, opts.course);
+        const course = pickCourse(workspace, opts.course, sdk.config.courseAliases);
         if (!course?.path) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
         const { buildCourseSearchIndex, buildMaterialsManifest } = await import("@imstudium/sdk");
         const idx = await buildCourseSearchIndex(join(ws, course.path), course, ws);
@@ -822,7 +822,7 @@ program
         const ws = expandPath(opts.output || sdk.workspacePath);
         const workspace = await sdk.studium.loadWorkspace(ws);
         if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
-        const course = pickCourse(workspace, opts.course!);
+        const course = pickCourse(workspace, opts.course!, sdk.config.courseAliases);
         if (!course) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
         const courseDir = resolveCourseDir(ws, course, workspace);
         const filesDir = join(courseDir, "files");

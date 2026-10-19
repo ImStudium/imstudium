@@ -36,7 +36,7 @@ async function workspace(sdk: Sdk): Promise<StudiumWorkspace | null> {
 export async function resolveCourse(sdk: Sdk, query: string): Promise<CourseRef> {
   const ws = await workspace(sdk);
   if (ws) {
-    const hit = pickCourse(ws, query);
+    const hit = pickCourse(ws, query, sdk.config.courseAliases);
     if (hit) {
       return {
         id: hit.id,
