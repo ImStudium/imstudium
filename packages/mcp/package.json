@@ -28,7 +28,9 @@
   "bin": {
     "imstudium-mcp": "dist/index.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
@@ -42,7 +44,8 @@
   "devDependencies": {
     "@types/node": "^22.15.21",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3"
+    "typescript": "^6.0.2",
+    "@typescript/native": "npm:typescript@^7.0.2"
   },
   "engines": {
     "node": ">=20"
