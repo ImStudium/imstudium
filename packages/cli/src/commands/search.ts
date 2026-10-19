@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { expandPath, searchWorkspace, type SearchKind } from "@imstudium/sdk";
+import { expandPath, pickCourse, searchWorkspace, type SearchKind } from "@imstudium/sdk";
 import { act, getSdk, output } from "../runtime.js";
 
 const KINDS: SearchKind[] = ["material", "news", "forum", "courseware", "wiki", "note"];
@@ -20,9 +20,16 @@ export function registerSearch(program: Command): void {
         const out = expandPath(opts.output || sdk.workspacePath);
         const query = words.join(" ");
         const kinds = opts.kind?.split(",").map((k) => k.trim()).filter((k): k is SearchKind => KINDS.includes(k as SearchKind));
+        // "nlp", a title fragment or a slug → the course folder name
+        let course = opts.course?.replace(/\s+/g, "-");
+        if (opts.course) {
+          const ws = await sdk.studium.loadWorkspace(out);
+          const hit = ws ? pickCourse(ws, opts.course, sdk.config.courseAliases) : undefined;
+          if (hit) course = hit.slug;
+        }
         const hits = await searchWorkspace(out, query, {
           limit: Number(opts.limit) || 10,
-          course: opts.course?.replace(/\s+/g, "-"),
+          course,
           kinds,
           includeArchive: opts.archive,
         });
