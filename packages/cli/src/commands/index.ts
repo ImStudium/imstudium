@@ -6,6 +6,7 @@ import { registerCommunication } from "./communication.js";
 import { registerContent } from "./content.js";
 import { registerPlanning } from "./planning.js";
 import { registerCatalog } from "./catalog.js";
+import { registerPeople } from "./people.js";
 
 /**
  * Command modules. Each file owns one area of Stud.IP and registers its
@@ -19,4 +20,5 @@ export function registerCommands(program: Command): void {
   registerContent(program);
   registerPlanning(program);
   registerCatalog(program);
+  registerPeople(program);
 }

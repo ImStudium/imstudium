@@ -9,6 +9,7 @@ import { ActivityResource, BlubberResource, ForumResource, MessagesResource } fr
 import { CoursewareResource } from "./resources/courseware.js";
 import { PlanningResource } from "./resources/planning.js";
 import { CatalogResource } from "./resources/catalog.js";
+import { PeopleResource } from "./resources/people.js";
 import { loadConfig, saveConfig, getDefaultConfig, paths, expandPath } from "./config.js";
 
 export const SDK_VERSION = "0.2.0";
@@ -45,6 +46,7 @@ export * from "./resources/courseware.js";
 export * from "./content/index.js";
 export * from "./resources/planning.js";
 export * from "./resources/catalog.js";
+export * from "./resources/people.js";
 export * from "./berlin.js";
 export * from "./ics.js";
 export * from "./timetable.js";
@@ -64,6 +66,7 @@ export interface ImstudiumSdk {
   schedule: ScheduleResource;
   planning: PlanningResource;
   catalog: CatalogResource;
+  people: PeopleResource;
   discovery: DiscoveryResource;
   sync: SyncEngine;
   studium: StudiumBuilder;
@@ -125,6 +128,7 @@ export async function createSdk(
     schedule: new ScheduleResource(client),
     planning: new PlanningResource(client),
     catalog: new CatalogResource(client),
+    people: new PeopleResource(client),
     discovery: new DiscoveryResource(client),
     sync: new SyncEngine(client),
     studium: new StudiumBuilder(client),
