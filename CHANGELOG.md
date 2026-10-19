@@ -79,7 +79,7 @@ All notable changes to ImStudium.
 - OAuth2 PKCE requires university-registered client
 - Courseware plugin files not in JSON:API (Stud.IP 5.4)
 
-[0.1.3]: https://github.com/paddy-shrp/imstudium/releases/tag/v0.1.3
-[0.1.2]: https://github.com/paddy-shrp/imstudium/releases/tag/v0.1.2
-[0.1.1]: https://github.com/paddy-shrp/imstudium/releases/tag/v0.1.1
-[0.1.0]: https://github.com/paddy-shrp/imstudium/releases/tag/v0.1.0
+[0.1.3]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.3
+[0.1.2]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.2
+[0.1.1]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.1
+[0.1.0]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.0

@@ -7,7 +7,7 @@
 **One line (no Bun / no global install):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/paddy-shrp/imstudium/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ImStudium/imstudium/main/scripts/install.sh | bash
 ```
 
 Or:

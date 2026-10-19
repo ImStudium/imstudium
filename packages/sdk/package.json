@@ -7,12 +7,12 @@
   "author": "Patrick Schröppel",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddy-shrp/imstudium.git",
+    "url": "https://github.com/ImStudium/imstudium.git",
     "directory": "packages/sdk"
   },
-  "homepage": "https://github.com/paddy-shrp/imstudium#readme",
+  "homepage": "https://github.com/ImStudium/imstudium#readme",
   "bugs": {
-    "url": "https://github.com/paddy-shrp/imstudium/issues"
+    "url": "https://github.com/ImStudium/imstudium/issues"
   },
   "keywords": [
     "imstudium",

@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddy-shrp/imstudium.git"
+    "url": "https://github.com/ImStudium/imstudium.git"
   },
   "workspaces": [
     "packages/*"

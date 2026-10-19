@@ -14,7 +14,7 @@ Contact RZ support: https://support.rz.uni-augsburg.de
 
 Template:
 
-> We maintain an open-source CLI tool for students ([imstudium](https://github.com/paddy-shrp/imstudium)) that uses the Stud.IP JSON:API. We request an OAuth2 public client (PKCE) with:
+> We maintain an open-source CLI tool for students ([imstudium](https://github.com/ImStudium/imstudium)) that uses the Stud.IP JSON:API. We request an OAuth2 public client (PKCE) with:
 > - Name: ImStudium CLI
 > - Redirect URI: `http://127.0.0.1:*/callback` (loopback)
 > - Scope: `api`

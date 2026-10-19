@@ -7,7 +7,7 @@ Thanks for contributing to ImStudium.
 Requires [Bun](https://bun.sh) 1.2+.
 
 ```bash
-git clone https://github.com/paddy-shrp/imstudium.git
+git clone https://github.com/ImStudium/imstudium.git
 cd imstudium
 bash scripts/install-dev.sh
 ```

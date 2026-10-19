@@ -1,17 +1,41 @@
 #!/usr/bin/env bash
 # ImStudium end-user installer — Node/npm only. No Bun required when packages are on npm.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/paddy-shrp/imstudium/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/ImStudium/imstudium/main/scripts/install.sh | bash
 #   bash scripts/install.sh [--global] [--workspace DIR]
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+# Piped through `curl | bash` there is no script directory — carry the helpers inline.
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
+if [[ -n "$SCRIPT_SOURCE" && -f "$(dirname "$SCRIPT_SOURCE")/lib/common.sh" ]]; then
+  # shellcheck source=lib/common.sh
+  source "$(dirname "$SCRIPT_SOURCE")/lib/common.sh"
+else
+  log() { printf '→ %s\n' "$*"; }
+  warn() { printf '⚠ %s\n' "$*" >&2; }
+  die() { printf '✗ %s\n' "$*" >&2; exit 1; }
+  has_cmd() { command -v "$1" >/dev/null 2>&1; }
+  ensure_bun() {
+    has_cmd bun && return 0
+    log "Bun not found — installing..."
+    curl -fsSL https://bun.sh/install | bash
+    export PATH="${HOME}/.bun/bin:${PATH}"
+    has_cmd bun || die "Bun install failed. See https://bun.sh"
+  }
+  ensure_npm() {
+    has_cmd npm && return 0
+    if [[ "$(uname -s)" == "Darwin" ]] && has_cmd brew; then
+      log "Installing Node via Homebrew..."
+      brew install node@22
+      return 0
+    fi
+    die "Install Node.js 20+ from https://nodejs.org"
+  }
+fi
 
 GLOBAL=1
 WORKSPACE="${IMSTUDIUM_WORKSPACE:-$HOME/Studium}"
-IMSTUDIUM_REPO="${IMSTUDIUM_REPO:-https://github.com/paddy-shrp/imstudium.git}"
+IMSTUDIUM_REPO="${IMSTUDIUM_REPO:-https://github.com/ImStudium/imstudium.git}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

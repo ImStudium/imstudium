@@ -5,10 +5,10 @@
   "version": "0.1.0",
   "author": {
     "name": "Patrick Schröppel",
-    "url": "https://github.com/paddy-shrp"
+    "url": "https://github.com/ImStudium"
   },
-  "repository": "https://github.com/paddy-shrp/imstudium",
-  "homepage": "https://github.com/paddy-shrp/imstudium#readme",
+  "repository": "https://github.com/ImStudium/imstudium",
+  "homepage": "https://github.com/ImStudium/imstudium#readme",
   "license": "MIT",
   "category": "education",
   "keywords": ["imstudium", "studip", "studium", "klausur", "mcp", "education"],
