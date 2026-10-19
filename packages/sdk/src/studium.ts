@@ -11,6 +11,7 @@ import {
 import { courseRelativePath, semesterFolderSlug } from "./workspace-path.js";
 import { agentSearchGuidance, type CourseSearchIndex, type WorkspaceSearchIndex } from "./search-corpus.js";
 import { EXTRACTION_LIMITS_FOR_AGENTS } from "./extraction-guidance.js";
+import { courseScheduleFromResources } from "./timetable.js";
 import type {
   StudiumCourse,
   StudiumExamDate,
@@ -77,7 +78,10 @@ export class StudiumBuilder {
     const rawCourses = onlyIds ? listed.filter((c) => onlyIds.has(c.id)) : listed;
     const semesterFolder = options?.folder ?? semesterFolderSlug(semesterCtx, options?.allSemesters);
     const semesterTitle = semesterCtx?.title || semesterFolder;
-    const scheduleEntries = await this.schedule.getSchedule(me.id);
+    const semStart = Date.parse(String(semesterCtx?.semester.attributes?.start ?? ""));
+    const scheduleEntries = await this.schedule.getSchedule(me.id, {
+      timestamp: Number.isFinite(semStart) ? semStart / 1000 + 86_400 : undefined,
+    });
 
     const studiumCourses: StudiumCourse[] = [];
     const allExams: StudiumExamDate[] = [];
@@ -88,20 +92,12 @@ export class StudiumBuilder {
       const folders = await this.files.listAllFolders(c.id);
       const events = await this.courses.getEvents(c.id);
 
-      const courseSchedule: StudiumScheduleEntry[] = scheduleEntries
-        .filter((e) => {
-          const rel = e.relationships?.["course"]?.data;
-          const cid = rel && !Array.isArray(rel) ? rel.id : undefined;
-          return cid === c.id;
-        })
-        .map((e) => ({
-          title: (e.attributes?.title as string) || "Event",
-          start: e.attributes?.["start-date"] as string | undefined,
-          end: e.attributes?.["end-date"] as string | undefined,
-          location: e.attributes?.location as string | undefined,
-          courseId: c.id,
-          courseTitle: title,
-        }));
+      // Cycles are `seminar-cycle-dates` owned by the course; single dates come from its events.
+      const courseSchedule: StudiumScheduleEntry[] = courseScheduleFromResources(
+        { id: c.id, title, number: c.attributes?.["course-number"] },
+        scheduleEntries,
+        events,
+      );
 
       const examDates = extractExamDates(c.id, title, events, c.attributes);
       allExams.push(...examDates);

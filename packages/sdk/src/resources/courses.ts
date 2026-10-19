@@ -124,9 +124,20 @@ export class CoursesResource {
 export class ScheduleResource {
   constructor(private client: StudIpClient) {}
 
-  async getSchedule(userId: string): Promise<EventResource[]> {
+  /**
+   * Raw `/users/{id}/schedule`: `seminar-cycle-dates` (course cycles — the
+   * course is the `owner` relationship, times are "HH:MM" + weekday) and your
+   * own `schedule-entries`. `timestamp` (unix seconds) picks the semester;
+   * default is the current one. Normalise with `normalizeScheduleItem`.
+   *
+   * Not paginated: the route rejects `page[...]` with 400, so a paginated
+   * call used to fail silently and every course schedule came back empty.
+   */
+  async getSchedule(userId: string, options: { timestamp?: number } = {}): Promise<JsonApiResource[]> {
     try {
-      return await this.client.paginateAll<EventResource>(`/users/${userId}/schedule`);
+      const filter = options.timestamp ? { timestamp: Math.floor(options.timestamp) } : undefined;
+      const doc = await this.client.get(`/users/${userId}/schedule`, { filter });
+      return Array.isArray(doc.data) ? doc.data : doc.data ? [doc.data] : [];
     } catch {
       return [];
     }
