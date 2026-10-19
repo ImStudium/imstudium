@@ -31,7 +31,7 @@ import {
 
 const KEYTAR_SERVICE = "imstudium";
 const KEYTAR_ACCOUNT = "session";
-const LOGIN_TIMEOUT_MS = 5 * 60_000;
+const LOGIN_TIMEOUT_MS = 10 * 60_000;
 
 export interface BrowserLoginOptions {
   instanceOrigin: string;
