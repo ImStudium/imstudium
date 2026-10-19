@@ -4,9 +4,105 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-19
+
+"Semester start": the whole Stud.IP within reach of one CLI, with a workspace that knows what's new, what's due and which semester it is.
+
+### Added
+
+- **`imstudium context`** gives the whole study picture in one call: the semester and its week, today's dates, open Abgaben, Klausuren, new files, recent news and the next sensible command. It works from local files first; `--live` also counts unread messages.
+- **Semester lifecycle**
+  - `imstudium semester` compares the term Stud.IP is in with your workspace.
+  - `imstudium semester start` archives the previous semester folder to `archive/<slug>/` (nothing is deleted, search refs are rewritten) and syncs the new one.
+  - `imstudium changes --since 7d` lists new and updated files.
+- **Time:** `today`, `week [--next]`, `stundenplan [--save]` and `holidays`. They show course cycles, single dates and cancellations in Europe/Berlin time, and `--offline` reads `calendar.ics`.
+- **Communication** (read-only)
+  - `news` (course or `--global`, `--save`), `inbox [--unread]`, `outbox`, `message <id>`
+  - `forum [course] [--discussion] [--save]`, `blubber`, `feed` (activity stream)
+- **Learning content**
+  - `courseware` / `cw` (units, page outline, `--save` as markdown plus block files)
+  - `tasks [--open]` (courseware deadlines, soonest first)
+  - `wiki [course] [page] [--save]` (the whole wiki as a linked markdown tree)
+  - an improved `files tree <course>` with sizes and change dates
+- **`imstudium search <words>`** is a ranked offline search (BM25) across extracted materials, news, forum, courseware and wiki. It folds umlauts, takes `--course` and `--kind`, and `--archive` adds past semesters.
+- **People & planning**
+  - `people [course]` lists lecturers, tutors and groups; students are only ever counted.
+  - `sprechstunden` shows upcoming office hours and free slots; booking stays in Stud.IP.
+  - `catalog search|areas|modules|studies` covers the Vorlesungsverzeichnis, study areas, MVV modules and Studiengänge. Course search and study areas work without login.
+- **Any Stud.IP route**
+  - `imstudium routes [topic]` lists the instance's JSON:API catalog, cached weekly from the public `/discovery`.
+  - `imstudium api <path>` calls any route with `--include`, `--filter`, `--fields`, `--limit`, `--all` and `--flat`. `/users/me/…` expands to your id.
+- **Sync**
+  - `sync` now also writes, per course, `news/`, `forum/`, `courseware/` and `wiki/`, plus `calendar.ics` and courseware tasks.
+  - Each sync writes `NEW.md`, `abgaben.md` and `stundenplan.md` at the root, along with `.imstudium/changes.jsonl` (new/updated log) and `.imstudium/tasks.json`.
+  - `sync --all-semesters` puts the current semester at the root and the rest under `archive/`.
+  - `snapshots/studium.json` carries counts and dates only, for Echo and dashboards. `imstudium module` and the `studium_modules` MCP tool read the same numbers.
+- **MCP `imstudium` tool:** a read-only door to every CLI command (allowlist), returning the same JSON as `imstudium --json <args>`. Writes are refused. The server identifies as `imstudium 0.2.0`.
+- **Skills:**
+  - `imstudium-agent`, the session playbook (`context` first, which command answers what, never write unasked)
+  - `imstudium-datenschutz`, DSGVO and UrhG rules
+  - a full command map in `imstudium-cli`
+- **SDK**
+  - `flatten()` and `Included` for JSON:API resources, plus `htmlToText` for Stud.IP HTML
+  - one frontmatter dialect for news, forum, courseware and wiki markdown
+  - `syncContent` and `syncCommunication` hooks per course
+- **Tests:** courseware, wiki, file tree, communication, schedule/ICS, people, catalog and consultations. All run on synthetic fixtures.
+
 ### Changed
 
-- **Single ingest pipeline:** pdf-inspector for PDFs, AnyDoc for Office. Removed Tesseract, poppler, LibreOffice, unzip XML, and cloud `/v2/parse` fallbacks.
+- **Resilient client**
+  - per-request timeouts (30 s JSON, 10 min downloads)
+  - retries with backoff on network errors, 429 (honours `Retry-After`) and 5xx
+  - a request gate of 6 in flight, typed JSON:API queries, and pagination that keeps `included`
+- **Auth**
+  - Being offline never logs you out. Only a definite rejection (401 or a login page) clears the session.
+  - The session check is lazy, so `createSdk` makes no network call.
+  - An expired session is renewed once, headless, from the isolated login profile.
+  - The first browser sign-in window stays open for 10 minutes, enough for MFA.
+- **Sync**
+  - The default layout is now `tree`, mirroring Stud.IP folders.
+  - The default include is `calendar,wiki,news,forum,courseware,tasks`.
+  - One broken course no longer stops the sync; errors are reported per course.
+  - Moved files are moved, not downloaded again.
+  - 4 downloads run in flight.
+- **Single ingest pipeline:** pdf-inspector for PDFs, AnyDoc for Office.
+  - Removed Tesseract, poppler, LibreOffice, unzip XML and cloud `/v2/parse` fallbacks.
+  - Both native engines load on first use.
+  - Extraction slugs include the folder (`Übungen/Blatt01` and `Lösungen/Blatt01` no longer collide).
+- **CLI-first setup:** `setup all` installs skills (and workflows) only, and MCP is opt-in via `imstudium setup mcp`.
+- **MCP setup** writes where each harness reads:
+  - Claude Code through `claude mcp add-json -s user`
+  - Codex via `[mcp_servers.imstudium]` in `config.toml`
+  - Windsurf via `mcp_config.json`
+  - OpenCode via `opencode.json`
+  - Cursor and Claude Desktop via their JSON files
+- **Course resolver:** every command takes a title fragment, slug, number or id for a course.
+- **Cache:** semesters (daily) and holidays (weekly) come from a small disk cache, with a stale fallback when offline.
+- **`llms.txt` and `STUDIUM.md`** point agents at `imstudium context --json`, `NEW.md`, `abgaben.md`, `stundenplan.md`, `imstudium search`, the content folders and `archive/`.
+- **Repository** moved to [github.com/ImStudium/imstudium](https://github.com/ImStudium/imstudium).
+- **Toolchain:** TypeScript 6 with the native compiler preview.
+- **Docs:** README, AGENTS.md, docs/API.md (Stud.IP 6.1.2 capability matrix) and docs/STUDIUM.md rewritten for 0.2.0.
+
+### Fixed
+
+- Course schedules in `studium.json` were always empty. `/users/{id}/schedule` rejects `page[...]`, and a cycle's course is its `owner`.
+- Exam dates are now read from Stud.IP 6 course events (`categories`, `start`, `is-cancelled`). Courses whose name contains an exam word no longer flag every date.
+- The `curl | bash` installer failed when piped; its helpers are now inline.
+- A missing native build of pdf-inspector or AnyDoc no longer crashes every command and the MCP server.
+- A login page returned instead of JSON is reported as `SESSION_EXPIRED`, not an opaque invalid response.
+- A failed silent renewal now waits 30 minutes before the next attempt instead of costing ~10 s on every command.
+- A denied OAuth consent no longer waits out the timeout.
+
+### Security
+
+- **Session store order:** ImSicheren (when installed), then the OS keychain, then `~/.config/imstudium/session.json` (mode 0600). No plaintext copy is left next to a secure store.
+- **Credentials:** silent renewal never types credentials; it works only while the university IdP still remembers you.
+- **Read-only by default:** `imstudium api` refuses non-GET methods without `--write`, and the MCP door refuses `--write`, `--save` and every command outside its allowlist.
+- **Reads without side effects**
+  - Forum postings are read via `include` (`/forum-discussions/{id}/postings` would mark threads read).
+  - Courseware avoids `GET /courseware-structural-elements/{id}`, which stores your last-visited page.
+  - Reading messages never marks them read.
+- **Personal data:** messages are never written into the workspace; `people` counts students and never names them; `snapshots/studium.json` holds no titles, names or ids.
 
 ## [0.1.3] — 2026-07-04
 
@@ -79,6 +175,7 @@ All notable changes to ImStudium.
 - OAuth2 PKCE requires university-registered client
 - Courseware plugin files not in JSON:API (Stud.IP 5.4)
 
+[0.2.0]: https://github.com/ImStudium/imstudium/releases/tag/v0.2.0
 [0.1.3]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.3
 [0.1.2]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.2
 [0.1.1]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.1
