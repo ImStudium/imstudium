@@ -1,19 +1,22 @@
 ---
-description: ImStudium — SDK/CLI/MCP conventions for agents
+description: ImStudium — SDK/CLI/MCP conventions for agents working on this repo
 globs:
   - "**/*"
 ---
 
 # ImStudium agent rules
 
-- Read [AGENTS.md](../AGENTS.md) and [docs/STUDIUM.md](../docs/STUDIUM.md) before changing behavior.
-- All CLI `--json` output must include `schemaVersion: "1"`.
-- Errors use `ImstudiumError` with `code`, `message`, `hint`.
-- SDK has no Commander imports; CLI has no raw fetch — use `@imstudium/sdk`.
-- MCP tools are defined in `packages/mcp/src/tools.ts`.
-- Extraction is **one pipeline**: `packages/sdk/src/ingest/local-docs.ts` (pdf-inspector for PDF, AnyDoc for everything else). No Tesseract, poppler, LibreOffice, unzip, or cloud parse.
-- Run `bun run validate` before proposing ship.
-- Do not ship a custom search engine — build `search/corpus.jsonl` indexes; agents grep/semantic-search natively (see `agentSearchGuidance`).
-- Exam dates from achievement text are `confirmed: false` — preserve that semantics.
-- Formulas/diagrams: open the original in `files/`. `content.md` is not LaTeX.
-- `viewer.html` is generated on read/view only — not during bulk extract.
+Read [AGENTS.md](../../AGENTS.md) (Part 2: architecture) and [docs/STUDIUM.md](../../docs/STUDIUM.md) before changing behaviour.
+
+- **Packages:**
+  - `packages/sdk` has the client, auth, `resources/*.ts` (one per Stud.IP domain), the `content/` writers, `studium.ts`, `sync.ts`, ingest and search. No Commander.
+  - `packages/cli` has `cli.ts` (core commands) and `commands/*.ts` (one `register…` per area, wired in `commands/index.ts`). No raw `fetch`; use `@imstudium/sdk`.
+  - `packages/mcp` has `tools.ts` and `cli-bridge.ts` (the read-only `imstudium` door, `READ_ONLY_COMMANDS` allowlist).
+- `packages/cli/src/pipeline.ts` (`runSync`) is the one sync pipeline. Add new per-course content there, not in a parallel loop.
+- **Read-only by default:** resources only GET. A write goes behind `--write` and stays off the MCP allowlist. Avoid reads with side effects (`/forum-discussions/{id}/postings`, `GET /courseware-structural-elements/{id}`); see `docs/API.md`.
+- Every CLI `--json` output includes `schemaVersion: "1"`. Errors use `ImstudiumError` with `code`, `message` and `hint`.
+- Workspace writers are idempotent (frontmatter hash) and keep `## Student notes`. Resolve paths from `course.path`.
+- Ingest is one pipeline in `packages/sdk/src/ingest/local-docs.ts` (pdf-inspector for PDF, AnyDoc for the rest, lazy-loaded). No Tesseract, poppler, LibreOffice or cloud parsing. `content.md` is not LaTeX.
+- Exam dates from course text stay `confirmed: false`.
+- **Tests:** vitest next to the code, with **synthetic fixtures only** (`packages/sdk/src/test/`). Never use real course content, names, messages or grades.
+- Run `bun run validate` (typecheck, build, tests) before proposing a change. Update CHANGELOG.md for user-facing changes.
