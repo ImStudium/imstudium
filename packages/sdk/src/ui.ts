@@ -158,9 +158,10 @@ export function traceConfirmationStyles(): string {
       --rule: #232321;
       --pulse: #FF5A1F;
       --pulse-dim: #451C06;
-      --font-display: "Bricolage Grotesque", system-ui, sans-serif;
-      --font-text: "Archivo", system-ui, sans-serif;
-      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+      /* System fonts only — the local sign-in pages make no third-party requests. */
+      --font-display: "Bricolage Grotesque", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --font-text: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
       --display-md: clamp(2rem, 6vw, 3.25rem);
       --display-sm: clamp(1.5rem, 4vw, 2.25rem);
       --text-lg: clamp(1.0625rem, 1.5vw, 1.25rem);
@@ -302,9 +303,6 @@ export function confirmationPageShell(title: string, body: string, script = ""):
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>${traceConfirmationStyles()}</style>
 </head>
 <body>
