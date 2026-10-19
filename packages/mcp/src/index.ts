@@ -64,6 +64,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return jsonText({ nextDeadlines: ws.nextDeadlines, exams });
       }
 
+      case "studium_modules": {
+        const ws = await loadWorkspace(sdk);
+        const next = ws.nextDeadlines[0];
+        return jsonText({
+          schemaVersion: 1,
+          leaf: "imstudium",
+          pack: "studium",
+          workspace: workspacePath,
+          modules: [
+            {
+              schemaVersion: 1,
+              id: "studium.courses",
+              pack: "studium",
+              title: "Courses",
+              kpis: [{ id: "courses", label: "Courses", value: ws.courses.length }],
+            },
+            {
+              schemaVersion: 1,
+              id: "studium.exams",
+              pack: "studium",
+              title: "Exams",
+              kpis: [
+                { id: "exams", label: "Exams", value: ws.courses.reduce((n, c) => n + (c.examDates?.length ?? 0), 0) },
+                { id: "next", label: "Next date", value: next?.date ?? null },
+                { id: "days", label: "Days remaining", value: next?.daysRemaining ?? null },
+              ],
+            },
+          ],
+        });
+      }
+
       case "studium_course_brief": {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");

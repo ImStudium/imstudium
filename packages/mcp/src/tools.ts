@@ -77,6 +77,11 @@ export const MCP_TOOLS = [
     description: "Check authentication status and current user",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "studium_modules",
+    description: "Harness modules for mina — course/exam counts, no student id",
+    inputSchema: { type: "object", properties: {} },
+  },
 ] as const;
 
 export const TOOL_NAMES = MCP_TOOLS.map((t) => t.name);

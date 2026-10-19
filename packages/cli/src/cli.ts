@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Command } from "commander";
 import {
@@ -520,6 +521,83 @@ program
         const md = await readFile(join(dir, "klausuren.md"), "utf-8");
         output(md);
       }
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+program
+  .command("module")
+  .description("Harness modules for mina — course/exam counts, no student id")
+  .option("-o, --output <dir>", "Workspace directory")
+  .action(async (opts: { output?: string }) => {
+    try {
+      const sdk = await getSdk();
+      const dir = expandPath(opts.output || sdk.workspacePath);
+      const ws = await sdk.studium.loadWorkspace(dir);
+      if (!ws) fail(new ImstudiumError("No workspace", "NO_WORKSPACE"));
+      const next = ws.nextDeadlines[0];
+      const metrics = {
+        courses: ws.courses.length,
+        exams: ws.courses.reduce((n, c) => n + (c.examDates?.length ?? 0), 0),
+        nextDate: next?.date ?? null,
+        nextDays: next?.daysRemaining ?? null,
+      };
+      mkdirSync(join(dir, "snapshots"), { recursive: true });
+      const snapshot = join(dir, "snapshots", "studium.json");
+      writeFileSync(
+        snapshot,
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            pack: "studium",
+            asOf: new Date().toISOString(),
+            metrics,
+            modules: ["studium.courses", "studium.exams"],
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      console.log(
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            leaf: "imstudium",
+            pack: "studium",
+            workspace: dir,
+            snapshot,
+            modules: [
+              {
+                schemaVersion: 1,
+                id: "studium.courses",
+                pack: "studium",
+                title: "Courses",
+                description: "Count only — no student id",
+                kpis: [{ id: "courses", label: "Courses", value: metrics.courses }],
+                actions: [{ id: "klausuren", label: "Klausuren", cli: "imstudium klausuren --json", json: true }],
+                views: [{ id: "kpis", kind: "kpis", title: "Courses", cli: "imstudium klausuren --json" }],
+              },
+              {
+                schemaVersion: 1,
+                id: "studium.exams",
+                pack: "studium",
+                title: "Exams",
+                description: "Next date only — no titles in snapshot",
+                kpis: [
+                  { id: "exams", label: "Exams", value: metrics.exams },
+                  { id: "next", label: "Next date", value: metrics.nextDate },
+                  { id: "days", label: "Days remaining", value: metrics.nextDays },
+                ],
+                actions: [{ id: "klausuren", label: "Klausuren", cli: "imstudium klausuren --json", json: true }],
+                views: [{ id: "kpis", kind: "kpis", title: "Exams", cli: "imstudium klausuren --json" }],
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+      );
     } catch (e) {
       fail(e);
     }
