@@ -8,6 +8,7 @@ import {
   semesterSlug,
   syncCommunication,
   syncContent,
+  syncPlanning,
   contentDeps,
   type ContentPart,
   type CwTask,
@@ -158,6 +159,7 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
         if (isCurrent) result.workspace = ws;
         await syncCourseCommunication(sdk, opts, ws, isCurrent ? include : include.filter((i) => i !== "forum"), result);
         await syncCourseContent(sdk, opts, ws, isCurrent ? include : include.filter((i) => i !== "tasks"), result, isCurrent);
+        if (isCurrent && include.includes("calendar")) await syncStundenplan(sdk, opts, ws, result);
         await extractAndIndex(sdk, opts, ws, result);
       }
       result.semesters.push({ title, slug, folder, archived: !isCurrent, courses: ids.length });
@@ -188,6 +190,7 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
       });
       await syncCourseCommunication(sdk, opts, ws, include, result);
       await syncCourseContent(sdk, opts, ws, include, result, true);
+      if (include.includes("calendar")) await syncStundenplan(sdk, opts, ws, result);
       await extractAndIndex(sdk, opts, ws, result);
     }
   }
@@ -254,6 +257,33 @@ async function syncCourseContent(
         message: `${e.scope}: ${e.message}`,
       });
     }
+  }
+}
+
+/** stundenplan.md — the weekly plan plus single dates and cancellations (current semester only). */
+async function syncStundenplan(sdk: Sdk, opts: RunSyncOptions, ws: StudiumWorkspace, result: RunSyncResult): Promise<void> {
+  try {
+    opts.onProgress?.("stundenplan");
+    await syncPlanning(
+      {
+        planning: sdk.planning,
+        userId: await meId(sdk),
+        courses: ws.courses.map((c) => ({ id: c.id, title: c.title, number: c.courseNumber ?? null })),
+        semester: {
+          id: ws.activeSemester.id,
+          title: ws.activeSemester.title,
+          start: ws.activeSemester.start,
+          end: ws.activeSemester.end,
+        },
+      },
+      opts.out,
+    );
+  } catch (e) {
+    (result.report.courseErrors ??= []).push({
+      courseId: "-",
+      courseTitle: "Stundenplan",
+      message: e instanceof Error ? e.message : String(e),
+    });
   }
 }
 

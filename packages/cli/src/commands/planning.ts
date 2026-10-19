@@ -35,7 +35,7 @@ import { currentCourses } from "../course-arg.js";
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-function icsPath(sdk: Sdk, override?: string): string {
+export function icsPath(sdk: Sdk, override?: string): string {
   return override ? resolve(override) : join(sdk.workspacePath, "calendar.ics");
 }
 
@@ -86,12 +86,12 @@ export async function resolveSemester(sdk: Sdk, label?: string): Promise<Semeste
   }
 }
 
-async function workspaceCourses(sdk: Sdk): Promise<CourseRefLite[]> {
+export async function workspaceCourses(sdk: Sdk): Promise<CourseRefLite[]> {
   const ws = await sdk.studium.loadWorkspace(sdk.workspacePath).catch(() => null);
   return (ws?.courses ?? []).map((c) => ({ id: c.id, title: c.title, number: c.courseNumber ?? null }));
 }
 
-function timetableSources(sdk: Sdk): TimetableSources {
+export function timetableSources(sdk: Sdk): TimetableSources {
   return {
     planning: sdk.planning,
     courses: async () => (await currentCourses(sdk)).map((c) => ({ id: c.id, title: c.title })),
