@@ -153,28 +153,5 @@ export class WikiResource {
   }
 }
 
-export class NewsResource {
-  constructor(private client: StudIpClient) {}
-
-  async listCourseNews(courseId: string) {
-    return this.client.paginateAll<JsonApiResource<"news">>(`/courses/${courseId}/news`);
-  }
-
-  async exportCourseNews(courseId: string, outDir: string): Promise<number> {
-    await ensureDir(outDir);
-    const items = await this.listCourseNews(courseId);
-    let count = 0;
-    for (const item of items) {
-      const title = (item.attributes?.title as string) || item.id;
-      const content = (item.attributes?.content as string) || "";
-      const date = (item.attributes?.mkdate as string) || "";
-      const safeName = item.id.slice(0, 12);
-      await writeFile(
-        join(outDir, `${safeName}.md`),
-        `# ${title}\n\n_${date}_\n\n${content}\n`,
-      );
-      count++;
-    }
-    return count;
-  }
-}
+// News moved to ./news.ts (dated markdown + README index); re-exported for existing imports.
+export { NewsResource } from "./news.js";
