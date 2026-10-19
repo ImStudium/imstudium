@@ -7,6 +7,7 @@ import { CoursesResource, DiscoveryResource, ScheduleResource } from "./resource
 import { FilesResource, NewsResource, WikiResource } from "./resources/files.js";
 import { ActivityResource, BlubberResource, ForumResource, MessagesResource } from "./resources/communication.js";
 import { CoursewareResource } from "./resources/courseware.js";
+import { PlanningResource } from "./resources/planning.js";
 import { loadConfig, saveConfig, getDefaultConfig, paths, expandPath } from "./config.js";
 
 export const SDK_VERSION = "0.2.0";
@@ -41,8 +42,10 @@ export * from "./resources/files.js";
 export * from "./resources/communication.js";
 export * from "./resources/courseware.js";
 export * from "./content/index.js";
+export * from "./resources/planning.js";
 export * from "./berlin.js";
 export * from "./ics.js";
+export * from "./timetable.js";
 
 export interface ImstudiumSdk {
   client: StudIpClient;
@@ -57,6 +60,7 @@ export interface ImstudiumSdk {
   blubber: BlubberResource;
   activity: ActivityResource;
   schedule: ScheduleResource;
+  planning: PlanningResource;
   discovery: DiscoveryResource;
   sync: SyncEngine;
   studium: StudiumBuilder;
@@ -116,6 +120,7 @@ export async function createSdk(
     blubber: new BlubberResource(client),
     activity: new ActivityResource(client),
     schedule: new ScheduleResource(client),
+    planning: new PlanningResource(client),
     discovery: new DiscoveryResource(client),
     sync: new SyncEngine(client),
     studium: new StudiumBuilder(client),
