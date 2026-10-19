@@ -50,7 +50,7 @@ For any formula, diagram, plot, or table: **open the original** under `files/` (
 
 ```json
 {
-  "requiredAction": "MANDATORY: Visually inspect all pageImages...",
+  "requiredAction": "Open the original file for figures; pageImages lists copied photos only",
   "pageImages": ["/abs/path/pages/page-1.png", "..."],
   "viewerHtml": "/abs/path/viewer.html",
   "viewerFileUrl": "file:///abs/path/viewer.html",

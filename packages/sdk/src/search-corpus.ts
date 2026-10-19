@@ -453,7 +453,7 @@ export function agentSearchGuidance(
     resolveHit: {
       materialsIndex: "search/materials.json",
       pageText: "extracted/<extractSlug>/content.md (## Page N section)",
-      pageImage: "extracted/<extractSlug>/pages/page-NNN.png",
+      pageImage: "only for copied photos (extracted/<extractSlug>/pages/); for slides and formulas open the original in files/",
     },
     chunkCount: workspace.search?.chunkCount,
     courseCount: workspace.search?.courseCount,
