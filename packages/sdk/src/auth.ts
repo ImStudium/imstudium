@@ -59,6 +59,37 @@ async function getKeytar() {
   }
 }
 
+type SecureContext = {
+  getRaw: (kind: string, id: string) => Promise<unknown>;
+  set: (kind: string, id: string, value: unknown) => Promise<void>;
+  delete: (kind: string, id: string) => Promise<void>;
+};
+
+/** ImSicheren is an optional peer: when installed it holds the session, nothing else does. */
+async function getSecureContext(): Promise<SecureContext | null> {
+  if (process.env.IMSTUDIUM_PLAIN_SESSION === "1") return null;
+  try {
+    const mod = (await import(/* webpackIgnore: true */ "@imsicheren/sdk" as string)) as {
+      createSecureContext: (o: { app: string; enforceAccessMode?: boolean }) => SecureContext;
+    };
+    return mod.createSecureContext({ app: "imstudium", enforceAccessMode: false });
+  } catch {
+    return null;
+  }
+}
+
+async function removePlainSessionFile(): Promise<void> {
+  try {
+    const { unlink } = await import("node:fs/promises");
+    await unlink(join(paths.configDir, "session.json"));
+  } catch {
+    // not there
+  }
+}
+
+/** valid: Stud.IP answered JSON for /users/me · rejected: 401 or login page · offline: no answer */
+export type CookieCheck = "valid" | "rejected" | "offline";
+
 export class AuthManager {
   private session: SessionData | null = null;
   private instanceOrigin = "";
@@ -71,19 +102,9 @@ export class AuthManager {
     if (this.session) return this.session;
 
     // Prefer ImSicheren (global credential plane; optional peer)
-    if (process.env.IMSTUDIUM_PLAIN_SESSION !== "1") {
+    const secure = await getSecureContext();
+    if (secure) {
       try {
-        const mod = (await import(
-          /* webpackIgnore: true */ "@imsicheren/sdk" as string
-        )) as {
-          createSecureContext: (o: {
-            app: string;
-            enforceAccessMode?: boolean;
-          }) => {
-            getRaw: (k: string, id: string) => Promise<unknown>;
-          };
-        };
-        const secure = mod.createSecureContext({ app: "imstudium", enforceAccessMode: false });
         const raw = await secure.getRaw("generic_json", "session");
         if (raw && typeof raw === "object") {
           this.session = raw as SessionData;
@@ -121,24 +142,11 @@ export class AuthManager {
     this.session = session;
     const raw = JSON.stringify(session);
 
-    if (process.env.IMSTUDIUM_PLAIN_SESSION !== "1") {
+    const secure = await getSecureContext();
+    if (secure) {
       try {
-        const mod = (await import(
-          /* webpackIgnore: true */ "@imsicheren/sdk" as string
-        )) as {
-          createSecureContext: (o: {
-            app: string;
-            enforceAccessMode?: boolean;
-          }) => {
-            set: (k: string, id: string, v: unknown) => Promise<void>;
-          };
-        };
-        const secure = mod.createSecureContext({ app: "imstudium", enforceAccessMode: false });
         await secure.set("generic_json", "session", session as unknown as Record<string, unknown>);
-        // still mirror file for offline tooling
-        const { mkdir, writeFile } = await import("node:fs/promises");
-        await mkdir(paths.configDir, { recursive: true });
-        await writeFile(`${paths.configDir}/session.json`, raw, { mode: 0o600 });
+        await removePlainSessionFile();
         return;
       } catch {
         // fall through
@@ -149,6 +157,7 @@ export class AuthManager {
     if (keytar?.setPassword) {
       try {
         await keytar.setPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT, raw);
+        await removePlainSessionFile();
         return;
       } catch {
         // fall through to file storage
@@ -162,19 +171,9 @@ export class AuthManager {
 
   async clearSession(): Promise<void> {
     this.session = null;
-    if (process.env.IMSTUDIUM_PLAIN_SESSION !== "1") {
+    const secure = await getSecureContext();
+    if (secure) {
       try {
-        const mod = (await import(
-          /* webpackIgnore: true */ "@imsicheren/sdk" as string
-        )) as {
-          createSecureContext: (o: {
-            app: string;
-            enforceAccessMode?: boolean;
-          }) => {
-            delete: (k: string, id: string) => Promise<void>;
-          };
-        };
-        const secure = mod.createSecureContext({ app: "imstudium", enforceAccessMode: false });
         await secure.delete("generic_json", "session");
       } catch {
         // ignore
@@ -188,32 +187,67 @@ export class AuthManager {
         // ignore
       }
     }
+    await removePlainSessionFile();
+  }
+
+  /** Where the session lives right now — for status output, never the value. */
+  async sessionStore(): Promise<"imsicheren" | "keychain" | "file" | "none"> {
+    const secure = await getSecureContext();
+    if (secure) {
+      try {
+        if (await secure.getRaw("generic_json", "session")) return "imsicheren";
+      } catch {
+        // ignore
+      }
+    }
+    const keytar = await getKeytar();
+    if (keytar?.getPassword) {
+      try {
+        if (await keytar.getPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT)) return "keychain";
+      } catch {
+        // ignore
+      }
+    }
     try {
-      const { unlink } = await import("node:fs/promises");
-      await unlink(`${paths.configDir}/session.json`);
+      const { access } = await import("node:fs/promises");
+      await access(join(paths.configDir, "session.json"));
+      return "file";
     } catch {
-      // ignore
+      return "none";
     }
   }
 
-  /** Refresh OAuth tokens when close to expiry (Stud.IP Refresh Token Grant). */
+  /** Result of the last ensureValidSession() check. */
+  lastCheck: CookieCheck | "oauth" | "none" = "none";
+
+  /**
+   * Check the stored session against Stud.IP. Only a definite rejection
+   * (401, or the login page instead of JSON) clears it — being offline never
+   * logs you out. Returns the session, or null when there is none or it was
+   * rejected; `lastCheck` says which.
+   */
   async ensureValidSession(options?: {
     instanceOrigin?: string;
     clientId?: string;
   }): Promise<SessionData | null> {
     const session = await this.loadSession();
-    if (!session) return null;
+    if (!session) {
+      this.lastCheck = "none";
+      return null;
+    }
 
     const origin = (options?.instanceOrigin || this.instanceOrigin).replace(/\/$/, "");
     if (session.type === "cookie" && origin && session.cookies?.Seminar_Session) {
-      const ok = await this.isCookieValid(origin, session.cookies.Seminar_Session);
-      if (!ok) {
+      const check = await this.checkCookie(origin, session.cookies.Seminar_Session);
+      this.lastCheck = check;
+      if (check === "rejected") {
         await this.clearSession();
         return null;
       }
       return session;
     }
 
+    this.lastCheck = "oauth";
     if (session.type !== "oauth") return session;
 
     const clientId = options?.clientId;
@@ -240,6 +274,67 @@ export class AuthManager {
     };
     await this.saveSession(refreshed);
     return refreshed;
+  }
+
+  /**
+   * Renew an expired cookie session without a window: reuse the isolated
+   * login profile headless. Works while the university IdP still remembers
+   * you ("Stay signed in"); never types credentials. Returns false when a
+   * human sign-in is needed.
+   */
+  async refreshSilently(options?: { instanceOrigin?: string; timeoutMs?: number }): Promise<boolean> {
+    if (process.env.IMSTUDIUM_NO_SILENT_REFRESH === "1") return false;
+    const origin = (options?.instanceOrigin || this.instanceOrigin).replace(/\/$/, "");
+    if (!origin) return false;
+    const { existsSync } = await import("node:fs");
+    if (!existsSync(resolveIsolatedProfileDir())) return false;
+
+    let playwright: typeof import("playwright");
+    try {
+      playwright = await import("playwright");
+    } catch {
+      return false;
+    }
+
+    let context: BrowserContext | null = null;
+    try {
+      context = await this.launchLoginContext(playwright, {
+        profile: "isolated",
+        profileDirectory: "Default",
+        headless: true,
+      });
+      let cookie = await this.extractSeminarSession(context, origin);
+      if (!cookie) {
+        const page = context.pages().find((p) => !p.isClosed()) ?? (await context.newPage());
+        await page
+          .goto(buildShibbolethLoginUrl(origin), { waitUntil: "domcontentloaded", timeout: 30_000 })
+          .catch(() => undefined);
+        const deadline = Date.now() + (options?.timeoutMs ?? 40_000);
+        while (Date.now() < deadline && !cookie) {
+          await this.assistLoginFlow(page);
+          if (await this.needsHuman(page)) break;
+          await this.sleep(1200);
+          cookie = await this.extractSeminarSession(context, origin);
+        }
+      }
+      if (!cookie) return false;
+      await this.persistCookieSession(cookie);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      await context?.close().catch(() => undefined);
+    }
+  }
+
+  /** A password, e-mail or MFA field means the IdP wants a person — stop silently. */
+  private async needsHuman(page: Page): Promise<boolean> {
+    if (page.isClosed()) return true;
+    const count = await page
+      .locator('input[type="password"], input[type="email"], input[name="loginfmt"], input[type="tel"]')
+      .count()
+      .catch(() => 0);
+    return count > 0;
   }
 
   getCookies(): Record<string, string> {
@@ -316,17 +411,29 @@ export class AuthManager {
   }
 
   private async isCookieValid(origin: string, seminarSession: string): Promise<boolean> {
+    return (await this.checkCookie(origin, seminarSession)) === "valid";
+  }
+
+  async checkCookie(origin: string, seminarSession: string): Promise<CookieCheck> {
     try {
       const res = await fetch(`${origin}/jsonapi.php/v1/users/me`, {
         headers: {
           Accept: "application/vnd.api+json",
           Cookie: `Seminar_Session=${seminarSession}`,
         },
+        redirect: "manual",
+        signal: AbortSignal.timeout(15_000),
       });
       const contentType = res.headers.get("content-type") || "";
-      return res.ok && contentType.includes("json");
+      await res.body?.cancel().catch(() => undefined);
+      if (res.ok && contentType.includes("json")) return "valid";
+      if (res.status === 401 || res.status === 403 || (res.status >= 300 && res.status < 400)) {
+        return "rejected";
+      }
+      if (res.ok) return "rejected"; // HTML login page instead of JSON
+      return "offline"; // 5xx etc. — don't throw the session away
     } catch {
-      return false;
+      return "offline";
     }
   }
 
@@ -826,8 +933,10 @@ function startCallbackServer(): Promise<{
 }> {
   return new Promise((resolve, reject) => {
     let resolveCode: (code: string) => void;
+    let rejectCode: (err: Error) => void;
     const codePromise = new Promise<string>((res, rej) => {
       resolveCode = res;
+      rejectCode = rej;
       setTimeout(() => rej(new Error("OAuth callback timed out")), 300_000);
     });
 
@@ -842,7 +951,7 @@ function startCallbackServer(): Promise<{
         res.end(
           `<h1>Sign-in failed</h1><p>${errorDescription || error}</p><p>Close this tab and run imstudium login again.</p>`,
         );
-        reject(
+        rejectCode!(
           new ImstudiumError(
             errorDescription || error,
             "OAUTH_DENIED",

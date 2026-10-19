@@ -7,10 +7,14 @@ import { CoursesResource, DiscoveryResource, ScheduleResource } from "./resource
 import { FilesResource, NewsResource, WikiResource } from "./resources/files.js";
 import { loadConfig, saveConfig, getDefaultConfig, paths, expandPath } from "./config.js";
 
+export const SDK_VERSION = "0.2.0";
+
 export * from "./types.js";
 export * from "./errors.js";
 export * from "./config.js";
 export * from "./client.js";
+export * from "./jsonapi.js";
+export * from "./routes.js";
 export * from "./auth.js";
 export * from "./login-url.js";
 export * from "./login-helper.js";
@@ -46,20 +50,43 @@ export interface ImstudiumSdk {
   config: Awaited<ReturnType<typeof loadConfig>>;
 }
 
-export async function createSdk(configOverride?: Partial<ReturnType<typeof getDefaultConfig>>) {
+export interface CreateSdkOptions {
+  /** Renew an expired session headless from the saved login profile (default true). */
+  silentRefresh?: boolean;
+}
+
+/**
+ * Build the SDK without touching the network. The session is checked lazily:
+ * the first 401 triggers one silent renewal, so local commands work offline
+ * and a stale cookie never blocks startup.
+ */
+export async function createSdk(
+  configOverride?: Partial<ReturnType<typeof getDefaultConfig>>,
+  options: CreateSdkOptions = {},
+) {
   const config = { ...(await loadConfig()), ...configOverride };
   const auth = new AuthManager();
   auth.setInstanceOrigin(config.instanceOrigin);
   await auth.loadSession();
-  await auth.ensureValidSession({
-    instanceOrigin: config.instanceOrigin,
-    clientId: config.oauth?.clientId,
-  });
 
   const client = new StudIpClient({
     baseUrl: config.baseUrl,
     getAuthHeaders: () => auth.getAuthHeaders(),
     getCookies: () => auth.getCookies(),
+    userAgent: `imstudium/${SDK_VERSION} (+https://github.com/ImStudium/imstudium)`,
+    onUnauthorized:
+      options.silentRefresh === false
+        ? undefined
+        : async () => {
+            if (auth.getAuthHeaders().Authorization) {
+              const s = await auth.ensureValidSession({
+                instanceOrigin: config.instanceOrigin,
+                clientId: config.oauth?.clientId,
+              });
+              return !!s;
+            }
+            return auth.refreshSilently({ instanceOrigin: config.instanceOrigin });
+          },
   });
 
   return {
