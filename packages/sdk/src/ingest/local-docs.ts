@@ -7,8 +7,33 @@
  *   scanned  → image-only page markers (no OCR)
  */
 import { Buffer } from "node:buffer";
-import { formatFromBytes, formatFromPath, toMarkdownBytes } from "@firecrawl/anydoc";
-import { extractPagesMarkdownAsync } from "@firecrawl/pdf-inspector";
+
+type AnyDoc = typeof import("@firecrawl/anydoc");
+type PdfInspector = typeof import("@firecrawl/pdf-inspector");
+
+let anydocModule: Promise<AnyDoc> | null = null;
+let pdfInspectorModule: Promise<PdfInspector> | null = null;
+
+/**
+ * Both engines ship native binaries. Load them on first use so a missing
+ * platform build (e.g. pdf-inspector on Intel macOS) only affects extraction,
+ * never login, sync or the MCP server.
+ */
+function loadAnydoc(): Promise<AnyDoc> {
+  anydocModule ??= import("@firecrawl/anydoc");
+  return anydocModule;
+}
+
+function loadPdfInspector(): Promise<PdfInspector> {
+  pdfInspectorModule ??= import("@firecrawl/pdf-inspector");
+  return pdfInspectorModule;
+}
+
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46]; // %PDF
+
+function looksLikePdf(bytes: Uint8Array): boolean {
+  return PDF_MAGIC.every((b, i) => bytes[i] === b);
+}
 
 export type LocalEngine = "pdf-inspector" | "anydoc";
 
@@ -70,6 +95,7 @@ function asError(err: unknown, fallback: string): Error {
 
 async function convertPdf(bytes: Uint8Array): Promise<LocalConvertResult> {
   try {
+    const { extractPagesMarkdownAsync } = await loadPdfInspector();
     const extracted = await extractPagesMarkdownAsync(toNodeBuffer(bytes));
     const pages: LocalPage[] = extracted.pages.map((p) => {
       const markdown = (p.markdown ?? "").trim();
@@ -105,6 +131,13 @@ async function convertPdf(bytes: Uint8Array): Promise<LocalConvertResult> {
 }
 
 async function convertAnydoc(bytes: Uint8Array, fileName: string): Promise<LocalConvertResult> {
+  let mod: AnyDoc;
+  try {
+    mod = await loadAnydoc();
+  } catch (err) {
+    return { ok: false, error: asError(err, "anydoc is not installed for this platform"), engine: "anydoc" };
+  }
+  const { formatFromBytes, formatFromPath, toMarkdownBytes } = mod;
   const format = formatFromPath(fileName) ?? formatFromBytes(bytes) ?? undefined;
   try {
     const markdown = await toMarkdownBytes(bytes, format);
@@ -140,8 +173,7 @@ export async function convertLocalDocument(
   fileName: string,
 ): Promise<LocalConvertResult> {
   const name = fileName.trim().split(/[/\\]/).pop() || fileName;
-  const sniffed = formatFromBytes(bytes);
-  if (isPdfFileName(name) || sniffed === "pdf") return convertPdf(bytes);
+  if (isPdfFileName(name) || looksLikePdf(bytes)) return convertPdf(bytes);
   return convertAnydoc(bytes, name);
 }
 
@@ -150,15 +182,22 @@ export async function probeLocalIngest(): Promise<{
   pdfInspector: boolean;
   error?: string;
 }> {
+  const errors: string[] = [];
+  let anydoc = false;
+  let pdfInspector = false;
   try {
-    formatFromPath("lecture.pptx");
-    toNodeBuffer(new Uint8Array([0x25, 0x50, 0x44, 0x46]));
-    return { anydoc: true, pdfInspector: true };
+    const mod = await loadAnydoc();
+    anydoc = Boolean(mod.formatFromPath("lecture.pptx"));
   } catch (err) {
-    return {
-      anydoc: false,
-      pdfInspector: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    anydocModule = null;
+    errors.push(`anydoc: ${err instanceof Error ? err.message : String(err)}`);
   }
+  try {
+    const mod = await loadPdfInspector();
+    pdfInspector = typeof mod.extractPagesMarkdownAsync === "function";
+  } catch (err) {
+    pdfInspectorModule = null;
+    errors.push(`pdf-inspector: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return { anydoc, pdfInspector, ...(errors.length ? { error: errors.join("; ") } : {}) };
 }
