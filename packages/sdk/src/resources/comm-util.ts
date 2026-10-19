@@ -160,45 +160,10 @@ export function isUnavailable(err: unknown): boolean {
 
 export type FrontmatterValue = string | number | boolean | null | undefined;
 
-function yamlScalar(value: Exclude<FrontmatterValue, undefined>): string {
-  if (value === null) return "null";
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return /^[A-Za-z0-9_.\-+/@][A-Za-z0-9_.\-+/@ :]*$/.test(value) && !/: |\s$/.test(value)
-    ? value
-    : JSON.stringify(value);
-}
+// One frontmatter dialect for news, forum, courseware and wiki files.
+import { frontmatter, parseFrontmatter } from "../content/markdown.js";
+export { frontmatter, parseFrontmatter };
 
-export function frontmatter(fields: Record<string, FrontmatterValue>): string {
-  const lines = Object.entries(fields)
-    .filter(([, v]) => v !== undefined)
-    .map(([k, v]) => `${k}: ${yamlScalar(v as Exclude<FrontmatterValue, undefined>)}`);
-  return `---\n${lines.join("\n")}\n---\n`;
-}
-
-/** Parse the simple `key: value` frontmatter written by `frontmatter()`. */
-export function parseFrontmatter(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!text.startsWith("---\n")) return out;
-  const end = text.indexOf("\n---", 4);
-  if (end < 0) return out;
-  for (const line of text.slice(4, end).split("\n")) {
-    const idx = line.indexOf(":");
-    if (idx <= 0) continue;
-    const key = line.slice(0, idx).trim();
-    let value = line.slice(idx + 1).trim();
-    if (value.startsWith('"')) {
-      try {
-        value = JSON.parse(value) as string;
-      } catch {
-        // keep raw
-      }
-    }
-    out[key] = value;
-  }
-  return out;
-}
-
-/** Write only when the content differs — keeps mtimes (and file watchers) quiet on re-sync. */
 export async function writeIfChanged(path: string, content: string): Promise<boolean> {
   try {
     if ((await readFile(path, "utf-8")) === content) return false;

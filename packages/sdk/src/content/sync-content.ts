@@ -15,7 +15,7 @@ import {
   renderCoursewareIndex,
   unitFolderNames,
   writeCoursewareUnit,
-  writeIfChanged,
+  writeMarkdownIfChanged,
   type FileFetcher,
   type FileWriteStats,
 } from "./courseware-write.js";
@@ -174,7 +174,7 @@ export async function syncContent(
         units: rendered.map((r, i) => ({ rendered: r, folder: folders[i]! })),
         tasks: result.tasks,
       });
-      await writeIfChanged(join(dir, "README.md"), readme, null, writeOpts);
+      await writeMarkdownIfChanged(join(dir, "README.md"), readme, null, writeOpts);
     }
     result.courseware = stats;
   }

@@ -54,7 +54,7 @@ async function readText(path: string): Promise<string | null> {
 }
 
 /** Write `text` unless the file already carries the same frontmatter hash. */
-export async function writeIfChanged(
+export async function writeMarkdownIfChanged(
   path: string,
   text: string,
   hash: string | null,
@@ -126,7 +126,7 @@ export async function writeCoursewareUnit(
   if (!options.dryRun) await ensureDir(unitDir);
 
   for (const el of rendered.elements) {
-    const action = await writeIfChanged(join(unitDir, el.path), el.markdown, el.hash, options);
+    const action = await writeMarkdownIfChanged(join(unitDir, el.path), el.markdown, el.hash, options);
     result[action]++;
   }
   result.removed = await removeStale(

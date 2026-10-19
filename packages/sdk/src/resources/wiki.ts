@@ -14,7 +14,7 @@ import { attr, relId } from "../jsonapi.js";
 import type { JsonApiResource } from "../types.js";
 import { cleanDate } from "./courseware.js";
 import { htmlToMarkdown, frontmatter, shortHash, contentSlug, studipMarkupToMarkdown } from "../content/markdown.js";
-import { removeStale, writeIfChanged, type WriteOptions } from "../content/courseware-write.js";
+import { removeStale, writeMarkdownIfChanged, type WriteOptions } from "../content/courseware-write.js";
 
 export interface WikiPage {
   id: string;
@@ -181,9 +181,9 @@ export interface WriteWikiResult {
 export async function writeWiki(rendered: RenderedWiki, wikiDir: string, options: WriteOptions = {}): Promise<WriteWikiResult> {
   const result: WriteWikiResult = { dir: wikiDir, pages: rendered.pages.length, written: 0, skipped: 0, removed: 0 };
   for (const p of rendered.pages) {
-    result[await writeIfChanged(join(wikiDir, p.node.file), p.markdown, p.hash, options)]++;
+    result[await writeMarkdownIfChanged(join(wikiDir, p.node.file), p.markdown, p.hash, options)]++;
   }
-  await writeIfChanged(join(wikiDir, "README.md"), rendered.readme, null, options);
+  await writeMarkdownIfChanged(join(wikiDir, "README.md"), rendered.readme, null, options);
   result.removed = await removeStale(wikiDir, new Set(rendered.pages.map((p) => p.node.file)), "studip-wiki", options);
   return result;
 }
