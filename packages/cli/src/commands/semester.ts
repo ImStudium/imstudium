@@ -14,25 +14,12 @@ import {
 import { act, getSdk, note, output } from "../runtime.js";
 import { readChanges, runSync } from "../pipeline.js";
 import { resetCourseCache } from "../course-arg.js";
+import { parseSince } from "../since.js";
 
 const fmtDate = (iso?: string) =>
   iso
     ? new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" })
     : "?";
-
-/** "7d", "24h", "2w", "30m" or an ISO date → epoch ms. */
-export function parseSince(value: string | undefined, fallbackDays = 7): number {
-  if (!value) return Date.now() - fallbackDays * 86_400_000;
-  const m = value.trim().match(/^(\d+)\s*([mhdw])$/i);
-  if (m) {
-    const n = Number(m[1]);
-    const unit = { m: 60_000, h: 3_600_000, d: 86_400_000, w: 7 * 86_400_000 }[m[2]!.toLowerCase() as "m" | "h" | "d" | "w"];
-    return Date.now() - n * unit;
-  }
-  const t = Date.parse(value);
-  if (Number.isNaN(t)) throw new ImstudiumError(`Can't read --since "${value}"`, "BAD_ARGS", undefined, "Use 7d, 24h, 2w or 2026-10-01");
-  return t;
-}
 
 export function registerSemester(program: Command): void {
   const semester = program
@@ -146,7 +133,6 @@ export function registerSemester(program: Command): void {
         const result = await runSync(sdk, {
           out,
           semesterId: target.id,
-          include: ["calendar", "wiki", "news"],
           extract: opts.extract,
           onProgress: note,
         });
@@ -177,7 +163,7 @@ export function registerSemester(program: Command): void {
       act(async (opts: { since: string; course?: string; output?: string }) => {
         const sdk = await getSdk();
         const out = expandPath(opts.output || sdk.workspacePath);
-        const since = parseSince(opts.since);
+        const since = parseSince(opts.since).getTime();
         const q = opts.course?.toLowerCase();
         const seen = new Set<string>();
         const changes = (await readChanges(out, since))

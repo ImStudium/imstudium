@@ -278,7 +278,6 @@ program
       const result = await runSync(sdk, {
         out,
         ...semOpts,
-        include: ["wiki", "news", "calendar"],
         extract: opts.extract,
         onProgress: (m) => note(m),
       });
@@ -647,7 +646,7 @@ program
   .option("--all-semesters", "Every enrolled semester: current at the root, the rest under archive/")
   .option("--layout <mode>", "tree (mirror Stud.IP folders) or flat", "tree")
   .option("--dry-run", "List changes without downloading")
-  .option("--include <items>", "Comma-separated: calendar,wiki,news (default: calendar)")
+  .option("--include <items>", "Comma-separated: calendar,wiki,news,forum (default: all four)")
   .option("--extract", "Extract new/changed files to markdown and rebuild the search index")
   .action(async (opts: {
     output?: string;
@@ -662,7 +661,7 @@ program
     try {
       const sdk = await getSdk();
       const out = expandPath(opts.output || sdk.workspacePath);
-      const include = opts.include?.split(",").map((s) => s.trim()) as Array<"wiki" | "news" | "calendar"> | undefined;
+      const include = opts.include?.split(",").map((s) => s.trim()) as Array<"wiki" | "news" | "calendar" | "forum"> | undefined;
       const semOpts = semesterSyncOptions(sdk, opts);
       const result = await runSync(sdk, {
         out,

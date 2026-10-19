@@ -84,7 +84,6 @@ export async function runOnboardFlow(opts: OnboardFlowOpts): Promise<OnboardFlow
         const result = await runSync(sdk, {
           out,
           semesterId: sdk.config.semesterId,
-          include: ["wiki", "news", "calendar"],
           onProgress: (m) => ui?.setLiveMessage(m),
         });
         report = result.report;

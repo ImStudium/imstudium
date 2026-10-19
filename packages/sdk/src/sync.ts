@@ -2,7 +2,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { StudIpClient } from "./client.js";
 import { CoursesResource } from "./resources/courses.js";
-import { FilesResource, NewsResource, WikiResource } from "./resources/files.js";
+import { FilesResource, WikiResource } from "./resources/files.js";
 import { ScheduleResource } from "./resources/courses.js";
 import { paths, ensureDir, slugify } from "./config.js";
 import { semesterFolderSlug } from "./workspace-path.js";
@@ -13,7 +13,8 @@ export interface SyncOptions {
   layout?: "flat" | "tree";
   dryRun?: boolean;
   concurrency?: number;
-  include?: Array<"wiki" | "news" | "calendar">;
+  /** calendar → calendar.ics, wiki → <course>/wiki. News and forum run in the CLI pipeline (syncCommunication). */
+  include?: Array<"wiki" | "news" | "calendar" | "forum">;
   courseFilter?: (course: { id: string; title: string }) => boolean;
   /** Stud.IP semester id — default: calendar current semester. */
   semesterId?: string;
@@ -32,14 +33,12 @@ export class SyncEngine {
   private courses: CoursesResource;
   private files: FilesResource;
   private wiki: WikiResource;
-  private news: NewsResource;
   private schedule: ScheduleResource;
 
   constructor(client: StudIpClient) {
     this.courses = new CoursesResource(client);
     this.files = new FilesResource(client);
     this.wiki = new WikiResource(client);
-    this.news = new NewsResource(client);
     this.schedule = new ScheduleResource(client);
   }
 
@@ -126,19 +125,6 @@ export class SyncEngine {
         } catch (e) {
           report.errors.push({
             fileRefId: `wiki:${course.id}`,
-            message: e instanceof Error ? e.message : String(e),
-          });
-        }
-      }
-
-      if (options.include?.includes("news")) {
-        try {
-          if (!options.dryRun) {
-            await this.news.exportCourseNews(course.id, join(courseDir, "news"));
-          }
-        } catch (e) {
-          report.errors.push({
-            fileRefId: `news:${course.id}`,
             message: e instanceof Error ? e.message : String(e),
           });
         }

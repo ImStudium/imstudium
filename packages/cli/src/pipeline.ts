@@ -6,6 +6,7 @@ import {
   rebuildSearchIndexes,
   semesterIdFromRelationships,
   semesterSlug,
+  syncCommunication,
   type CourseWithSemester,
   type SemesterResource,
   type StudiumWorkspace,
@@ -24,7 +25,7 @@ export interface RunSyncOptions {
   layout?: "flat" | "tree";
   dryRun?: boolean;
   extract?: boolean;
-  include?: Array<"wiki" | "news" | "calendar">;
+  include?: Array<"wiki" | "news" | "calendar" | "forum">;
   onProgress?: (message: string) => void;
 }
 
@@ -108,7 +109,7 @@ export function groupCoursesBySemester(
 export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncResult> {
   const progress = opts.onProgress ?? (() => undefined);
   const result: RunSyncResult = { report: emptyReport(), semesters: [], extracted: 0, changes: [] };
-  const include = opts.include ?? ["calendar"];
+  const include = opts.include ?? DEFAULT_INCLUDE;
   const layout = opts.layout ?? "tree";
   const origin = sdk.config.instanceOrigin;
 
@@ -148,6 +149,7 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
           archive: !isCurrent,
         });
         if (isCurrent) result.workspace = ws;
+        await syncCourseCommunication(sdk, opts, ws, isCurrent ? include : include.filter((i) => i !== "forum"), result);
         await extractAndIndex(sdk, opts, ws, result);
       }
       result.semesters.push({ title, slug, folder, archived: !isCurrent, courses: ids.length });
@@ -176,6 +178,7 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
         archived: false,
         courses: ws.courses.length,
       });
+      await syncCourseCommunication(sdk, opts, ws, include, result);
       await extractAndIndex(sdk, opts, ws, result);
     }
   }
@@ -186,6 +189,33 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
     if (result.workspace) await writeEchoSnapshot(opts.out, result.workspace);
   }
   return result;
+}
+
+/** What a plain `imstudium sync` brings home besides files. */
+export const DEFAULT_INCLUDE: Array<"wiki" | "news" | "calendar" | "forum"> = ["calendar", "wiki", "news", "forum"];
+
+/** News and forum threads as markdown in each course folder (never messages). */
+async function syncCourseCommunication(
+  sdk: Sdk,
+  opts: RunSyncOptions,
+  ws: StudiumWorkspace,
+  include: RunSyncOptions["include"],
+  result: RunSyncResult,
+): Promise<void> {
+  const news = include?.includes("news") ?? false;
+  const forum = include?.includes("forum") ?? false;
+  if (!news && !forum) return;
+  for (const course of ws.courses) {
+    if (!course.path) continue;
+    opts.onProgress?.(`news & forum ${course.title}`);
+    const r = await syncCommunication(sdk, { id: course.id, title: course.title }, join(opts.out, course.path), {
+      news,
+      forum,
+    });
+    for (const e of r.errors) {
+      (result.report.courseErrors ??= []).push({ courseId: course.id, courseTitle: course.title, message: `${e.area}: ${e.message}` });
+    }
+  }
 }
 
 async function extractAndIndex(
