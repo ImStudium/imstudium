@@ -2,3 +2,4 @@
 export * from "./markdown.js";
 export * from "./courseware-render.js";
 export * from "./courseware-write.js";
+export * from "./sync-content.js";
