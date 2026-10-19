@@ -6,6 +6,7 @@ import { Extractor } from "./extract.js";
 import { CoursesResource, DiscoveryResource, ScheduleResource } from "./resources/courses.js";
 import { FilesResource, NewsResource, WikiResource } from "./resources/files.js";
 import { ActivityResource, BlubberResource, ForumResource, MessagesResource } from "./resources/communication.js";
+import { CoursewareResource } from "./resources/courseware.js";
 import { loadConfig, saveConfig, getDefaultConfig, paths, expandPath } from "./config.js";
 
 export const SDK_VERSION = "0.2.0";
@@ -38,6 +39,8 @@ export * from "./migrate.js";
 export * from "./resources/courses.js";
 export * from "./resources/files.js";
 export * from "./resources/communication.js";
+export * from "./resources/courseware.js";
+export * from "./content/index.js";
 
 export interface ImstudiumSdk {
   client: StudIpClient;
@@ -45,6 +48,7 @@ export interface ImstudiumSdk {
   courses: CoursesResource;
   files: FilesResource;
   wiki: WikiResource;
+  courseware: CoursewareResource;
   news: NewsResource;
   messages: MessagesResource;
   forum: ForumResource;
@@ -103,6 +107,7 @@ export async function createSdk(
     courses: new CoursesResource(client),
     files: new FilesResource(client),
     wiki: new WikiResource(client),
+    courseware: new CoursewareResource(client),
     news: new NewsResource(client),
     messages: new MessagesResource(client),
     forum: new ForumResource(client),
