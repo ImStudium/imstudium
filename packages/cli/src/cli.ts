@@ -35,44 +35,8 @@ import {
 } from "./version.js";
 import { fileURLToPath } from "node:url";
 
-interface GlobalOpts {
-  json?: boolean;
-  quiet?: boolean;
-  instance?: string;
-}
-
-let globalOpts: GlobalOpts = {};
-
-function output(data: unknown, text?: string) {
-  if (globalOpts.json) {
-    console.log(JSON.stringify({ schemaVersion: "1", ...((typeof data === "object" && data) || { data }) }, null, 2));
-  } else if (text) {
-    console.log(text);
-  } else if (typeof data === "string") {
-    console.log(data);
-  }
-}
-
-function fail(err: unknown): never {
-  const error =
-    err instanceof ImstudiumError
-      ? err
-      : new ImstudiumError(err instanceof Error ? err.message : String(err), "UNKNOWN");
-  if (globalOpts.json) {
-    console.error(JSON.stringify(error.toJSON(), null, 2));
-  } else {
-    console.error(`Error: ${error.message}`);
-    if (error.hint) console.error(`Hint: ${error.hint}`);
-  }
-  process.exit(1);
-}
-
-async function getSdk() {
-  const partial = globalOpts.instance
-    ? { baseUrl: `${globalOpts.instance.replace(/\/$/, "")}/jsonapi.php/v1`, instanceOrigin: globalOpts.instance.replace(/\/$/, "") }
-    : undefined;
-  return createSdk(partial);
-}
+import { act, fail, getSdk, globalOpts, output, type GlobalOpts } from "./runtime.js";
+import { registerCommands } from "./commands/index.js";
 
 function semesterSyncOptions(
   sdk: Awaited<ReturnType<typeof createSdk>>,
@@ -226,8 +190,10 @@ program
   .option("--quiet", "Minimal output")
   .option("--instance <url>", "Stud.IP instance origin (default: digicampus.uni-augsburg.de)")
   .hook("preAction", (thisCommand) => {
-    globalOpts = thisCommand.opts() as GlobalOpts;
+    Object.assign(globalOpts, thisCommand.opts() as GlobalOpts);
   });
+
+registerCommands(program);
 
 program
   .command("onboard")
@@ -1301,4 +1267,4 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-program.parse();
+await program.parseAsync();

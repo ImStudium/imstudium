@@ -12,7 +12,9 @@ const DATA_DIR = join(homedir(), ".local", "share", "imstudium");
 export const paths = {
   configDir: CONFIG_DIR,
   configFile: join(CONFIG_DIR, "config.json"),
+  dataDir: DATA_DIR,
   syncStateFile: join(DATA_DIR, "sync-state.json"),
+  routesFile: join(DATA_DIR, "routes.json"),
   defaultWorkspace: join(homedir(), "Studium"),
 };
 
