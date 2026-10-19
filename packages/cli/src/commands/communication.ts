@@ -3,7 +3,9 @@ import { join } from "node:path";
 import {
   ImstudiumError,
   selectNews,
+  toMs,
   writeNewsMarkdown,
+  type ForumDiscussion,
   type NewsItem,
 } from "@imstudium/sdk";
 import { act, getSdk, note, output } from "../runtime.js";
@@ -11,9 +13,11 @@ import { meId } from "../me.js";
 import { currentCourses, resolveCourse, type CourseRef } from "../course-arg.js";
 import { optionalSince } from "../since.js";
 import {
+  formatDiscussions,
   formatMessage,
   formatMessages,
   formatNews,
+  formatThread,
 } from "./communication-format.js";
 
 function intOpt(value: string | undefined, flag: string, fallback?: number): number | undefined {
@@ -159,6 +163,73 @@ export function registerCommunication(program: Command): void {
         const sdk = await getSdk();
         const message = await sdk.messages.get(id);
         output({ message }, formatMessage(message));
+      }),
+    );
+
+  // ── forum ───────────────────────────────────────────────────────────────────
+  program
+    .command("forum")
+    .description("Course forum: discussions newest activity first, one thread, or --save as markdown")
+    .argument("[course]", "Course (default: recent discussions of all current courses)")
+    .option("--discussion <id>", "Show one discussion with all postings")
+    .option("--since <when>", "Only discussions active since 7d, today or a date")
+    .option("--limit <n>", "Newest N discussions (default 30)")
+    .option("--save", "Write forum/<topic>/<discussion>.md + forum/README.md into the course folder(s)")
+    .action(
+      act(async (query: string | undefined, opts: { discussion?: string; since?: string; limit?: string; save?: boolean }) => {
+        const sdk = await getSdk();
+        if (opts.discussion) {
+          const thread = await sdk.forum.thread(opts.discussion);
+          output({ thread }, formatThread(thread));
+          return;
+        }
+        const since = optionalSince(opts.since);
+        const limit = intOpt(opts.limit, "limit", 30);
+        const courses = query ? [await resolveCourse(sdk, query)] : await currentCourses(sdk);
+
+        if (opts.save) {
+          const saved = [];
+          for (const course of courses) {
+            if (!course.dir && !query) {
+              note(`not saved: ${course.title} is not in the workspace (run imstudium sync)`);
+              continue;
+            }
+            const res = await sdk.forum.exportCourseForum(course.id, join(requireDir(course), "forum"), {
+              courseTitle: course.title,
+            });
+            saved.push({ course: courseJson(course), ...res });
+            note(
+              res.available
+                ? `${course.title}: ${res.discussions} discussions, ${res.fetched} fetched, ${res.written} written → ${res.dir}`
+                : `${course.title}: no forum`,
+            );
+          }
+          output({ saved }, `Saved forum of ${saved.filter((s) => s.available).length}/${saved.length} course(s).`);
+          return;
+        }
+
+        const overviews = await perCourse(courses, (c) => sdk.forum.overview(c.id, { since }), !!query);
+        const discussions: Array<ForumDiscussion & { courseId: string; courseTitle: string }> = overviews
+          .flatMap(({ course, value }) => value.discussions.map((d) => ({ ...d, courseId: course.id, courseTitle: course.title })))
+          .sort((a, b) => toMs(b.lastActivity) - toMs(a.lastActivity))
+          .slice(0, limit);
+
+        if (query && overviews[0]) {
+          const { course, value } = overviews[0];
+          const unread = value.discussions.reduce((s, d) => s + d.unreadCount, 0);
+          const header = value.available
+            ? `${course.title} — forum: ${value.topics.length} topics, ${value.discussions.length} discussions${unread ? `, ${unread} unread postings` : ""}`
+            : `${course.title} has no forum (or you cannot read it).`;
+          output(
+            { course: courseJson(course), forum: { ...value, discussions } },
+            value.available ? `${header}\n\n${formatDiscussions(discussions)}\n\nRead one: imstudium forum --discussion <id>` : header,
+          );
+          return;
+        }
+        output(
+          { courses: overviews.map((o) => ({ ...courseJson(o.course), available: o.value.available })), since: since?.toISOString() ?? null, count: discussions.length, discussions },
+          formatDiscussions(discussions, { showCourse: true }),
+        );
       }),
     );
 }

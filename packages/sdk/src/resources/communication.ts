@@ -2,3 +2,4 @@
 export * from "./comm-util.js";
 export * from "./news.js";
 export * from "./messages.js";
+export * from "./forum.js";

@@ -3,6 +3,8 @@ import {
   excerpt,
   isoDay,
   isoMinute,
+  type ForumDiscussion,
+  type ForumThread,
   type MessageItem,
   type NewsItem,
 } from "@imstudium/sdk";
@@ -66,4 +68,43 @@ export function formatMessage(m: MessageItem): string {
     "",
     m.text || "(no text)",
   ].join("\n");
+}
+
+export type DiscussionWithCourse = ForumDiscussion & { courseTitle?: string | null };
+
+export function formatDiscussions(items: DiscussionWithCourse[], options: { showCourse?: boolean } = {}): string {
+  if (items.length === 0) return "No forum discussions.";
+  return items
+    .map((d) => {
+      const title = d.topicName ? `${d.topicName} › ${d.title}` : d.title;
+      const counts = `${plural(d.postingsCount, "posting")}${d.unreadCount ? `, ${d.unreadCount} new` : ""}`;
+      const flags = [d.sticky && "pinned", d.closed && "closed"].filter(Boolean).join(", ");
+      const head = [isoDay(d.lastActivity), options.showCourse ? d.courseTitle : null, title]
+        .filter(Boolean)
+        .join(" · ");
+      return `${head} — ${counts}${flags ? ` (${flags})` : ""}${d.startedBy ? ` · ${d.startedBy.name}` : ""}  [${d.id}]`;
+    })
+    .join("\n");
+}
+
+export function formatThread(thread: ForumThread): string {
+  const d = thread.discussion;
+  const meta = [
+    d.topicName,
+    plural(thread.postings.length, "posting"),
+    d.startedBy && `started by ${d.startedBy.name}${d.createdAt ? ` on ${isoDay(d.createdAt)}` : ""}`,
+    d.closed && "closed",
+  ].filter(Boolean);
+  return [
+    d.title,
+    meta.join(" · "),
+    "",
+    ...thread.postings.flatMap((p) => [
+      `${isoMinute(p.date)} · ${displayName(p.author)}${p.moderator ? " (lecturer/tutor)" : ""}`,
+      indentAll(p.text || "(empty)"),
+      "",
+    ]),
+  ]
+    .join("\n")
+    .trimEnd();
 }
