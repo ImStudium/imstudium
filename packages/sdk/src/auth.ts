@@ -32,6 +32,7 @@ import {
 const KEYTAR_SERVICE = "imstudium";
 const KEYTAR_ACCOUNT = "session";
 const LOGIN_TIMEOUT_MS = 10 * 60_000;
+const SILENT_REFRESH_COOLDOWN_MS = 30 * 60_000;
 
 export interface BrowserLoginOptions {
   instanceOrigin: string;
@@ -288,6 +289,25 @@ export class AuthManager {
     if (!origin) return false;
     const { existsSync } = await import("node:fs");
     if (!existsSync(resolveIsolatedProfileDir())) return false;
+    // A failed attempt costs ~10 s of headless browser; don't retry it on every command.
+    const marker = join(paths.dataDir, "silent-refresh-failed");
+    const { readFile, writeFile, mkdir, unlink } = await import("node:fs/promises");
+    try {
+      const last = Date.parse((await readFile(marker, "utf-8")).trim());
+      if (Number.isFinite(last) && Date.now() - last < SILENT_REFRESH_COOLDOWN_MS) return false;
+    } catch {
+      // no recent failure
+    }
+    const ok = await this.refreshSilentlyOnce(origin, options?.timeoutMs);
+    if (ok) await unlink(marker).catch(() => undefined);
+    else {
+      await mkdir(paths.dataDir, { recursive: true }).catch(() => undefined);
+      await writeFile(marker, new Date().toISOString()).catch(() => undefined);
+    }
+    return ok;
+  }
+
+  private async refreshSilentlyOnce(origin: string, timeoutMs?: number): Promise<boolean> {
 
     let playwright: typeof import("playwright");
     try {
@@ -309,7 +329,7 @@ export class AuthManager {
         await page
           .goto(buildShibbolethLoginUrl(origin), { waitUntil: "domcontentloaded", timeout: 30_000 })
           .catch(() => undefined);
-        const deadline = Date.now() + (options?.timeoutMs ?? 40_000);
+        const deadline = Date.now() + (timeoutMs ?? 40_000);
         while (Date.now() < deadline && !cookie) {
           await this.assistLoginFlow(page);
           if (await this.needsHuman(page)) break;
@@ -711,6 +731,8 @@ export class AuthManager {
   }
 
   private async persistCookieSession(seminarSession: string): Promise<SessionData> {
+    const { unlink } = await import("node:fs/promises");
+    await unlink(join(paths.dataDir, "silent-refresh-failed")).catch(() => undefined);
     const session: SessionData = {
       type: "cookie",
       cookies: { Seminar_Session: seminarSession },

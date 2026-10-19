@@ -23,6 +23,7 @@ export * from "./jsonapi.js";
 export * from "./routes.js";
 export * from "./rollover.js";
 export * from "./search.js";
+export * from "./cache.js";
 export * from "./auth.js";
 export * from "./login-url.js";
 export * from "./login-helper.js";

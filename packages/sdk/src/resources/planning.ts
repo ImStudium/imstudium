@@ -6,6 +6,7 @@
  * to the `owner` relationship, and serves `/holidays` as plain JSON. We read
  * both spellings and never throw on a missing field.
  */
+import { cachedJson } from "../cache.js";
 import type { StudIpClient } from "../client.js";
 import { relId } from "../jsonapi.js";
 import type { JsonApiResource } from "../types.js";
@@ -295,7 +296,11 @@ export class PlanningResource {
     const years: number[] = [];
     for (let y = Number(fromKey.slice(0, 4)); y <= Number(toKey.slice(0, 4)); y++) years.push(y);
     const lists = await Promise.all(
-      years.map(async (year) => normalizeHolidays(await this.client.get(`/holidays`, { filter: { year } }))),
+      years.map((year) =>
+        cachedJson(`holidays:${this.client.apiBase}:${year}`, 7 * 24 * 3_600_000, async () =>
+          normalizeHolidays(await this.client.get(`/holidays`, { filter: { year } })),
+        ),
+      ),
     );
     return lists.flat().filter((h) => h.date >= fromKey && h.date <= toKey);
   }
