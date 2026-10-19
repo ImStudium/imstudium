@@ -11,10 +11,9 @@ globs:
 - Errors use `ImstudiumError` with `code`, `message`, `hint`.
 - SDK has no Commander imports; CLI has no raw fetch — use `@imstudium/sdk`.
 - MCP tools are defined in `packages/mcp/src/tools.ts`.
-- Extraction lives in `packages/sdk/src/extract.ts` — external tools (poppler/LibreOffice) are optional; every kind must degrade gracefully with a `hint`. Never add heavy npm deps for parsing (no pdfjs, no mammoth); shell out or use native XML.
+- Extraction is **one pipeline**: `packages/sdk/src/ingest/local-docs.ts` (pdf-inspector for PDF, AnyDoc for everything else). No Tesseract, poppler, LibreOffice, unzip, or cloud parse.
 - Run `bun run validate` before proposing ship.
 - Do not ship a custom search engine — build `search/corpus.jsonl` indexes; agents grep/semantic-search natively (see `agentSearchGuidance`).
 - Exam dates from achievement text are `confirmed: false` — preserve that semantics.
-- Slide answers require visual inspection: agents must read `pageImages` or `viewerFileUrl` (see `imstudium-visual` skill). Never ship slide summaries from `content.md` text only.
-- Extraction has no LaTeX pipeline: `content.md` is poppler Unicode or Tesseract OCR — formulas/diagrams require page PNGs; see `extraction-guidance.ts` / `searchGuidance.extractionLimits`.
-- `viewer.html` is generated on read/view only — not during bulk extract (keep sync fast).
+- Formulas/diagrams: open the original in `files/`. `content.md` is not LaTeX.
+- `viewer.html` is generated on read/view only — not during bulk extract.

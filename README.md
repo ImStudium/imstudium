@@ -92,10 +92,10 @@ imstudium --json studium
 | `klausuren` | Exam timeline |
 | `courses list` | Live course list |
 | `sync` | Sync files + rebuild workspace (`--extract` to also extract; `--semester` for other terms) |
-| `extract` | Text + page images from all synced materials |
+| `extract` / `ingest` | Single pipeline: AnyDoc + pdf-inspector → `content.md` |
 | `index` | Rebuild page index (`corpus.jsonl`) for agent grep / semantic search |
-| `view` | Build `viewer.html` for Playwright / browser agents (fast) |
-| `doctor` | Check extraction tools (poppler, LibreOffice) |
+| `view` | Viewer for copied photos (`pages/`) |
+| `doctor` | Check AnyDoc + pdf-inspector |
 | `update` | Upgrade CLI + refresh agent skills/MCP |
 | `watch --interval 1h` | Continuous sync |
 | `discover` | List JSON:API routes |
@@ -114,33 +114,26 @@ Tools: `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium
 
 **Content search:** grep or semantic-search `<course.path>/search/corpus.jsonl` with your agent — `studium_overview` returns `searchGuidance`. No custom search MCP tool.
 
-## Extraction — agents that SEE your slides
-
-Every synced file is extractable to text **and** rendered page images:
+## Extraction — one local pipeline
 
 ```bash
-brew install poppler                  # PDF text + slide PNGs
-brew install --cask libreoffice      # optional: PPTX/DOCX/XLSX rendering
-brew install tesseract tesseract-lang # optional: OCR for scans & photos
-imstudium doctor                     # verify tools
-
+imstudium doctor                     # anydoc + pdf-inspector
 imstudium extract                    # everything
-imstudium extract --course Analysis  # one course
-imstudium sync --extract             # sync + extract in one step
+imstudium ingest --file ./slides.pptx
+imstudium sync --extract
 ```
 
-| Input | Text | Page images | Tool |
-|-------|------|-------------|------|
-| PDF | ✅ per page | ✅ PNG per page | poppler |
-| Scanned PDF (no text layer) | ✅ OCR per page | ✅ PNG per page | poppler + tesseract |
-| PPTX / DOCX / XLSX / ODP... | ✅ per slide | ✅ via LibreOffice → PDF | libreoffice + poppler |
-| PPTX / DOCX (no LibreOffice) | ✅ native XML | — | built-in |
-| Images / photos (PNG/JPG/...) | ✅ OCR if tesseract | ✅ copied to pages/ | built-in (+ tesseract) |
-| Text / code / CSV / notebooks | ✅ passthrough | — | built-in |
+| Input | Engine |
+|-------|--------|
+| PDF | pdf-inspector |
+| PPTX / DOCX / XLSX / ODP / EPUB | AnyDoc |
+| Scanned / image-only PDF pages | marked `_(image-only page — no text layer)_` — open the original |
+| Photos | copied to `pages/` (no OCR) |
+| Text / code / CSV | passthrough |
 
-All tools are free and local — no API keys, no credits, no cloud. Everything degrades gracefully: missing tools just mean fewer output layers, never a crash (`imstudium doctor` shows what's active).
+No Tesseract, no poppler, no LibreOffice, no Firecrawl API key. `imstudium doctor` is the health check.
 
-MCP agents use `studium_read_material` — returns `requiredAction`, `pageImages`, and `viewerFileUrl`. **Read every PNG** or open the viewer in Playwright/browser before explaining slides.
+MCP `studium_read_material` returns `content`. For formulas/diagrams, open the source file in `files/` — markdown is not LaTeX.
 
 ## Agent skills
 

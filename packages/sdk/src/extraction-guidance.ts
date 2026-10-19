@@ -1,12 +1,12 @@
 /**
  * Agent-facing extraction limits — llms.txt, searchGuidance, skills.
- * Local poppler/Tesseract only; no LaTeX-in-markdown pipeline.
+ * One local pipeline: AnyDoc + pdf-inspector. No Tesseract, no LaTeX.
  */
 export const EXTRACTION_LIMITS_FOR_AGENTS = [
-  "content.md is plain text (poppler) or OCR (Tesseract) — not LaTeX $...$ markdown.",
-  "Typed PDFs: Unicode math at best (e.g. β, ∑); subscripts often appear as x1 not x_1.",
-  "Scanned/handwritten pages: OCR is unreliable for formulas — treat _(OCR)_ blocks as low trust.",
-  "PPTX native-xml fallback skips Office Math; prefer LibreOffice+poppler path or page PNGs.",
-  "Formulas, diagrams, plots, tables: read pages/*.png or viewer.html before explaining — mandatory.",
-  "corpus.jsonl text is for keyword discovery; do not answer math from indexed OCR alone.",
+  "content.md is local AnyDoc / pdf-inspector markdown — not LaTeX $...$.",
+  "PDFs: pdf-inspector (layout, tables, reading order). Image-only pages are marked _(image-only page — no text layer)_.",
+  "PPTX/DOCX/XLSX: AnyDoc native conversion. No LibreOffice, no unzip XML fallback.",
+  "No Tesseract / no cloud OCR. Scanned pages have no text — open the original file.",
+  "Formulas and diagrams: open the source PDF/PPTX; do not invent math from markdown.",
+  "corpus.jsonl is for keyword discovery, not for answering from image-only pages.",
 ] as const;

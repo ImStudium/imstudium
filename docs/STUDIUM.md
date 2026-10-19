@@ -57,12 +57,12 @@ See `llms.txt` at the workspace root.
 
 ## Extraction limits (agents)
 
-Local extract (`imstudium extract`) uses poppler + optional Tesseract — **not** LaTeX-in-markdown.
+One pipeline (`imstudium extract` / `ingest`): **AnyDoc + pdf-inspector**, on-device, no API key, no Tesseract.
 
-- **Typed PDFs:** Unicode text in `content.md` — math symbols at best, not `$...$` LaTeX
-- **Scans / handwriting:** Tesseract OCR — unreliable for formulas (`_(OCR)_` blocks)
-- **Slides with formulas/diagrams:** read `extracted/<slug>/pages/*.png` before explaining
-- **corpus.jsonl:** keyword discovery only — do not answer math from indexed OCR text alone
+- **PDFs:** pdf-inspector markdown
+- **Office:** AnyDoc
+- **Image-only pages:** `_(image-only page — no text layer)_` — open `files/`
+- **corpus.jsonl:** keyword discovery only
 
 `studium_overview` (MCP) returns `searchGuidance.extractionLimits`. Skill: `imstudium-visual`.
 

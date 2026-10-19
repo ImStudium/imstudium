@@ -57,23 +57,7 @@ npm_package_available() {
 }
 
 install_optional_tools() {
-  local os
-  os="$(uname -s)"
-  case "$os" in
-    Darwin)
-      if has_cmd brew && ! has_cmd pdftotext; then
-        log "Optional: poppler for PDF slide images (brew install poppler)..."
-        brew install poppler 2>/dev/null || warn "Skip for now — run: brew install poppler"
-      fi
-      ;;
-    Linux)
-      if has_cmd apt-get && ! has_cmd pdftotext; then
-        log "Optional: poppler-utils for PDF slide images..."
-        sudo apt-get update -qq && sudo apt-get install -y poppler-utils 2>/dev/null \
-          || warn "Skip for now — install poppler-utils later"
-      fi
-      ;;
-  esac
+  : # ingest is AnyDoc + pdf-inspector (bundled). No Tesseract / poppler.
 }
 
 install_from_npm() {

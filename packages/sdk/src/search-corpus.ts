@@ -59,7 +59,7 @@ export interface WorkspaceSearchIndex {
 }
 
 const PAGE_HEADING = /^## (Page|Slide) (\d+)\s*$/m;
-const PLACEHOLDER = /(?:^|[_(]) *(no extractable text|OCR — verify)/i;
+const PLACEHOLDER = /(?:^|[_(]) *(no extractable text|image-only page|OCR — verify)/i;
 const MIN_TEXT = 24;
 
 /** Split content.md into page/slide sections. */

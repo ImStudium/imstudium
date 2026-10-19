@@ -42,6 +42,7 @@ imstudium --json studium
 imstudium --json klausuren
 imstudium sync --quiet --extract
 imstudium extract --course "Analysis"
+imstudium ingest --file ~/Downloads/slides.pptx
 imstudium doctor --json
 imstudium files tree --course "Analysis"
 ```
@@ -50,7 +51,7 @@ imstudium files tree --course "Analysis"
 
 After `extract`, each file has `extracted/<file>/content.md` and `pages/*.png`.
 
-**Limits:** text is poppler/OCR — not LaTeX markdown. OCR fails on handwritten math. Use PNGs for formulas and diagrams (see `imstudium-visual` skill).
+**Limits:** one pipeline — pdf-inspector (PDF) + AnyDoc (Office). No Tesseract. Image-only pages have no text; open the original. See `imstudium-visual`.
 
 ## Auth
 

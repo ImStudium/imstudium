@@ -37,18 +37,15 @@ imstudium update --json       # same, machine-readable
 
 ## Visual comprehension (slides)
 
-**Never summarize slides from text alone.** After `studium_read_material`, read every `pageImages` PNG or open `viewerFileUrl` in Playwright/browser.
+After `studium_read_material`, use `content.md` for structure. For formulas and diagrams, open the original file under `files/` — there is no Tesseract and no slide PNG rasterizer.
 
-Skill: `imstudium-visual` (installed by onboard)
+## Extraction limits (formulas)
 
-## Extraction limits (formulas, OCR)
+One pipeline: **AnyDoc** (Office) + **pdf-inspector** (PDFs). Local only. No Tesseract.
 
-Local extract uses **poppler** (PDF text) and **Tesseract** (scans) — **not** LaTeX-in-markdown.
-
-- `content.md` / `corpus.jsonl` text: plain Unicode or OCR — fine for keyword search, **not** for explaining math
-- Typed PDFs: symbols like β, ∑ at best; subscripts often wrong (`x1` not `x_1`)
-- Scanned/handwritten: OCR is unreliable — `_(OCR)_` blocks are low trust
-- **Formulas, diagrams, plots:** read `pages/*.png` or `viewer.html` before answering (mandatory)
+- `content.md` is layout-aware markdown, **not** LaTeX `$...$`
+- Image-only pages: `_(image-only page — no text layer)_` — open the original in `files/`
+- Formulas/diagrams: open the source PDF/PPTX; do not invent math from markdown
 
 `studium_overview` → `searchGuidance.extractionLimits` lists the full contract. Skill: `imstudium-visual`.
 

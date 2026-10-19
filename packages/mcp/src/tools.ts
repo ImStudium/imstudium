@@ -36,7 +36,7 @@ export const MCP_TOOLS = [
   {
     name: "studium_read_material",
     description:
-      "Extract one course file (PDF/PPTX/DOCX/images). Returns text + pageImages + viewerHtml. Text is poppler/OCR only — not LaTeX; read every pageImage for formulas/diagrams before explaining.",
+      "Extract one course file via the local AnyDoc + pdf-inspector pipeline. Returns markdown content. Not LaTeX; open the original file for formulas/diagrams. Photos copy into pageImages.",
     inputSchema: {
       type: "object",
       properties: {

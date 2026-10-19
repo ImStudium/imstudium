@@ -159,7 +159,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           requiredAction: visual.requiredAction,
           viewerFileUrl: visual.viewerFileUrl,
           methods: visual.methods,
-          hint: pageImages.length ? undefined : result.hint || "Install poppler for slide images: imstudium doctor",
+          hint: pageImages.length ? undefined : result.hint || "Markdown-only extract — open the original file for diagrams",
           otherMatches: candidates.slice(1),
         });
       }

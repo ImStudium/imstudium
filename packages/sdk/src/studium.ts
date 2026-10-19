@@ -493,7 +493,7 @@ export async function writeLlmsTxt(workspacePath: string, ws: StudiumWorkspace):
     "3. Slides/diagrams/formulas: read `pages/page-NNN.png` before explaining visual content — text alone is insufficient.",
     "4. Refresh: `imstudium sync --quiet --extract` (daily), `imstudium index` (rebuild page index).",
     "",
-    "## Extraction limits (local poppler + Tesseract)",
+    "## Extraction limits (local AnyDoc + pdf-inspector)",
     "",
     ...EXTRACTION_LIMITS_FOR_AGENTS.map((line) => `- ${line}`),
     "",

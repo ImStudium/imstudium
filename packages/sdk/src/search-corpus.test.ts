@@ -24,7 +24,7 @@ describe("parseContentMdSections", () => {
 
 describe("isIndexableSection", () => {
   it("skips empty placeholder pages without images", () => {
-    expect(isIndexableSection("_(no extractable text — check the page image)_", false)).toBe(false);
+    expect(isIndexableSection("_(image-only page — no text layer)_", false)).toBe(false);
     expect(isIndexableSection("Short", false)).toBe(false);
   });
 
@@ -47,7 +47,7 @@ describe("parseExtractionChunks", () => {
     writeFileSync(join(dir, "manifest.json"), JSON.stringify({ source: "/tmp/x.pdf", kind: "pdf" }));
     writeFileSync(
       join(dir, "content.md"),
-      `# x.pdf\n\n## Page 1\n\n_(no extractable text — check the page image)_\n\n## Page 2\n\nBackpropagation through time in recurrent networks.`,
+      `# x.pdf\n\n## Page 1\n\n_(image-only page — no text layer)_\n\n## Page 2\n\nBackpropagation through time in recurrent networks.`,
     );
     const chunks = await parseExtractionChunks(dir, {
       workspaceRoot: "/Studium",

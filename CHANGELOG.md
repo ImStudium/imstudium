@@ -4,6 +4,10 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+### Changed
+
+- **Single ingest pipeline:** pdf-inspector for PDFs, AnyDoc for Office. Removed Tesseract, poppler, LibreOffice, unzip XML, and cloud `/v2/parse` fallbacks.
+
 ## [0.1.3] — 2026-07-04
 
 ### Added

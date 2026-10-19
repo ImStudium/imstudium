@@ -25,24 +25,19 @@ Re-run agent wiring after upgrades: `imstudium setup all -y`
 
 ## MCP tools (use in order)
 
-`studium_overview` → `studium_klausuren` → **grep/semantic-search corpus.jsonl** → `studium_find_materials` → `studium_read_material` → **read pageImages**
+`studium_overview` → `studium_klausuren` → **grep/semantic-search corpus.jsonl** → `studium_find_materials` → `studium_read_material`
 
 `studium_overview` returns `searchGuidance` — use your native grep or codebase search on `corpus.jsonl`.
 
 Other tools: `studium_course_brief`, `imstudium_sync`, `imstudium_sync_dry_run`, `imstudium_list_courses`, `imstudium_whoami`
 
-## Slides and PDFs — visual comprehension required
+## Slides and PDFs
 
-**Never summarize slides from extracted text alone.**
+One pipeline: pdf-inspector (PDF) + AnyDoc (Office). No Tesseract.
 
-After `studium_read_material`:
+`content.md` is not LaTeX. For formulas/diagrams, open the original under `files/`. Image-only pages are marked `_(image-only page — no text layer)_`.
 
-1. Read every `pageImages` PNG, or
-2. Open `viewerFileUrl` in a browser / Playwright
-
-Diagrams, formulas, and layout are lost in text extraction. Skill: `imstudium-visual`.
-
-**No LaTeX in markdown** — poppler/Tesseract only; read `pageImages` for math. See `searchGuidance.extractionLimits` on `studium_overview`.
+See `searchGuidance.extractionLimits` on `studium_overview`.
 
 ## Exam dates
 

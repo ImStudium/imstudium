@@ -693,7 +693,8 @@ program
 
 program
   .command("extract")
-  .description("Extract text + page images from synced materials (PDF, PPTX, DOCX, images, ...)")
+  .alias("ingest")
+  .description("Smart local ingest: AnyDoc + pdf-inspector → content.md + page images")
   .option("--course <name>", "Only one course (title substring or slug)")
   .option("--file <path>", "Extract a single file to <file>-extracted/")
   .option("--no-images", "Text only, skip page image rendering")
@@ -856,7 +857,7 @@ program
 
 program
   .command("doctor")
-  .description("Check extraction tool availability")
+  .description("Check local ingest pipeline (AnyDoc + pdf-inspector)")
   .action(async () => {
     try {
       const sdk = await getSdk();
@@ -877,11 +878,8 @@ program
             ? `oauth tip:   register client → docs/OAUTH.md`
             : "",
         "",
-        `pdftotext:   ${tools.pdftotext || "MISSING"}`,
-        `pdftoppm:    ${tools.pdftoppm || "MISSING"}`,
-        `libreoffice: ${tools.soffice || "MISSING (native PPTX/DOCX text fallback active)"}`,
-        `tesseract:   ${tools.tesseract || "MISSING (no OCR for scanned PDFs/photos — agents can still read page images)"}`,
-        `unzip:       ${tools.unzip || "MISSING"}`,
+        `anydoc:        ${tools.anydoc ? "ok" : "MISSING"}`,
+        `pdf-inspector: ${tools.pdfInspector ? "ok" : "MISSING"}`,
       ];
       if (hints.length) lines.push("", ...hints);
       output({ cliVersion: getCliVersion(), update, oauth, tools, hints }, lines.filter(Boolean).join("\n"));
