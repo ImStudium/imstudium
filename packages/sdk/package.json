@@ -1,6 +1,6 @@
 {
   "name": "@imstudium/sdk",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "ImStudium Stud.IP JSON:API client, auth, sync, and Studium workspace builder",
   "license": "MIT",
   "type": "module",
@@ -39,7 +39,10 @@
   },
   "imsicheren": {
     "namespace": "imstudium",
-    "kinds": ["generic_json", "oauth_token"]
+    "kinds": [
+      "generic_json",
+      "oauth_token"
+    ]
   },
   "dependencies": {
     "@firecrawl/anydoc": "^0.1.9",

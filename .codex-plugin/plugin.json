@@ -2,7 +2,7 @@
   "name": "imstudium",
   "displayName": "ImStudium",
   "description": "Stud.IP sync, Klausur planning, slide visual comprehension for Codex agents.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "Patrick Schröppel",
     "url": "https://github.com/ImStudium"
