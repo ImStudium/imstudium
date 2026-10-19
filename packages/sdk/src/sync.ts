@@ -2,19 +2,21 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { StudIpClient } from "./client.js";
 import { CoursesResource } from "./resources/courses.js";
-import { FilesResource, WikiResource } from "./resources/files.js";
+import { FilesResource } from "./resources/files.js";
 import { ScheduleResource } from "./resources/courses.js";
 import { paths, ensureDir, slugify } from "./config.js";
 import { semesterFolderSlug } from "./workspace-path.js";
 import type { SyncReport, SyncState, SyncStateEntry } from "./types.js";
+
+export type SyncPart = "calendar" | "wiki" | "news" | "forum" | "courseware" | "tasks";
 
 export interface SyncOptions {
   outputDir: string;
   layout?: "flat" | "tree";
   dryRun?: boolean;
   concurrency?: number;
-  /** calendar → calendar.ics, wiki → <course>/wiki. News and forum run in the CLI pipeline (syncCommunication). */
-  include?: Array<"wiki" | "news" | "calendar" | "forum">;
+  /** calendar → calendar.ics. Course content (news, forum, wiki, courseware, tasks) runs in the CLI pipeline. */
+  include?: SyncPart[];
   courseFilter?: (course: { id: string; title: string }) => boolean;
   /** Stud.IP semester id — default: calendar current semester. */
   semesterId?: string;
@@ -32,13 +34,11 @@ export interface SyncOptions {
 export class SyncEngine {
   private courses: CoursesResource;
   private files: FilesResource;
-  private wiki: WikiResource;
   private schedule: ScheduleResource;
 
   constructor(client: StudIpClient) {
     this.courses = new CoursesResource(client);
     this.files = new FilesResource(client);
-    this.wiki = new WikiResource(client);
     this.schedule = new ScheduleResource(client);
   }
 
@@ -116,19 +116,6 @@ export class SyncEngine {
           })
         : semesterFolder;
       const courseDir = join(options.outputDir, folder, courseSlug);
-
-      if (options.include?.includes("wiki")) {
-        try {
-          if (!options.dryRun) {
-            await this.wiki.exportCourseWiki(course.id, join(courseDir, "wiki"));
-          }
-        } catch (e) {
-          report.errors.push({
-            fileRefId: `wiki:${course.id}`,
-            message: e instanceof Error ? e.message : String(e),
-          });
-        }
-      }
 
       let fileRefs: Awaited<ReturnType<FilesResource["listAllFileRefs"]>>;
       let folderPaths = new Map<string, string>();

@@ -7,6 +7,11 @@ import {
   semesterIdFromRelationships,
   semesterSlug,
   syncCommunication,
+  syncContent,
+  contentDeps,
+  type ContentPart,
+  type CwTask,
+  type SyncPart,
   type CourseWithSemester,
   type SemesterResource,
   type StudiumWorkspace,
@@ -25,7 +30,7 @@ export interface RunSyncOptions {
   layout?: "flat" | "tree";
   dryRun?: boolean;
   extract?: boolean;
-  include?: Array<"wiki" | "news" | "calendar" | "forum">;
+  include?: SyncPart[];
   onProgress?: (message: string) => void;
 }
 
@@ -50,6 +55,8 @@ export interface ChangeEntry {
 
 export interface RunSyncResult {
   report: SyncReport;
+  /** Courseware tasks (Abgaben) of the current semester, soonest first. */
+  tasks: CwTask[];
   semesters: SemesterRun[];
   /** The current-semester workspace (studium.json) when it was rebuilt. */
   workspace?: StudiumWorkspace;
@@ -108,7 +115,7 @@ export function groupCoursesBySemester(
  */
 export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncResult> {
   const progress = opts.onProgress ?? (() => undefined);
-  const result: RunSyncResult = { report: emptyReport(), semesters: [], extracted: 0, changes: [] };
+  const result: RunSyncResult = { report: emptyReport(), semesters: [], extracted: 0, changes: [], tasks: [] };
   const include = opts.include ?? DEFAULT_INCLUDE;
   const layout = opts.layout ?? "tree";
   const origin = sdk.config.instanceOrigin;
@@ -150,6 +157,7 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
         });
         if (isCurrent) result.workspace = ws;
         await syncCourseCommunication(sdk, opts, ws, isCurrent ? include : include.filter((i) => i !== "forum"), result);
+        await syncCourseContent(sdk, opts, ws, isCurrent ? include : include.filter((i) => i !== "tasks"), result, isCurrent);
         await extractAndIndex(sdk, opts, ws, result);
       }
       result.semesters.push({ title, slug, folder, archived: !isCurrent, courses: ids.length });
@@ -179,6 +187,7 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
         courses: ws.courses.length,
       });
       await syncCourseCommunication(sdk, opts, ws, include, result);
+      await syncCourseContent(sdk, opts, ws, include, result, true);
       await extractAndIndex(sdk, opts, ws, result);
     }
   }
@@ -186,13 +195,14 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
   if (!opts.dryRun) {
     result.changes = await recordChanges(opts.out, result.report);
     await writeNewMd(opts.out);
+    if (include.includes("tasks")) await writeTasks(opts.out, result.tasks);
     if (result.workspace) await writeEchoSnapshot(opts.out, result.workspace);
   }
   return result;
 }
 
 /** What a plain `imstudium sync` brings home besides files. */
-export const DEFAULT_INCLUDE: Array<"wiki" | "news" | "calendar" | "forum"> = ["calendar", "wiki", "news", "forum"];
+export const DEFAULT_INCLUDE: SyncPart[] = ["calendar", "wiki", "news", "forum", "courseware", "tasks"];
 
 /** News and forum threads as markdown in each course folder (never messages). */
 async function syncCourseCommunication(
@@ -214,6 +224,35 @@ async function syncCourseCommunication(
     });
     for (const e of r.errors) {
       (result.report.courseErrors ??= []).push({ courseId: course.id, courseTitle: course.title, message: `${e.area}: ${e.message}` });
+    }
+  }
+}
+
+/** Courseware pages, wiki and courseware tasks per course (pure SDK writers). */
+async function syncCourseContent(
+  sdk: Sdk,
+  opts: RunSyncOptions,
+  ws: StudiumWorkspace,
+  include: SyncPart[],
+  result: RunSyncResult,
+  collectTasks: boolean,
+): Promise<void> {
+  const parts = include.filter((i): i is ContentPart => i === "courseware" || i === "wiki" || i === "tasks");
+  if (!parts.length) return;
+  const deps = contentDeps(sdk);
+  for (const course of ws.courses) {
+    if (!course.path) continue;
+    opts.onProgress?.(`${parts.join(", ")} ${course.title}`);
+    const r = await syncContent(deps, { id: course.id, title: course.title }, join(opts.out, course.path), {
+      include: parts,
+    });
+    if (collectTasks) result.tasks.push(...r.tasks);
+    for (const e of r.errors) {
+      (result.report.courseErrors ??= []).push({
+        courseId: course.id,
+        courseTitle: course.title,
+        message: `${e.scope}: ${e.message}`,
+      });
     }
   }
 }
@@ -306,6 +345,36 @@ export async function writeNewMd(out: string, days = 14): Promise<void> {
   await writeFile(join(out, "NEW.md"), lines.join("\n"));
 }
 
+/** .imstudium/tasks.json + abgaben.md — courseware deadlines, soonest first. */
+export async function writeTasks(out: string, tasks: CwTask[]): Promise<void> {
+  const sorted = [...tasks].sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"));
+  await mkdir(join(out, STATE_DIR), { recursive: true });
+  await writeFile(join(out, STATE_DIR, "tasks.json"), JSON.stringify({ updatedAt: new Date().toISOString(), tasks: sorted }, null, 2) + "\n");
+  const fmt = (iso: string | null) =>
+    iso
+      ? new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" })
+      : "ohne Frist";
+  const open = sorted.filter((t) => t.status === "open" || t.status === "overdue" || t.status === "upcoming");
+  const done = sorted.filter((t) => t.status === "submitted");
+  const lines = ["# Abgaben", "", `Courseware tasks · updated ${new Date().toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}`, ""];
+  if (!open.length) lines.push("_Nothing open._", "");
+  for (const t of open) {
+    const left = t.daysLeft === null ? "" : t.daysLeft < 0 ? ` · **${-t.daysLeft} d overdue**` : ` · in ${t.daysLeft} d`;
+    lines.push(`- **${fmt(t.deadline)}**${left} — ${t.title} (${t.courseTitle ?? ""}${t.unitTitle ? ` · ${t.unitTitle}` : ""})${t.progress !== null ? ` · ${t.progress}%` : ""}`);
+  }
+  if (done.length) lines.push("", `## Submitted (${done.length})`, "", ...done.map((t) => `- ${fmt(t.deadline)} — ${t.title} (${t.courseTitle ?? ""})`));
+  lines.push("", "_imstudium tasks --open · .imstudium/tasks.json_", "");
+  await writeFile(join(out, "abgaben.md"), lines.join("\n"));
+}
+
+export async function readTasks(out: string): Promise<CwTask[]> {
+  try {
+    return (JSON.parse(await readFile(join(out, STATE_DIR, "tasks.json"), "utf-8")) as { tasks: CwTask[] }).tasks;
+  } catch {
+    return [];
+  }
+}
+
 /**
  * snapshots/studium.json for Echo: counts and dates only — no titles,
  * no student id, no file names.
@@ -313,6 +382,7 @@ export async function writeNewMd(out: string, days = 14): Promise<void> {
 export async function writeEchoSnapshot(out: string, ws: StudiumWorkspace): Promise<string> {
   const next = ws.nextDeadlines[0];
   const week = await readChanges(out, Date.now() - 7 * 86_400_000);
+  const openTasks = (await readTasks(out)).filter((t) => t.status === "open" || t.status === "overdue");
   const metrics = {
     semester: ws.activeSemester.title,
     courses: ws.courses.length,
@@ -320,6 +390,8 @@ export async function writeEchoSnapshot(out: string, ws: StudiumWorkspace): Prom
     nextDate: next?.date ?? null,
     nextDays: next?.daysRemaining ?? null,
     newFiles7d: new Set(week.map((c) => c.path)).size,
+    openTasks: openTasks.length,
+    nextTaskDays: openTasks.map((t) => t.daysLeft).filter((d): d is number => d !== null).sort((a, b) => a - b)[0] ?? null,
     lastSync: new Date().toISOString(),
   };
   await mkdir(join(out, "snapshots"), { recursive: true });

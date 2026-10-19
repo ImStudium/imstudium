@@ -19,6 +19,7 @@ import {
   archiveLegacyConfigDir,
   formatFileTree,
   type StudiumExamDate,
+  type SyncPart,
   type StudiumWorkspace,
 } from "@imstudium/sdk";
 import {
@@ -649,7 +650,7 @@ program
   .option("--all-semesters", "Every enrolled semester: current at the root, the rest under archive/")
   .option("--layout <mode>", "tree (mirror Stud.IP folders) or flat", "tree")
   .option("--dry-run", "List changes without downloading")
-  .option("--include <items>", "Comma-separated: calendar,wiki,news,forum (default: all four)")
+  .option("--include <items>", "Comma-separated: calendar,wiki,news,forum,courseware,tasks (default: all)")
   .option("--extract", "Extract new/changed files to markdown and rebuild the search index")
   .action(async (opts: {
     output?: string;
@@ -664,7 +665,7 @@ program
     try {
       const sdk = await getSdk();
       const out = expandPath(opts.output || sdk.workspacePath);
-      const include = opts.include?.split(",").map((s) => s.trim()) as Array<"wiki" | "news" | "calendar" | "forum"> | undefined;
+      const include = opts.include?.split(",").map((s) => s.trim()) as SyncPart[] | undefined;
       const semOpts = semesterSyncOptions(sdk, opts);
       const result = await runSync(sdk, {
         out,
