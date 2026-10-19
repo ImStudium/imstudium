@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { registerApi } from "./api.js";
 import { registerSemester } from "./semester.js";
+import { registerSearch } from "./search.js";
 
 /**
  * Command modules. Each file owns one area of Stud.IP and registers its
@@ -9,4 +10,5 @@ import { registerSemester } from "./semester.js";
 export function registerCommands(program: Command): void {
   registerApi(program);
   registerSemester(program);
+  registerSearch(program);
 }
