@@ -10,6 +10,7 @@ import {
   ImstudiumError,
   matchUnit,
   renderWiki,
+  sortTasks,
   syncContent,
   wikiPageUrl,
   type ContentSyncResult,
@@ -193,6 +194,35 @@ export function registerContent(program: Command): void {
           },
           lines.join("\n").trimEnd(),
         );
+      }),
+    );
+
+  program
+    .command("tasks")
+    .description("Courseware tasks (Aufgaben) with deadlines, soonest first")
+    .argument("[course]", "Course (default: all current courses)")
+    .option("--open", "Hide submitted tasks")
+    .action(
+      act(async (courseQuery: string | undefined, opts: { open?: boolean }) => {
+        const sdk = await getSdk();
+        const courses = courseQuery ? [await resolveCourse(sdk, courseQuery)] : await currentCourses(sdk);
+        const rows = await perCourse(courses, async (c) => {
+          const tasks = await sdk.courseware.listTasks(c.id, { courseTitle: c.title });
+          if (!tasks.some((t) => t.unitId)) return tasks;
+          // Name the unit each task lives in (one extra call, only when needed).
+          const units = await sdk.courseware.listCourseUnits(c.id).catch(() => [] as CwUnit[]);
+          const titles = new Map(units.map((u) => [u.id, u.title]));
+          return tasks.map((t) => ({ ...t, unitTitle: t.unitId ? (titles.get(t.unitId) ?? null) : null }));
+        });
+        const all = sortTasks(rows.flatMap((r) => r.value));
+        const shown = opts.open ? all.filter((t) => t.status !== "submitted") : all;
+        const open = all.filter((t) => t.status !== "submitted").length;
+        const overdue = all.filter((t) => t.status === "overdue").length;
+        const header = `Courseware tasks · ${open} open${overdue ? ` (${overdue} overdue)` : ""} · ${all.length - open} submitted`;
+        const lines = shown.length
+          ? [header, "", ...taskLines(shown, !courseQuery)]
+          : [all.length ? `${header}\n\nNothing open.` : "No courseware tasks."];
+        output({ count: shown.length, open, overdue, tasks: shown }, lines.join("\n"));
       }),
     );
 
