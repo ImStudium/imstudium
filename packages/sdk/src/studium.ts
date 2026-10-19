@@ -388,15 +388,20 @@ function extractExamDates(
   const results: StudiumExamDate[] = [];
 
   for (const ev of events) {
-    const title = String(ev.attributes?.title || "");
-    const category = String(ev.attributes?.category || "");
-    const combined = `${title} ${category}`;
+    const a = ev.attributes ?? {};
+    // Stud.IP 6 course-events: `start`/`categories`/`is-cancelled`, and `title` is the
+    // course's own name — so only the date type and description say "Klausur".
+    const v6 = "categories" in a || "is-cancelled" in a;
+    if (a["is-cancelled"]) continue;
+    const title = String(a.title || "");
+    const category = String(a.categories || a.category || "");
+    const combined = v6 ? `${category} ${a.description || ""}` : `${title} ${category}`;
     if (EXAM_KEYWORDS.some((re) => re.test(combined))) {
       results.push({
         courseId,
         courseTitle,
-        date: ev.attributes?.["start-date"] as string | undefined,
-        title: title || "Exam",
+        date: (a.start ?? a["start-date"]) as string | undefined,
+        title: (v6 ? category : title) || "Exam",
         location: ev.attributes?.location as string | undefined,
         confirmed: true,
         source: "event",
