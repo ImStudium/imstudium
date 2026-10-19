@@ -7,9 +7,12 @@ import {
   type NewsItem,
 } from "@imstudium/sdk";
 import { act, getSdk, note, output } from "../runtime.js";
+import { meId } from "../me.js";
 import { currentCourses, resolveCourse, type CourseRef } from "../course-arg.js";
 import { optionalSince } from "../since.js";
 import {
+  formatMessage,
+  formatMessages,
   formatNews,
 } from "./communication-format.js";
 
@@ -107,6 +110,55 @@ export function registerCommunication(program: Command): void {
           },
           formatNews(news, { showCourse: !query }),
         );
+      }),
+    );
+
+  // ── messages ────────────────────────────────────────────────────────────────
+  program
+    .command("inbox")
+    .description("Your Stud.IP messages, newest first (reading never marks them read)")
+    .option("--unread", "Only unread messages")
+    .option("--since <when>", "Only since 7d, 24h, today or a date")
+    .option("--limit <n>", "Newest N (default 20)")
+    .action(
+      act(async (opts: { unread?: boolean; since?: string; limit?: string }) => {
+        const sdk = await getSdk();
+        const since = optionalSince(opts.since);
+        const messages = await sdk.messages.inbox(await meId(sdk), {
+          unread: opts.unread,
+          since,
+          limit: intOpt(opts.limit, "limit", 20),
+        });
+        output(
+          { box: "inbox", unreadOnly: !!opts.unread, since: since?.toISOString() ?? null, count: messages.length, messages },
+          formatMessages(messages) + (messages.length ? "\n\nRead one: imstudium message <id>" : ""),
+        );
+      }),
+    );
+
+  program
+    .command("outbox")
+    .description("Messages you sent, newest first")
+    .option("--since <when>", "Only since 7d, 24h, today or a date")
+    .option("--limit <n>", "Newest N (default 20)")
+    .action(
+      act(async (opts: { since?: string; limit?: string }) => {
+        const sdk = await getSdk();
+        const since = optionalSince(opts.since);
+        const messages = await sdk.messages.outbox(await meId(sdk), { since, limit: intOpt(opts.limit, "limit", 20) });
+        output({ box: "outbox", since: since?.toISOString() ?? null, count: messages.length, messages }, formatMessages(messages));
+      }),
+    );
+
+  program
+    .command("message")
+    .description("One message in full, with sender and recipients (does not mark it read)")
+    .argument("<id>", "Message id from imstudium inbox/outbox")
+    .action(
+      act(async (id: string) => {
+        const sdk = await getSdk();
+        const message = await sdk.messages.get(id);
+        output({ message }, formatMessage(message));
       }),
     );
 }
