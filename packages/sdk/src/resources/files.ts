@@ -7,6 +7,9 @@ import type { StudIpClient } from "../client.js";
 import type { FileRefAttributes, FileTreeNode, FolderAttributes, JsonApiResource } from "../types.js";
 import { ensureDir } from "../config.js";
 
+// WikiResource moved to wiki.ts; re-exported so existing imports keep working.
+export * from "./wiki.js";
+
 type FileRefResource = JsonApiResource<"file-refs"> & { attributes?: FileRefAttributes };
 type FolderResource = JsonApiResource<"folders"> & { attributes?: FolderAttributes };
 
@@ -126,30 +129,6 @@ export class FilesResource {
 
     for (const f of folders) pathFor(f.id);
     return cache;
-  }
-}
-
-export class WikiResource {
-  constructor(private client: StudIpClient) {}
-
-  async listCoursePages(courseId: string) {
-    return this.client.paginateAll<JsonApiResource<"wiki-pages">>(
-      `/courses/${courseId}/wiki-pages`,
-    );
-  }
-
-  async exportCourseWiki(courseId: string, outDir: string): Promise<number> {
-    await ensureDir(outDir);
-    const pages = await this.listCoursePages(courseId);
-    let count = 0;
-    for (const page of pages) {
-      const keyword = (page.attributes?.keyword as string) || page.id;
-      const content = (page.attributes?.content as string) || "";
-      const safeName = keyword.replace(/[^a-zA-Z0-9._-]+/g, "_");
-      await writeFile(join(outDir, `${safeName}.md`), `# ${keyword}\n\n${content}\n`);
-      count++;
-    }
-    return count;
   }
 }
 
