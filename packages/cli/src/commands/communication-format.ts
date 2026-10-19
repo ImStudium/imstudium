@@ -3,6 +3,7 @@ import {
   excerpt,
   isoDay,
   isoMinute,
+  type ActivityItem,
   type BlubberComment,
   type BlubberThread,
   type ForumDiscussion,
@@ -124,4 +125,15 @@ export function formatBlubberThreads(items: BlubberThread[]): string {
 export function formatBlubberComments(items: BlubberComment[]): string {
   if (items.length === 0) return `${INDENT}(no comments)`;
   return items.map((c) => block(`${INDENT}${isoMinute(c.date)} · ${displayName(c.author)}`, `${INDENT}${excerpt(c.text, 300, 4)}`)).join("\n");
+}
+
+export function formatActivities(items: ActivityItem[]): string {
+  if (items.length === 0) return "Nothing happened in that time.";
+  return items
+    .map((a) => {
+      const where = a.courseTitle ?? (a.contextType === "system" ? "Stud.IP" : null);
+      const head = [isoMinute(a.date), where, `${a.type ? `[${a.type}] ` : ""}${a.title}`].filter(Boolean).join(" · ");
+      return block(head, excerpt(a.text));
+    })
+    .join("\n");
 }

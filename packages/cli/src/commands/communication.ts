@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { join } from "node:path";
 import {
   ImstudiumError,
+  parseActivityTypes,
   selectNews,
   toMs,
   writeNewsMarkdown,
@@ -11,8 +12,9 @@ import {
 import { act, getSdk, note, output } from "../runtime.js";
 import { meId } from "../me.js";
 import { currentCourses, resolveCourse, type CourseRef } from "../course-arg.js";
-import { optionalSince } from "../since.js";
+import { optionalSince, parseSince } from "../since.js";
 import {
+  formatActivities,
   formatBlubberComments,
   formatBlubberThreads,
   formatDiscussions,
@@ -269,6 +271,44 @@ export function registerCommunication(program: Command): void {
         output(
           { since: since?.toISOString() ?? null, count: threads.length, threads },
           formatBlubberThreads(threads) + (threads.length ? "\n\nRead one: imstudium blubber --thread <id>" : ""),
+        );
+      }),
+    );
+
+  // ── activity stream ─────────────────────────────────────────────────────────
+  program
+    .command("feed")
+    .description("What happened in your courses: Stud.IP's activity stream, newest first")
+    .option("--since <when>", "Since 24h, 7d, 2w, today or a date", "7d")
+    .option("--type <types>", "documents, news, forum, wiki, message, participants, schedule, courseware (comma-separated)")
+    .option("--course <course>", "Only this course")
+    .option("--limit <n>", "Newest N (default 50)")
+    .action(
+      act(async (opts: { since: string; type?: string; course?: string; limit?: string }) => {
+        const sdk = await getSdk();
+        const since = parseSince(opts.since);
+        let types;
+        try {
+          types = parseActivityTypes(opts.type);
+        } catch (e) {
+          throw new ImstudiumError(e instanceof Error ? e.message : String(e), "BAD_ARGS");
+        }
+        const course = opts.course ? await resolveCourse(sdk, opts.course) : undefined;
+        const activities = await sdk.activity.stream(await meId(sdk), {
+          since,
+          types,
+          courseId: course?.id,
+          limit: intOpt(opts.limit, "limit", 50),
+        });
+        output(
+          {
+            since: since.toISOString(),
+            types: types ?? null,
+            course: course ? courseJson(course) : null,
+            count: activities.length,
+            activities,
+          },
+          formatActivities(activities),
         );
       }),
     );

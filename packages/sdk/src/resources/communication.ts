@@ -7,6 +7,7 @@ export * from "./news.js";
 export * from "./messages.js";
 export * from "./forum.js";
 export * from "./blubber.js";
+export * from "./activity.js";
 
 /** Anything that carries the news and forum resources — the SDK object itself works. */
 export interface CommunicationDeps {

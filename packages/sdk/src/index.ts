@@ -5,7 +5,7 @@ import { StudiumBuilder } from "./studium.js";
 import { Extractor } from "./extract.js";
 import { CoursesResource, DiscoveryResource, ScheduleResource } from "./resources/courses.js";
 import { FilesResource, NewsResource, WikiResource } from "./resources/files.js";
-import { BlubberResource, ForumResource, MessagesResource } from "./resources/communication.js";
+import { ActivityResource, BlubberResource, ForumResource, MessagesResource } from "./resources/communication.js";
 import { loadConfig, saveConfig, getDefaultConfig, paths, expandPath } from "./config.js";
 
 export const SDK_VERSION = "0.2.0";
@@ -49,6 +49,7 @@ export interface ImstudiumSdk {
   messages: MessagesResource;
   forum: ForumResource;
   blubber: BlubberResource;
+  activity: ActivityResource;
   schedule: ScheduleResource;
   discovery: DiscoveryResource;
   sync: SyncEngine;
@@ -106,6 +107,7 @@ export async function createSdk(
     messages: new MessagesResource(client),
     forum: new ForumResource(client),
     blubber: new BlubberResource(client),
+    activity: new ActivityResource(client),
     schedule: new ScheduleResource(client),
     discovery: new DiscoveryResource(client),
     sync: new SyncEngine(client),
