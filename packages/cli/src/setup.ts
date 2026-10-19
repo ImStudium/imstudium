@@ -267,6 +267,76 @@ async function installWorkflowsForAgents(
   return results;
 }
 
+/** Claude Code: `claude mcp add-json -s user` — never hand-edit ~/.claude.json, it is live state. */
+async function installClaudeCodeMcp(workspace: string, force: boolean): Promise<SetupItemResult> {
+  const { spawnSync } = await import("node:child_process");
+  const where = "claude mcp (user scope)";
+  const probe = spawnSync("claude", ["mcp", "get", "imstudium"], { encoding: "utf-8" });
+  if (probe.error) return { action: "skipped", path: `${where}: claude CLI not on PATH` };
+  const exists = probe.status === 0;
+  if (exists && !force) return { action: "skipped", path: where };
+  if (exists) spawnSync("claude", ["mcp", "remove", "imstudium", "-s", "user"], { encoding: "utf-8" });
+  const entry = { type: "stdio", ...imstudiumMcpEntry(workspace) };
+  const add = spawnSync("claude", ["mcp", "add-json", "-s", "user", "imstudium", JSON.stringify(entry)], {
+    encoding: "utf-8",
+  });
+  if (add.status !== 0) return { action: "skipped", path: `${where}: ${(add.stderr || add.stdout).trim().slice(0, 120)}` };
+  return { action: exists ? "updated" : "installed", path: where };
+}
+
+function tomlString(value: string): string {
+  return JSON.stringify(value); // TOML basic strings share JSON escaping for our values
+}
+
+/** Codex: one `[mcp_servers.imstudium]` table in config.toml, replaced in place. */
+export function upsertCodexToml(existing: string, workspace: string): string {
+  const entry = imstudiumMcpEntry(workspace) as { command: string; args: string[]; env: Record<string, string> };
+  const block = [
+    "[mcp_servers.imstudium]",
+    `command = ${tomlString(entry.command)}`,
+    `args = [${entry.args.map(tomlString).join(", ")}]`,
+    `env = { ${Object.entries(entry.env)
+      .map(([k, v]) => `${k} = ${tomlString(v)}`)
+      .join(", ")} }`,
+  ].join("\n");
+  const re = /^\[mcp_servers\.imstudium\][\s\S]*?(?=^\[|(?![\s\S]))/m;
+  if (re.test(existing)) return existing.replace(re, `${block}\n\n`).replace(/\n{3,}$/, "\n");
+  return `${existing.replace(/\s*$/, "")}${existing.trim() ? "\n\n" : ""}${block}\n`;
+}
+
+async function installCodexMcp(file: string, workspace: string, force: boolean): Promise<SetupItemResult> {
+  let existing = "";
+  try {
+    existing = await readFile(file, "utf-8");
+  } catch {
+    // new file
+  }
+  const next = upsertCodexToml(existing, workspace);
+  const had = existing.includes("[mcp_servers.imstudium]");
+  if (next === existing || (had && !force && next.trim() === existing.trim())) return { action: "skipped", path: file };
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, next);
+  return { action: had ? "updated" : "installed", path: file };
+}
+
+/** OpenCode: `mcp.imstudium = { type: "local", command: [...], environment }` in opencode.json. */
+async function installOpenCodeMcp(file: string, workspace: string, force: boolean): Promise<SetupItemResult> {
+  let existing: Record<string, unknown> = {};
+  try {
+    existing = JSON.parse(await readFile(file, "utf-8")) as Record<string, unknown>;
+  } catch {
+    // new file
+  }
+  const entry = imstudiumMcpEntry(workspace) as { command: string; args: string[]; env: Record<string, string> };
+  const desired = { type: "local", command: [entry.command, ...entry.args], environment: entry.env, enabled: true };
+  const mcp = (existing.mcp as Record<string, Record<string, unknown>> | undefined) ?? {};
+  if (!force && mcpEntryMatches(mcp.imstudium, desired)) return { action: "skipped", path: file };
+  const merged = { $schema: "https://opencode.ai/config.json", ...existing, mcp: { ...mcp, imstudium: desired } };
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(merged, null, 2)}\n`);
+  return { action: mcp.imstudium ? "updated" : "installed", path: file };
+}
+
 async function installMcpForAgents(
   agents: AgentProfile[],
   workspace: string,
@@ -281,9 +351,16 @@ async function installMcpForAgents(
     for (const file of agent.mcpFiles()) {
       if (seen.has(file)) continue;
       seen.add(file);
-      const result = await installMcpFile(file, workspace, force);
+      const result =
+        agent.mcpStyle === "claude-cli"
+          ? await installClaudeCodeMcp(workspace, force)
+          : agent.mcpStyle === "codex-toml"
+            ? await installCodexMcp(file, workspace, force)
+            : agent.mcpStyle === "opencode"
+              ? await installOpenCodeMcp(file, workspace, force)
+              : await installMcpFile(file, workspace, force);
       results.push(result);
-      if (result.action !== "skipped") manifest.mcp[agent.id].push(file);
+      if (result.action !== "skipped") manifest.mcp[agent.id].push(result.path);
     }
   }
   return results;
