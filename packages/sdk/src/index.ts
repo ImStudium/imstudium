@@ -15,6 +15,7 @@ export * from "./config.js";
 export * from "./client.js";
 export * from "./jsonapi.js";
 export * from "./routes.js";
+export * from "./rollover.js";
 export * from "./auth.js";
 export * from "./login-url.js";
 export * from "./login-helper.js";

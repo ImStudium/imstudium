@@ -46,6 +46,15 @@ export class StudiumBuilder {
       semesterId?: string;
       semesterLabel?: string;
       allSemesters?: boolean;
+      /** Relative folder for course dirs (default: the semester slug, e.g. WS2026-27). */
+      folder?: string;
+      /** Only these courses (all-semester sync groups courses per semester). */
+      courseIds?: string[];
+      /**
+       * Past semester: write `<folder>/semester.json` and leave the root
+       * overview (studium.json, STUDIUM.md, klausuren.md, llms.txt) alone.
+       */
+      archive?: boolean;
     },
   ): Promise<StudiumWorkspace> {
     await ensureDir(workspacePath);
@@ -60,11 +69,13 @@ export class StudiumBuilder {
       semesterLabel: options?.semesterLabel,
       allSemesters: options?.allSemesters,
     });
-    const rawCourses = await this.courses.listMine(me.id, {
+    const listed = await this.courses.listMine(me.id, {
       semesterId: options?.semesterId ?? semesterCtx?.semester.id,
       allSemesters: options?.allSemesters,
     });
-    const semesterFolder = semesterFolderSlug(semesterCtx, options?.allSemesters);
+    const onlyIds = options?.courseIds ? new Set(options.courseIds) : null;
+    const rawCourses = onlyIds ? listed.filter((c) => onlyIds.has(c.id)) : listed;
+    const semesterFolder = options?.folder ?? semesterFolderSlug(semesterCtx, options?.allSemesters);
     const semesterTitle = semesterCtx?.title || semesterFolder;
     const scheduleEntries = await this.schedule.getSchedule(me.id);
 
@@ -161,6 +172,15 @@ export class StudiumBuilder {
       courses: studiumCourses,
       nextDeadlines: allExams.filter((e) => e.date && (e.daysRemaining ?? 999) >= 0).slice(0, 10),
     };
+
+    if (options?.archive) {
+      workspace.activeSemester.isCurrent = false;
+      const dir = join(workspacePath, semesterFolder);
+      await ensureDir(dir);
+      await writeFile(join(dir, "semester.json"), JSON.stringify(workspace, null, 2));
+      await this.writeKlausurenMd(dir, allExams);
+      return workspace;
+    }
 
     await this.attachSearchMetadata(workspacePath, workspace);
 
