@@ -172,6 +172,18 @@ export class StudIpClient {
     return this.baseUrl;
   }
 
+  /**
+   * Whether the request may go out as an authenticated one: true when the
+   * client carries a cookie or token, and for clients built without any
+   * credential source (anonymous use, fixtures).
+   */
+  private hasSession(): boolean {
+    if (!this.getCookies && !this.getAuthHeaders) return true;
+    const auth = this.getAuthHeaders?.() ?? {};
+    const cookies = this.getCookies?.() ?? {};
+    return Object.keys(auth).length > 0 || Object.keys(cookies).length > 0;
+  }
+
   private buildHeaders(url: string, extra?: Record<string, string>): Record<string, string> {
     const auth = this.getAuthHeaders?.() ?? {};
     const cookies = this.getCookies?.();
@@ -220,9 +232,16 @@ export class StudIpClient {
   async fetchRaw(
     method: string,
     path: string,
-    init?: { body?: string; headers?: Record<string, string>; timeoutMs?: number },
+    init?: { body?: string; headers?: Record<string, string>; timeoutMs?: number; public?: boolean },
   ): Promise<Response> {
     const url = this.resolveUrl(path);
+    if (!init?.public && !this.hasSession()) {
+      // Signed out: say so before anything goes over the wire (no request
+      // that would only come back as the HTML login page).
+      throw new ImstudiumError("Not signed in to Stud.IP.", "AUTH_REQUIRED", undefined, "Run: imstudium login", {
+        origin: originOf(url),
+      });
+    }
     let renewed = false;
 
     return this.gate.run(async () => {
@@ -268,11 +287,12 @@ export class StudIpClient {
   async request<T extends JsonApiResource = JsonApiResource>(
     method: string,
     path: string,
-    options?: { body?: unknown; headers?: Record<string, string>; raw?: boolean },
+    options?: { body?: unknown; headers?: Record<string, string>; raw?: boolean; public?: boolean },
   ): Promise<JsonApiDocument<T>> {
     const headers = { ...options?.headers };
     if (options?.body) headers["Content-Type"] = "application/vnd.api+json";
     const res = await this.fetchRaw(method, path, {
+      public: options?.public,
       headers,
       body: options?.body ? JSON.stringify(options.body) : undefined,
     });
@@ -298,10 +318,11 @@ export class StudIpClient {
   async get<T extends JsonApiResource = JsonApiResource>(
     path: string,
     params?: JsonApiQuery | Record<string, string>,
+    options?: { public?: boolean },
   ): Promise<JsonApiDocument<T>> {
     const qs = toSearchParams(params).toString();
     const url = qs ? `${path}${path.includes("?") ? "&" : "?"}${qs}` : path;
-    return this.request<T>("GET", url);
+    return this.request<T>("GET", url, { public: options?.public });
   }
 
   /** GET a single resource; throws NOT_FOUND when data is empty. */

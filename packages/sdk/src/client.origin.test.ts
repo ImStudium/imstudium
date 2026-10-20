@@ -20,8 +20,8 @@ function recorder() {
 function clientFor(baseOrigin: string, sessionOrigin: string | undefined, fetchImpl: typeof fetch, kind: "cookie" | "oauth" = "cookie") {
   return new StudIpClient({
     baseUrl: `${baseOrigin}/jsonapi.php/v1`,
-    getCookies: () => (kind === "cookie" ? { Seminar_Session: "synthetic-cookie" } : {}),
-    getAuthHeaders: () => (kind === "oauth" ? { Authorization: "Bearer synthetic-token" } : {}),
+    getCookies: (): Record<string, string> => (kind === "cookie" ? { Seminar_Session: "synthetic-cookie" } : {}),
+    getAuthHeaders: (): Record<string, string> => (kind === "oauth" ? { Authorization: "Bearer synthetic-token" } : {}),
     getSessionOrigin: () => sessionOrigin,
     fetchImpl,
     retries: 0,

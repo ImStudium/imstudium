@@ -153,7 +153,7 @@ export class DiscoveryResource {
   constructor(private client: StudIpClient) {}
 
   async listRoutes(): Promise<Array<{ methods: string[]; pattern: string }>> {
-    const doc = await this.client.get<JsonApiResource<"slim-routes">>("discovery");
+    const doc = await this.client.get<JsonApiResource<"slim-routes">>("discovery", undefined, { public: true });
     const data = Array.isArray(doc.data) ? doc.data : doc.data ? [doc.data] : [];
     return data.map((r: JsonApiResource<"slim-routes">) => ({
       methods: (r.attributes?.methods as string[]) || [],
@@ -162,7 +162,7 @@ export class DiscoveryResource {
   }
 
   async getProperties(): Promise<Record<string, string>> {
-    const doc = await this.client.get<JsonApiResource<"studip-properties">>("studip/properties");
+    const doc = await this.client.get<JsonApiResource<"studip-properties">>("studip/properties", undefined, { public: true });
     const data = Array.isArray(doc.data) ? doc.data : doc.data ? [doc.data] : [];
     const out: Record<string, string> = {};
     for (const p of data) {
