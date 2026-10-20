@@ -208,6 +208,7 @@ Browser sign-in goes through the instance's Shibboleth login. If your university
 | Package | |
 |---|---|
 | `@imstudium/cli` | The `imstudium` command |
+| `@imstudium/contract` | zod schemas for every `--json` output, the error table and the `imstudium/source/v1` feed |
 | `@imstudium/sdk` | Stud.IP client, auth, sync, workspace writers |
 | `@imstudium/mcp` | MCP server (`imstudium-mcp`) |
 

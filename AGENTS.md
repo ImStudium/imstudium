@@ -108,7 +108,7 @@ Bun workspaces, four packages:
 | Package | Owns |
 |---|---|
 | `packages/contract` (`@imstudium/contract`) | zod schemas for every CLI `--json` output, the error document and the `imstudium/source/v1` feed. Types only on hot paths; values (zod) load lazily |
-| `packages/sdk` (`@imstudium/sdk`) | Stud.IP client, auth, resources, sync, workspace writers, extraction, search. No Commander |
+| `packages/sdk` (`@imstudium/sdk`) | Stud.IP client, auth, resources, sync, workspace writers, extraction, search. No Commander. `src/index.ts` names every public export (no `export *`); `surface.test.ts` pins the list |
 | `packages/cli` (`@imstudium/cli`) | Commander commands, `--json` output, agent setup, bundled skills. No raw `fetch` to Stud.IP; everything goes through the SDK |
 | `packages/mcp` (`@imstudium/mcp`) | MCP server: tool definitions and the CLI door |
 
