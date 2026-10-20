@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { StudIpClient } from "./client.js";
 import { AuthManager } from "./auth.js";
 import { SyncEngine } from "./sync.js";
@@ -13,7 +14,8 @@ import { PeopleResource } from "./resources/people.js";
 import { ConsultationsResource } from "./resources/consultations.js";
 import { loadConfig, saveConfig, getDefaultConfig, paths, expandPath } from "./config.js";
 
-export const SDK_VERSION = "0.2.0";
+/** The installed @imstudium/sdk version, read from its package.json (one source of truth). */
+export const SDK_VERSION: string = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
 
 export * from "./types.js";
 export * from "./errors.js";

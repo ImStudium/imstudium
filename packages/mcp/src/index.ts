@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -13,7 +14,7 @@ import { materialVisualPayload } from "./visual.js";
 import { checkArgs, runCli } from "./cli-bridge.js";
 
 const server = new Server(
-  { name: "imstudium", version: "0.2.0" },
+  { name: "imstudium", version: (createRequire(import.meta.url)("../package.json") as { version: string }).version },
   { capabilities: { tools: {} } },
 );
 

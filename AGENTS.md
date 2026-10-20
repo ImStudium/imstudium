@@ -135,7 +135,8 @@ Bun workspaces, four packages:
   - `workspace.ts`: onboard, init, studium, klausuren, module
   - `courses.ts`: courses list/show, files tree/download
   - `sync.ts`: sync, extract, index, view, export calendar, watch
-  - `setup.ts`: setup *, update · `config.ts` · `doctor.ts` · `schema.ts` · `legacy.ts` (semesters, discover)
+  - `setup.ts`: setup *, update · `config.ts` · `schema.ts` · `legacy.ts` (semesters, discover)
+  - `doctor.ts`: a registry of checks (`DOCTOR_CHECKS`, each `{id, status: ok|warn|fail|skip, detail, fix}`). Network checks share a 3 s budget and are skipped with `--offline`; a new check needs a fix string for warn/fail.
   - `api.ts`: routes, api
   - `semester.ts`: semester, semester start, changes
   - `search.ts`

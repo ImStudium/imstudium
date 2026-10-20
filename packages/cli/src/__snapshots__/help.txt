@@ -87,8 +87,8 @@ Commands:
                                                  updates what changed
   config                                         Show or change ~/.config/imstudium/config.json
   session                                        Session management: import a Stud.IP session cookie
-  doctor                                         Check local ingest pipeline (AnyDoc +
-                                                 pdf-inspector)
+  doctor [options]                               Check install, session, workspace, ingest engines,
+                                                 agent setup and the MCP door — each with a fix
   update                                         Upgrade CLI (if needed) and refresh agent
                                                  skills/MCP
   module [options]                               Harness modules for mina — course/exam counts, no
@@ -851,10 +851,12 @@ Options:
 ### imstudium doctor
 Usage: imstudium doctor [options]
 
-Check local ingest pipeline (AnyDoc + pdf-inspector)
+Check install, session, workspace, ingest engines, agent setup and the MCP door — each with a fix
 
 Options:
-  -h, --help  display help for command
+  --offline           No network: skip the npm, OAuth, Stud.IP and semester checks
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
 
 ### imstudium update
 Usage: imstudium update [options]

@@ -16,5 +16,6 @@ export * from "./cli/planning.js";
 export * from "./cli/content.js";
 export * from "./cli/communication.js";
 export * from "./cli/workspace.js";
+export * from "./cli/doctor.js";
 export * from "./feed/index.js";
 export * from "./commands.js";

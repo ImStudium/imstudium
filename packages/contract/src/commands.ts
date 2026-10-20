@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ContextOutput } from "./cli/context.js";
+import { DoctorOutput } from "./cli/doctor.js";
 import { CoursewareOutput, TasksOutput } from "./cli/content.js";
 import { ForumOutput, MessagesOutput, NewsOutput } from "./cli/communication.js";
 import { HolidaysOutput, TodayOutput, WeekOutput } from "./cli/planning.js";
@@ -36,6 +37,7 @@ export const CLI_OUTPUTS = {
   semester: SemesterOutput,
   "semester start": SemesterStartOutput,
   sync: SyncOutput,
+  doctor: DoctorOutput,
 } satisfies Record<string, z.ZodType>;
 
 export type CliCommandWithSchema = keyof typeof CLI_OUTPUTS;

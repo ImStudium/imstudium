@@ -89,7 +89,7 @@ Every command takes `--json` (stable keys for scripts and agents), `--quiet` and
 | | `semester start` · `watch` | Roll over to a new term · keep syncing |
 | **Any Stud.IP route** | `routes [topic]` | Every JSON:API route your Stud.IP offers |
 | | `api <path> [--flat] [--all]` | Call any route, e.g. `imstudium api /users/me/courses --flat` |
-| **Setup & health** | `login` · `logout` · `doctor` · `update` | Sign in and out · check extraction · upgrade |
+| **Setup & health** | `login` · `logout` · `doctor [--offline]` · `update` | Sign in and out · check install, session, workspace, engines, agents and MCP (each with a fix) · upgrade |
 | | `setup all · mcp · status` · `onboard` · `config set` | Agent skills · opt-in MCP · what's wired · first-time setup · settings |
 
 ## Your workspace

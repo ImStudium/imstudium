@@ -1,5 +1,5 @@
 import type { CommanderError } from "commander";
-import { createSdk, EXIT_CODES, ImstudiumError, toImstudiumError } from "@imstudium/sdk";
+import { createSdk, EXIT_CODES, ImstudiumError, toImstudiumError, type CreateSdkOptions } from "@imstudium/sdk";
 
 export interface GlobalOpts {
   json?: boolean;
@@ -79,14 +79,14 @@ export function jsonRequested(argv: string[] = process.argv): boolean {
   return argv.includes("--json");
 }
 
-export async function getSdk(): Promise<Sdk> {
+export async function getSdk(options?: CreateSdkOptions): Promise<Sdk> {
   const partial = globalOpts.instance
     ? {
         baseUrl: `${globalOpts.instance.replace(/\/$/, "")}/jsonapi.php/v1`,
         instanceOrigin: globalOpts.instance.replace(/\/$/, ""),
       }
     : undefined;
-  return createSdk(partial);
+  return createSdk(partial, options);
 }
 
 /** Wrap an async action so every command reports errors the same way. */
