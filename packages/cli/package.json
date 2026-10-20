@@ -28,6 +28,13 @@
   "bin": {
     "imstudium": "dist/cli.js"
   },
+  "exports": {
+    "./program": {
+      "types": "./dist/program.d.ts",
+      "import": "./dist/program.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "skills",

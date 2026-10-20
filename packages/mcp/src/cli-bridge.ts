@@ -5,13 +5,19 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { buildProgram } from "@imstudium/cli/program";
+
 /**
  * The CLI is the product; MCP is a thin door to it. Every read-only command
  * an agent can run in a terminal is reachable here with the same JSON.
+ *
+ * The door is an allow-list of *leaf command paths* (what Commander would
+ * actually run), not of first words: `semester` is allowed, `semester start`
+ * is not, however the arguments are ordered.
  */
-export const READ_ONLY_COMMANDS = new Set([
+export const READ_ONLY_PATHS: ReadonlySet<string> = new Set([
+  "status",
   "context",
-  "schema",
   "today",
   "week",
   "stundenplan",
@@ -20,40 +26,128 @@ export const READ_ONLY_COMMANDS = new Set([
   "klausuren",
   "changes",
   "news",
-  "feed",
   "inbox",
   "outbox",
   "message",
   "forum",
   "blubber",
+  "feed",
+  "search",
   "courseware",
-  "cw",
   "wiki",
-  "files",
+  "files tree",
+  "courses list",
+  "courses show",
+  "studium",
   "people",
   "sprechstunden",
-  "catalog",
-  "search",
+  "catalog search",
+  "catalog areas",
+  "catalog modules",
+  "catalog studies",
   "semester",
-  "studium",
   "routes",
   "api",
-  "status",
+  "schema",
   "doctor",
-  "courses",
 ]);
 
-const BLOCKED_FLAGS = /^(--write|--save|-X|--method|--data|-d|--force)(=|$)/;
+/**
+ * Options that are refused on every command: they change which Stud.IP
+ * origin receives the session (--instance), write files (-o/--output,
+ * --workspace, --dir, --ics, --save, --force) or write upstream
+ * (--write, -X/--method, -d/--data).
+ */
+export const BLOCKED_LONG = new Set(["--instance", "--output", "--workspace", "--dir", "--ics", "--write", "--save", "--force", "--data", "--method"]);
+export const BLOCKED_SHORT = new Set(["-o", "-d", "-X"]);
+
+const WHY: Record<string, string> = {
+  "semester start": "semester start changes the workspace — run it in a terminal.",
+  "files download": "files download writes to disk — run it in a terminal.",
+};
+
+type Cmd = ReturnType<typeof buildProgram>;
+
+class Resolved {
+  constructor(readonly leaf: Cmd) {}
+}
+
+function chain(cmd: Cmd): Cmd[] {
+  const out: Cmd[] = [];
+  for (let c: Cmd | null = cmd; c; c = c.parent as Cmd | null) out.unshift(c);
+  return out;
+}
+
+/**
+ * Parse `args` with the real CLI command tree (same arities, aliases,
+ * attached values, `--x=y`, combined short flags) without running anything:
+ * every action is replaced by one that only records which command Commander
+ * picked. Returns the leaf command, "help" for help/version output, or the
+ * Commander error message.
+ */
+function resolve(args: string[]): Resolved | "help" | { error: string } {
+  const program = buildProgram();
+  const silent = { writeOut: () => {}, writeErr: () => {}, outputError: () => {} };
+  const all: Cmd[] = [];
+  const visit = (c: Cmd) => {
+    all.push(c);
+    (c.commands as Cmd[]).forEach(visit);
+  };
+  visit(program);
+  let picked: Cmd | null = null;
+  for (const c of all) {
+    c.exitOverride();
+    c.configureOutput(silent);
+    c.action(function (this: Cmd) {
+      picked = this;
+    });
+  }
+  try {
+    program.parse(args, { from: "user" });
+  } catch (e) {
+    const code = (e as { code?: string }).code ?? "";
+    if (code === "commander.helpDisplayed" || code === "commander.help" || code === "commander.version") return "help";
+    return { error: (e as Error).message.replace(/^error:\s*/i, "") };
+  }
+  return picked ? new Resolved(picked) : { error: "no command" };
+}
 
 export function checkArgs(args: string[]): string | null {
-  const [command, sub] = args;
-  if (!command || !READ_ONLY_COMMANDS.has(command)) {
-    return `Not available over MCP: "${command ?? ""}". Read-only commands: ${[...READ_ONLY_COMMANDS].join(", ")}.`;
+  const notAvailable = (what: string) =>
+    `Not available over MCP: "${what}". Read-only commands: ${[...READ_ONLY_PATHS].join(", ")}.`;
+  if (args.length === 0) return notAvailable("");
+
+  // Defence in depth: a blocked long option is refused wherever it appears,
+  // also as the value of another option (the root parses --instance anywhere).
+  for (const a of args) {
+    const long = a.startsWith("--") ? a.split("=")[0]! : "";
+    if (BLOCKED_LONG.has(long)) return `${long} is not allowed over MCP (read-only door).`;
   }
-  if (command === "semester" && sub === "start") return "semester start changes the workspace — run it in a terminal.";
-  if (command === "files" && sub === "download") return "files download writes to disk — run it in a terminal.";
-  const blocked = args.find((a) => BLOCKED_FLAGS.test(a));
-  if (blocked) return `${blocked} is not allowed over MCP (read-only door).`;
+
+  // The runner prepends --json; parse exactly what will run.
+  const r = resolve(["--json", ...args]);
+  if (r === "help") return null;
+  if (!(r instanceof Resolved)) {
+    const first = args.find((a) => !a.startsWith("-")) ?? args[0]!;
+    return /unknown command|too many arguments|no command/i.test(r.error)
+      ? notAvailable(first)
+      : `Refused over MCP: ${r.error}`;
+  }
+
+  const cmds = chain(r.leaf);
+  const path = cmds.slice(1).map((c) => c.name()).join(" ");
+  if (WHY[path]) return WHY[path];
+  if (!READ_ONLY_PATHS.has(path)) return notAvailable(path);
+
+  // Every option the user set, on the leaf and its ancestors, by its real flags.
+  for (const c of cmds) {
+    for (const opt of c.options) {
+      if (c.getOptionValueSource(opt.attributeName()) !== "cli") continue;
+      if ((opt.long && BLOCKED_LONG.has(opt.long)) || (opt.short && BLOCKED_SHORT.has(opt.short))) {
+        return `${opt.long ?? opt.short} is not allowed over MCP (read-only door).`;
+      }
+    }
+  }
   return null;
 }
 

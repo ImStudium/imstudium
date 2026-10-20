@@ -6,7 +6,7 @@ export const MCP_TOOLS = [
       "Start every session with [\"context\"]. Examples: [\"today\"], [\"week\",\"--next\"], [\"tasks\",\"--open\"], " +
       "[\"search\",\"gradient descent\"], [\"news\",\"statistik\",\"--since\",\"7d\"], [\"courseware\",\"datenbanken\"], " +
       "[\"sprechstunden\",\"statistik\"], [\"catalog\",\"search\",\"machine learning\"], [\"routes\",\"forum\"], " +
-      "[\"api\",\"/users/me/courses\",\"--flat\"]. Writes (--write, --save, semester start, login, setup) are refused — use a terminal.",
+      "[\"api\",\"/users/me/courses\",\"--flat\"]. Writes and origin changes (--write, --save, -o/--output, --instance, semester start, files download, login, setup) are refused — use a terminal.",
     inputSchema: {
       type: "object",
       properties: {
