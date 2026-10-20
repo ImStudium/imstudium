@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
  */
 export const READ_ONLY_COMMANDS = new Set([
   "context",
+  "schema",
   "today",
   "week",
   "stundenplan",
