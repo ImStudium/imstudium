@@ -172,6 +172,7 @@ Bun workspaces, four packages:
 - Vitest, `packages/*/src/**/*.test.ts`, next to the code.
 - **Synthetic fixtures only** (`packages/sdk/src/test/*-fixtures.ts`). Never put real course content, names, messages or grades in tests, docs, issues or commits.
 - `bun run validate` runs typecheck, build and tests, and must pass before you propose a change.
+- `docs/COMMANDS.md` and `docs/ERRORS.md` are generated (`scripts/gen-docs.ts`). After changing a command, an option, a contract schema or the error table run `bun run docs`; `scripts/docs.test.ts` and CI (`bun run docs:check`) fail on drift. Intended `--help` changes also need `vitest -u` for the help snapshot.
 - Build and check commands with `bun run build`, then `node packages/cli/dist/cli.js <command> --help`.
 - CLI integration tests use `packages/cli/src/test/harness.ts`: a synthetic workspace, a throwaway `HOME`, the file session store and a preload that fails every network call.
 - Never commit anything from `~/Studium`, `~/.config/imstudium` or `~/.local/share/imstudium`.

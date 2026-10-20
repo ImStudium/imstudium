@@ -5,27 +5,21 @@ import { getCliVersion } from "./version.js";
 
 /**
  * Help lists commands in the order of a student's day, not in registration
- * order: start → today → what's new → material → workspace → API → setup.
- * Anything not listed (a new command) goes last until it is placed here.
+ * order. The groups also structure docs/COMMANDS.md. A new top-level command
+ * must be placed here (structure.test.ts fails otherwise).
  */
-export const HELP_ORDER = [
-  // start
-  "onboard", "init", "login", "logout", "status", "context",
-  // today and deadlines
-  "today", "week", "stundenplan", "holidays", "tasks", "klausuren",
-  // what's new
-  "changes", "news", "inbox", "outbox", "message", "forum", "blubber", "feed",
-  // material and courses
-  "search", "courseware", "wiki", "files", "courses", "studium", "people", "sprechstunden", "catalog",
-  // workspace and sync
-  "semester", "sync", "extract", "index", "view", "watch", "export",
-  // Stud.IP API and contracts
-  "routes", "api", "schema",
-  // setup and health
-  "setup", "config", "session", "doctor", "update",
-  // legacy
-  "module", "semesters", "discover",
-] as const;
+export const HELP_GROUPS: ReadonlyArray<{ title: string; commands: readonly string[] }> = [
+  { title: "Start", commands: ["onboard", "init", "login", "logout", "status", "context"] },
+  { title: "Today and deadlines", commands: ["today", "week", "stundenplan", "holidays", "tasks", "klausuren"] },
+  { title: "What's new", commands: ["changes", "news", "inbox", "outbox", "message", "forum", "blubber", "feed"] },
+  { title: "Material and courses", commands: ["search", "courseware", "wiki", "files", "courses", "studium", "people", "sprechstunden", "catalog"] },
+  { title: "Workspace and sync", commands: ["semester", "sync", "extract", "index", "view", "watch", "export"] },
+  { title: "Stud.IP API and contracts", commands: ["routes", "api", "schema"] },
+  { title: "Setup and health", commands: ["setup", "config", "session", "doctor", "update"] },
+  { title: "Legacy", commands: ["module", "semesters", "discover"] },
+];
+
+export const HELP_ORDER: readonly string[] = HELP_GROUPS.flatMap((g) => g.commands);
 
 /**
  * The whole command tree, with no side effects at import: nothing parses

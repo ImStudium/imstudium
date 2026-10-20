@@ -21,6 +21,7 @@
     "install:dev": "bash scripts/install-dev.sh",
     "docs": "bun scripts/gen-docs.ts",
     "docs:check": "bun scripts/gen-docs.ts --check",
+    "docs:commands": "bun scripts/gen-docs.ts commands",
     "docs:errors": "bun scripts/gen-docs.ts errors"
   },
   "devDependencies": {

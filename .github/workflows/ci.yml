@@ -21,3 +21,6 @@ jobs:
 
       - name: Validate
         run: bun run validate
+
+      - name: Generated docs are current
+        run: bun run docs:check

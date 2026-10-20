@@ -61,7 +61,7 @@ imstudium context          # what matters now
 
 ## Commands
 
-Every command takes `--json` (stable keys for scripts and agents), `--quiet` and `--instance <url>`. A course argument can be a title fragment, slug, number or id, as in `imstudium news statistik`. `imstudium <command> --help` lists every option.
+Every command takes `--json` (stable keys for scripts and agents), `--quiet` and `--instance <url>`. A course argument can be a title fragment, shortcut, slug, number or id, as in `imstudium news statistik` or `--course statistik`. `imstudium <command> --help` lists every option; [docs/COMMANDS.md](docs/COMMANDS.md) is the full reference, `imstudium schema <command>` prints the JSON Schema of a command's `--json` output, and [docs/ERRORS.md](docs/ERRORS.md) lists every error code and exit code.
 
 | | Command | What you get |
 |---|---|---|
@@ -211,7 +211,7 @@ Browser sign-in goes through the instance's Shibboleth login. If your university
 | `@imstudium/sdk` | Stud.IP client, auth, sync, workspace writers |
 | `@imstudium/mcp` | MCP server (`imstudium-mcp`) |
 
-[AGENTS.md](AGENTS.md) · [docs/STUDIUM.md](docs/STUDIUM.md) · [docs/API.md](docs/API.md) · [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+[AGENTS.md](AGENTS.md) · [docs/COMMANDS.md](docs/COMMANDS.md) · [docs/ERRORS.md](docs/ERRORS.md) · [docs/STUDIUM.md](docs/STUDIUM.md) · [docs/API.md](docs/API.md) · [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Legal
 
