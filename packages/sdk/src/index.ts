@@ -89,7 +89,7 @@ export {
 // ── Sync and the Studium workspace ───────────────────────────────────────────
 export { SyncEngine, type SyncPart, type SyncOptions } from "./sync.js";
 export { StudiumBuilder, normalizeStudiumWorkspace } from "./studium.js";
-export { pickCourse, resolveCourseDir } from "./workspace-path.js";
+export { pickCourse, resolveCourseDir, resolveCourseQuery, resolveWorkspaceCourse, type CourseCandidate } from "./workspace-path.js";
 export { ensureMigrated, archiveLegacyConfigDir, convertLegacyManifest, legacyPaths, type MigrationResult } from "./migrate.js";
 
 // ── Extraction, viewer and search ────────────────────────────────────────────

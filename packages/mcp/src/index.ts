@@ -5,7 +5,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createSdk, expandPath, extractSlug, ImstudiumError, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, toImstudiumError, type StudiumWorkspace } from "@imstudium/sdk";
+import { createSdk, expandPath, extractSlug, ImstudiumError, normalizeStudiumWorkspace, pageRef, resolveCourseDir, resolveWorkspaceCourse, agentSearchGuidance, toImstudiumError, type StudiumWorkspace } from "@imstudium/sdk";
 import type { ErrorBody, KlausurenOutput } from "@imstudium/contract";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -37,12 +37,6 @@ function jsonText(data: unknown) {
 function errorResult(e: unknown) {
   const body: ErrorBody = toImstudiumError(e).toJSON();
   return { ...jsonText(body), isError: true };
-}
-
-function courseNotFound(query: string, ws: StudiumWorkspace): ImstudiumError {
-  return new ImstudiumError(`No course matches "${query}"`, "COURSE_NOT_FOUND", 404, "Pass a title fragment, shortcut or id from details.available", {
-    available: ws.courses.map((c) => c.title),
-  });
 }
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -123,8 +117,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "studium_course_brief": {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");
-        const course = pickCourse(ws, courseArg, sdk.config.courseAliases);
-        if (!course) throw courseNotFound(courseArg, ws);
+        const course = resolveWorkspaceCourse(ws, courseArg, sdk.config.courseAliases);
         const courseDir = resolveCourseDir(workspacePath, course, ws);
         let courseMd = "";
         try {
@@ -145,8 +138,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");
         const query = String((args as { query?: string })?.query || "").toLowerCase();
-        const course = pickCourse(ws, courseArg, sdk.config.courseAliases);
-        if (!course) throw courseNotFound(courseArg, ws);
+        const course = resolveWorkspaceCourse(ws, courseArg, sdk.config.courseAliases);
 
         const filesDir = join(resolveCourseDir(workspacePath, course, ws), "files");
         const matches = await findFilesRecursive(filesDir, query);
@@ -159,8 +151,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const fileArg = String((args as { file?: string })?.file || "").toLowerCase();
         const page = (args as { page?: number })?.page;
 
-        const course = pickCourse(ws, courseArg, sdk.config.courseAliases);
-        if (!course) throw courseNotFound(courseArg, ws);
+        const course = resolveWorkspaceCourse(ws, courseArg, sdk.config.courseAliases);
 
         const courseDir = resolveCourseDir(workspacePath, course, ws);
         const filesDir = join(courseDir, "files");

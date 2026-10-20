@@ -96,7 +96,9 @@ readRouteCatalog
 rebuildSearchIndexes
 renderWiki
 resolveCourseDir
+resolveCourseQuery
 resolveSemesterByLabel
+resolveWorkspaceCourse
 rhythmLabel
 saveConfig
 searchRoutes

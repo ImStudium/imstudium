@@ -1,8 +1,9 @@
 import {
   expandPath,
   ImstudiumError,
-  pickCourse,
   resolveCourseDir,
+  resolveCourseQuery,
+  resolveWorkspaceCourse,
   slugify,
   type StudiumWorkspace,
 } from "@imstudium/sdk";
@@ -37,7 +38,7 @@ async function workspace(sdk: Sdk): Promise<StudiumWorkspace | null> {
 export async function resolveCourse(sdk: Sdk, query: string): Promise<CourseRef> {
   const ws = await workspace(sdk);
   if (ws) {
-    const hit = pickCourse(ws, query, sdk.config.courseAliases);
+    const hit = notFoundAsUndefined(() => resolveWorkspaceCourse(ws, query, sdk.config.courseAliases));
     if (hit) {
       return {
         id: hit.id,
@@ -49,30 +50,30 @@ export async function resolveCourse(sdk: Sdk, query: string): Promise<CourseRef>
     }
   }
 
-  if (STUDIP_ID.test(query)) {
-    const course = await sdk.courses.get(query);
+  if (STUDIP_ID.test(query.trim())) {
+    const course = await sdk.courses.get(query.trim());
     const title = String(course.attributes?.title ?? query);
     return { id: course.id, title, slug: slugify(title) };
   }
 
+  // Live enrollments across all semesters, oldest first (so "newest" is last).
   const all = await sdk.courses.listMine(await meId(sdk), { allSemesters: true });
-  const q = query.trim().toLowerCase();
-  const matches = all.filter((c) => {
-    const title = String(c.attributes?.title ?? "").toLowerCase();
-    const number = String(c.attributes?.["course-number"] ?? "").toLowerCase();
-    return title.includes(q) || slugify(title).toLowerCase().includes(q) || (number && number === q);
+  const candidates = all.map((c) => {
+    const title = String(c.attributes?.title ?? c.id);
+    return { id: c.id, title, slug: slugify(title), courseNumber: String(c.attributes?.["course-number"] ?? "") || undefined };
   });
-  if (matches.length === 0) {
-    throw new ImstudiumError(
-      `No course matches "${query}"`,
-      "COURSE_NOT_FOUND",
-      404,
-      "imstudium courses list shows your courses; pass a title fragment, slug or id.",
-    );
+  const hit = resolveCourseQuery(candidates, query, { aliases: sdk.config.courseAliases });
+  return { id: hit.id, title: hit.title, slug: hit.slug };
+}
+
+/** COURSE_NOT_FOUND → undefined (try the next source); COURSE_AMBIGUOUS and everything else propagate. */
+export function notFoundAsUndefined<T>(fn: () => T): T | undefined {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof ImstudiumError && e.code === "COURSE_NOT_FOUND") return undefined;
+    throw e;
   }
-  const course = matches[matches.length - 1]!; // newest enrollment wins
-  const title = String(course.attributes?.title ?? course.id);
-  return { id: course.id, title, slug: slugify(title) };
 }
 
 /** Courses of the focus semester — from the workspace when present, else live. */
@@ -101,16 +102,11 @@ export async function currentCourses(sdk: Sdk): Promise<CourseRef[]> {
 /**
  * A course of a loaded workspace by title fragment, shortcut, slug or id —
  * the offline resolver for commands that only make sense on synced courses
- * (extract, index, view, changes, search). Throws COURSE_NOT_FOUND.
+ * (extract, index, view, changes, search). Throws COURSE_NOT_FOUND or
+ * COURSE_AMBIGUOUS.
  */
 export function workspaceCourse(sdk: Pick<Sdk, "config">, ws: StudiumWorkspace, query: string): StudiumWorkspace["courses"][number] {
-  const hit = pickCourse(ws, query, sdk.config.courseAliases);
-  if (!hit) {
-    throw new ImstudiumError(`No course in the workspace matches "${query}"`, "COURSE_NOT_FOUND", 404, "Pass a title fragment, shortcut, slug or id", {
-      available: ws.courses.map((c) => c.title),
-    });
-  }
-  return hit;
+  return resolveWorkspaceCourse(ws, query, sdk.config.courseAliases);
 }
 
 /**

@@ -29,6 +29,7 @@ All notable changes to ImStudium.
 - The JSON error body gains `retryable` and `exitCode`.
 - Usage errors (unknown command, missing argument) exit 2 and, under `--json`, print the JSON error body instead of Commander's plain text.
 - MCP: every curated tool failure returns the error body with `isError: true` (was a successful text result).
+- **One course resolver, no guessing.** Every `[course]`/`--course` argument and the MCP course tools go through `resolveCourseQuery` (SDK; id, alias, course number, slug, title fragment; exact beats fragment). Several matches throw `COURSE_AMBIGUOUS` with `details.candidates` instead of silently taking the first; the only tie-breaks are "exactly one in the focus semester" and "the same title in several terms → newest". SDK: new `resolveCourseQuery`, `resolveWorkspaceCourse`; `pickCourse` is deprecated (now throws `COURSE_AMBIGUOUS` too).
 
 ### Fixed
 

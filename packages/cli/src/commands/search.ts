@@ -1,8 +1,9 @@
 import type { Command } from "commander";
-import { ImstudiumError, pickCourse, searchWorkspace, type SearchKind } from "@imstudium/sdk";
+import { ImstudiumError, resolveWorkspaceCourse, searchWorkspace, type SearchKind } from "@imstudium/sdk";
 import type { SearchOutput } from "@imstudium/contract";
 import { act, getSdk, output } from "../runtime.js";
 import { courseOption, limitOption, outputOption, parseLimit, workspaceDir } from "../kit/args.js";
+import { notFoundAsUndefined } from "../course-arg.js";
 
 const KINDS: SearchKind[] = ["material", "news", "forum", "courseware", "wiki", "note"];
 
@@ -30,7 +31,7 @@ export function registerSearch(program: Command): void {
         let course = opts.course?.replace(/\s+/g, "-");
         if (opts.course) {
           const ws = await sdk.studium.loadWorkspace(out);
-          const hit = ws ? pickCourse(ws, opts.course, sdk.config.courseAliases) : undefined;
+          const hit = ws ? notFoundAsUndefined(() => resolveWorkspaceCourse(ws, opts.course!, sdk.config.courseAliases)) : undefined;
           if (hit) course = hit.slug;
         }
         const hits = await searchWorkspace(out, query, {
