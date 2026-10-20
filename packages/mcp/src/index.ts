@@ -209,29 +209,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
       }
 
-      case "imstudium_sync": {
-        const course = (args as { course?: string })?.course;
-        const semOpts = { semesterId: sdk.config.semesterId };
-        const report = await sdk.sync.sync({
-          outputDir: workspacePath,
-          include: ["wiki", "news", "calendar"],
-          ...semOpts,
-          courseFilter: course
-            ? (c) => c.title.toLowerCase().includes(course.toLowerCase())
-            : undefined,
-        });
-        const workspace = await sdk.studium.build(workspacePath, sdk.config.instanceOrigin, semOpts);
-        return jsonText({
-          report,
-          workspaceSummary: {
-            courses: workspace.courses.length,
-            activeSemester: workspace.activeSemester,
-            workspaceFolder: workspace.workspaceFolder,
-            otherSemesters: workspace.otherSemesters,
-          },
-        });
-      }
-
       case "imstudium_sync_dry_run": {
         const course = (args as { course?: string })?.course;
         const semOpts = { semesterId: sdk.config.semesterId };

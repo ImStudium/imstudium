@@ -11,7 +11,7 @@ description: |
 
 0. `imstudium update` — upgrade CLI + refresh harness
 1. `imstudium_whoami` — auth OK?
-2. `imstudium_sync` or CLI `imstudium sync --quiet`
+2. CLI `imstudium sync --quiet` in a terminal (MCP has only `imstudium_sync_dry_run`)
 3. `studium_overview` — course list
 4. `studium_klausuren` — `nextDeadlines` top 3
 

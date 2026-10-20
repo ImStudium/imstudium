@@ -24,7 +24,7 @@ imstudium setup mcp
 | One course | `studium_course_brief` |
 | Find PDFs by filename | `studium_find_materials` |
 | **Read/see slide content** | `studium_read_material` |
-| Refresh | `imstudium_sync` |
+| Refresh | `imstudium_sync_dry_run` (preview); the sync itself runs in a terminal: `imstudium sync` |
 | Auth check | `imstudium_whoami` |
 
 ## Finding content (use YOUR search tools)
@@ -54,7 +54,7 @@ imstudium_whoami → studium_overview → studium_klausuren
   → studium_read_material → open the original for figures
 ```
 
-Prefer local tools before `imstudium_sync` (network + auth).
+Prefer local tools; a sync (network + auth) is a terminal step: `imstudium sync`.
 
 ## Visual comprehension (important)
 

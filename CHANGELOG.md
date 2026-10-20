@@ -4,6 +4,25 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-26
+
+"Semester start": the whole Stud.IP within reach of one CLI, with a workspace that knows what's new, what's due and which semester it is.
+
+### Security
+
+- **The MCP door parses like the CLI.** `imstudium` (MCP) resolves its arguments with the CLI's own Commander tree (option arity, aliases, `--x=y`, attached and combined short flags) and allows only read-only leaf commands. It refuses `--instance` and every option that writes or redirects (`-o/--output`, `--workspace`, `--dir`, `--ics`, `--save`, `--force`, `--write`, `-X/--method`, `-d/--data`) wherever it appears, plus `login`, `logout`, `setup`, `sync`, `semester start` and `files download`. Before, only the first two words were checked and `today --instance <url>` sent the session to that URL.
+- **A session only goes to the Stud.IP that issued it.** Sessions are stored with their origin (keychain account `session:<origin>`); the client refuses to attach the cookie or token to any other origin (`SESSION_ORIGIN_MISMATCH`, nothing is sent). Sessions saved by 0.1.x are moved once to the configured `instanceOrigin`.
+- **No session, no request.** Signed out, the client throws `AUTH_REQUIRED` before any network call (only public routes such as `discovery` go out).
+- **MCP tool `imstudium_sync` removed.** A full sync over MCP downloaded files and rewrote the workspace on an agent's say-so; it is a terminal step now (`imstudium sync`). `imstudium_sync_dry_run` stays.
+- **Session store order:** ImSicheren (when installed), then the OS keychain, then `~/.config/imstudium/session.json` (mode 0600). No plaintext copy is left next to a secure store.
+- **Credentials:** silent renewal never types credentials; it works only while the university IdP still remembers you.
+- **Read-only by default:** `imstudium api` refuses non-GET methods without `--write`, and the MCP door refuses `--write`, `--save` and every command outside its allowlist.
+- **Reads without side effects**
+  - Forum postings are read via `include` (`/forum-discussions/{id}/postings` would mark threads read).
+  - Courseware avoids `GET /courseware-structural-elements/{id}`, which stores your last-visited page.
+  - Reading messages never marks them read.
+- **Personal data:** messages are never written into the workspace; `people` counts students and never names them; `snapshots/studium.json` holds no titles, names or ids.
+
 ### Added
 
 - **`@imstudium/contract`** (new package, MIT): zod schemas for every documented `--json` output (`context`, `today`, `week`, `holidays`, `tasks`, `courseware`, `news`, `inbox`/`outbox`, `forum`, `search`, `changes`, `klausuren`, `semester`, `semester start`, `sync`), the error document, and the `imstudium/source/v1` feed shapes (discovery, item, page, ingest). The CLI and MCP type their payloads against it, so a drift fails the build.
@@ -13,34 +32,6 @@ All notable changes to ImStudium.
 - `SDK_VERSION` and the MCP server version are read from package.json instead of hard-coded strings.
 - **One error table** ([docs/ERRORS.md](docs/ERRORS.md), generated): every failure has a stable `code`, an exit code, a default hint and `retryable`. The CLI, the MCP server and the SDK all read it.
 - `IMSTUDIUM_SESSION_STORE=file` keeps the session in the 0600 file only (no keychain, no ImSicheren) — for tests, CI and headless machines.
-
-### Changed
-
-- **Consistent flags.** `-o, --output <dir>` is the workspace on every command that reads it (now also `today`, `week`, `stundenplan`, `setup mcp|migrate|all`; `--workspace` stays as a hidden alias there). `-n, --limit <n>` everywhere a list is cut (`news`, `inbox`, `outbox`, `forum`, `blubber`, `feed`, `search`, `catalog`, `api`; new on `changes` and `tasks`), and a bad value is an error instead of a silent default. `--course <name>` works on every course command, also those that take a `[course]` argument (`news`, `forum`, `blubber`, `courseware`, `tasks`, `wiki`, `people`, `sprechstunden`), and resolves shortcuts the same way everywhere (`changes --course nlp` now works).
-- `context --since <when>` replaces `--days <n>` (still accepted), and `context --offline` makes no Stud.IP call at all.
-- `watch --interval` uses the same duration grammar as `--since` (`30m`, `30min`, `1h`); bad input is an error (it silently became 1 h). `watch --json` prints one JSON line per round.
-- `--help` lists commands in the order of a student's day (start → today → what's new → material → workspace → API → setup).
-- Human output: every date is formatted in Europe/Berlin by one kit (task deadlines used the laptop's zone). `config show`, `status`, `courses show` and `discover` now print text without `--json` (they printed nothing). `courses show` resolves shortcuts like the other commands. `login --json` prints exactly one JSON document; sign-in prompts go to stderr.
-- Internals: `cli.ts` (1,234 lines) is now a 5-line entry point; commands live in `commands/*.ts`, assembled by `program.ts`.
-
-- **`@imstudium/sdk` exports a named, intentional surface** (121 runtime exports, was 311 via 38 `export *`). HTML/UI helpers (`escapeHtml`, `designSystemStyles`, login-helper pages), normalisers, cache and login plumbing are internal now. Everything the CLI and MCP use stays exported; a snapshot test pins the list. If you imported something that is gone, open an issue.
-- **Exit codes** follow the error table: 0 ok · 1 internal · 2 usage · 3 gated · 4 auth · 5 not found · 6 offline · 7 Stud.IP error · 8 workspace (was always 1).
-- **Error codes merged** (old code kept as `legacyCode` for one minor): `NO_SESSION`/`NOT_LOGGED_IN`/`SESSION_EXPIRED` → `AUTH_REQUIRED`; `NO_WORKSPACE`/`NO_COURSE_DIR`/`NOT_IN_WORKSPACE` → `WORKSPACE_MISSING`; `MISSING_ARG`/`INVALID_KEY` → `BAD_ARGS`; `NO_SEMESTER` → `SEMESTER_NOT_FOUND`; `NO_ROUTE(S)` → `ROUTE_NOT_FOUND`; `HTTP_ERROR`/`API_ERROR` → `UPSTREAM_ERROR` (HTTP 401 → `AUTH_REQUIRED`, 404 → `NOT_FOUND`). Stud.IP's own error code moves to `details.upstream.code`.
-- The JSON error body gains `retryable` and `exitCode`.
-- Usage errors (unknown command, missing argument) exit 2 and, under `--json`, print the JSON error body instead of Commander's plain text.
-- MCP: every curated tool failure returns the error body with `isError: true` (was a successful text result).
-- **One course resolver, no guessing.** Every `[course]`/`--course` argument and the MCP course tools go through `resolveCourseQuery` (SDK; id, alias, course number, slug, title fragment; exact beats fragment). Several matches throw `COURSE_AMBIGUOUS` with `details.candidates` instead of silently taking the first; the only tie-breaks are "exactly one in the focus semester" and "the same title in several terms → newest". SDK: new `resolveCourseQuery`, `resolveWorkspaceCourse`; `pickCourse` is deprecated (now throws `COURSE_AMBIGUOUS` too).
-
-### Fixed
-
-- `today --offline` and `week --offline` no longer ask Stud.IP for holidays; they use the cached list or none.
-
-## [0.2.0] — 2026-10-19
-
-"Semester start": the whole Stud.IP within reach of one CLI, with a workspace that knows what's new, what's due and which semester it is.
-
-### Added
-
 - **`imstudium context`** gives the whole study picture in one call: the semester and its week, today's dates, open Abgaben, Klausuren, new files, recent news and the next sensible command. It works from local files first; `--live` also counts unread messages.
 - **Semester lifecycle**
   - `imstudium semester` compares the term Stud.IP is in with your workspace.
@@ -81,6 +72,20 @@ All notable changes to ImStudium.
 
 ### Changed
 
+- **Consistent flags.** `-o, --output <dir>` is the workspace on every command that reads it (now also `today`, `week`, `stundenplan`, `setup mcp|migrate|all`; `--workspace` stays as a hidden alias there). `-n, --limit <n>` everywhere a list is cut (`news`, `inbox`, `outbox`, `forum`, `blubber`, `feed`, `search`, `catalog`, `api`; new on `changes` and `tasks`), and a bad value is an error instead of a silent default. `--course <name>` works on every course command, also those that take a `[course]` argument (`news`, `forum`, `blubber`, `courseware`, `tasks`, `wiki`, `people`, `sprechstunden`), and resolves shortcuts the same way everywhere (`changes --course nlp` now works).
+- `context --since <when>` replaces `--days <n>` (still accepted), and `context --offline` makes no Stud.IP call at all.
+- `watch --interval` uses the same duration grammar as `--since` (`30m`, `30min`, `1h`); bad input is an error (it silently became 1 h). `watch --json` prints one JSON line per round.
+- `--help` lists commands in the order of a student's day (start → today → what's new → material → workspace → API → setup).
+- Human output: every date is formatted in Europe/Berlin by one kit (task deadlines used the laptop's zone). `config show`, `status`, `courses show` and `discover` now print text without `--json` (they printed nothing). `courses show` resolves shortcuts like the other commands. `login --json` prints exactly one JSON document; sign-in prompts go to stderr.
+- Internals: `cli.ts` (1,234 lines) is now a 5-line entry point; commands live in `commands/*.ts`, assembled by `program.ts`.
+
+- **`@imstudium/sdk` exports a named, intentional surface** (121 runtime exports, was 311 via 38 `export *`). HTML/UI helpers (`escapeHtml`, `designSystemStyles`, login-helper pages), normalisers, cache and login plumbing are internal now. Everything the CLI and MCP use stays exported; a snapshot test pins the list. If you imported something that is gone, open an issue.
+- **Exit codes** follow the error table: 0 ok · 1 internal · 2 usage · 3 gated · 4 auth · 5 not found · 6 offline · 7 Stud.IP error · 8 workspace (was always 1).
+- **Error codes merged** (old code kept as `legacyCode` for one minor): `NO_SESSION`/`NOT_LOGGED_IN`/`SESSION_EXPIRED` → `AUTH_REQUIRED`; `NO_WORKSPACE`/`NO_COURSE_DIR`/`NOT_IN_WORKSPACE` → `WORKSPACE_MISSING`; `MISSING_ARG`/`INVALID_KEY` → `BAD_ARGS`; `NO_SEMESTER` → `SEMESTER_NOT_FOUND`; `NO_ROUTE(S)` → `ROUTE_NOT_FOUND`; `HTTP_ERROR`/`API_ERROR` → `UPSTREAM_ERROR` (HTTP 401 → `AUTH_REQUIRED`, 404 → `NOT_FOUND`). Stud.IP's own error code moves to `details.upstream.code`.
+- The JSON error body gains `retryable` and `exitCode`.
+- Usage errors (unknown command, missing argument) exit 2 and, under `--json`, print the JSON error body instead of Commander's plain text.
+- MCP: every curated tool failure returns the error body with `isError: true` (was a successful text result).
+- **One course resolver, no guessing.** Every `[course]`/`--course` argument and the MCP course tools go through `resolveCourseQuery` (SDK; id, alias, course number, slug, title fragment; exact beats fragment). Several matches throw `COURSE_AMBIGUOUS` with `details.candidates` instead of silently taking the first; the only tie-breaks are "exactly one in the focus semester" and "the same title in several terms → newest". SDK: new `resolveCourseQuery`, `resolveWorkspaceCourse`; `pickCourse` is deprecated (now throws `COURSE_AMBIGUOUS` too).
 - **Resilient client**
   - per-request timeouts (30 s JSON, 10 min downloads)
   - retries with backoff on network errors, 429 (honours `Retry-After`) and 5xx
@@ -116,6 +121,7 @@ All notable changes to ImStudium.
 
 ### Fixed
 
+- `today --offline` and `week --offline` no longer ask Stud.IP for holidays; they use the cached list or none.
 - Course schedules in `studium.json` were always empty. `/users/{id}/schedule` rejects `page[...]`, and a cycle's course is its `owner`.
 - Exam dates are now read from Stud.IP 6 course events (`categories`, `start`, `is-cancelled`). Courses whose name contains an exam word no longer flag every date.
 - The `curl | bash` installer failed when piped; its helpers are now inline.
@@ -123,17 +129,6 @@ All notable changes to ImStudium.
 - A login page returned instead of JSON is reported as `SESSION_EXPIRED`, not an opaque invalid response.
 - A failed silent renewal now waits 30 minutes before the next attempt instead of costing ~10 s on every command.
 - A denied OAuth consent no longer waits out the timeout.
-
-### Security
-
-- **Session store order:** ImSicheren (when installed), then the OS keychain, then `~/.config/imstudium/session.json` (mode 0600). No plaintext copy is left next to a secure store.
-- **Credentials:** silent renewal never types credentials; it works only while the university IdP still remembers you.
-- **Read-only by default:** `imstudium api` refuses non-GET methods without `--write`, and the MCP door refuses `--write`, `--save` and every command outside its allowlist.
-- **Reads without side effects**
-  - Forum postings are read via `include` (`/forum-discussions/{id}/postings` would mark threads read).
-  - Courseware avoids `GET /courseware-structural-elements/{id}`, which stores your last-visited page.
-  - Reading messages never marks them read.
-- **Personal data:** messages are never written into the workspace; `people` counts students and never names them; `snapshots/studium.json` holds no titles, names or ids.
 
 ## [0.1.3] — 2026-07-04
 

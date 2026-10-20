@@ -68,16 +68,6 @@ export const MCP_TOOLS = [
     },
   },
   {
-    name: "imstudium_sync",
-    description: "Refresh workspace from live Stud.IP (requires login). Full sync + rebuild.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        course: { type: "string", description: "Optional single course filter" },
-      },
-    },
-  },
-  {
     name: "imstudium_sync_dry_run",
     description: "Preview pending file downloads without downloading",
     inputSchema: {

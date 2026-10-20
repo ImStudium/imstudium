@@ -165,7 +165,7 @@ imstudium setup mcp     # writes the imstudium server where each harness reads i
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 | OpenCode | `~/.config/opencode/opencode.json` |
 
-It also writes `~/Studium/mcp.json`. The server's main tool is **`imstudium`**, a read-only door to every CLI command: `{"args": ["week", "--next"]}` returns the same JSON as `imstudium --json week --next`. It refuses anything that writes (`--write`, `--save`, `semester start`, `files download`, `login`, `setup`). The workspace tools `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium_find_materials`, `studium_read_material` and `imstudium_sync` stay available.
+It also writes `~/Studium/mcp.json`. The server's main tool is **`imstudium`**, a read-only door to every CLI command: `{"args": ["week", "--next"]}` returns the same JSON as `imstudium --json week --next`. It parses the arguments with the CLI's own command tree and refuses anything that writes or changes where the session goes (`--write`, `--save`, `-o/--output`, `--instance`, `semester start`, `files download`, `login`, `setup`). The workspace tools `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium_find_materials`, `studium_read_material` and `imstudium_sync_dry_run` stay available; syncing runs only in a terminal (`imstudium sync`).
 
 ## Privacy
 

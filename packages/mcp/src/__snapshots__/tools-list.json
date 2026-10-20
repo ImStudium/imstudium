@@ -1,0 +1,124 @@
+[
+  {
+    "name": "imstudium",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Command and arguments, e.g. [\"today\"] or [\"search\", \"Erwartungswert\", \"--archive\"]"
+        }
+      },
+      "required": [
+        "args"
+      ]
+    }
+  },
+  {
+    "name": "studium_overview",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "studium_klausuren",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "studium_course_brief",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "course": {
+          "type": "string",
+          "description": "Course title substring or id"
+        }
+      },
+      "required": [
+        "course"
+      ]
+    }
+  },
+  {
+    "name": "studium_find_materials",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "course": {
+          "type": "string",
+          "description": "Course title substring"
+        },
+        "query": {
+          "type": "string",
+          "description": "Filename search"
+        }
+      },
+      "required": [
+        "course"
+      ]
+    }
+  },
+  {
+    "name": "studium_read_material",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "course": {
+          "type": "string",
+          "description": "Course title substring"
+        },
+        "file": {
+          "type": "string",
+          "description": "Filename substring (e.g. 'vorlesung 3', 'klausur')"
+        },
+        "page": {
+          "type": "number",
+          "description": "Optional: only this page/slide (1-based)"
+        }
+      },
+      "required": [
+        "course",
+        "file"
+      ]
+    }
+  },
+  {
+    "name": "imstudium_sync_dry_run",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "course": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "name": "imstudium_list_courses",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "imstudium_whoami",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "studium_modules",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+]
