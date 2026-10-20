@@ -103,10 +103,11 @@ Paths:
 
 ### Architecture
 
-Bun workspaces, three packages:
+Bun workspaces, four packages:
 
 | Package | Owns |
 |---|---|
+| `packages/contract` (`@imstudium/contract`) | zod schemas for every CLI `--json` output, the error document and the `imstudium/source/v1` feed. Types only on hot paths; values (zod) load lazily |
 | `packages/sdk` (`@imstudium/sdk`) | Stud.IP client, auth, resources, sync, workspace writers, extraction, search. No Commander |
 | `packages/cli` (`@imstudium/cli`) | Commander commands, `--json` output, agent setup, bundled skills. No raw `fetch` to Stud.IP; everything goes through the SDK |
 | `packages/mcp` (`@imstudium/mcp`) | MCP server: tool definitions and the CLI door |
@@ -148,7 +149,7 @@ Bun workspaces, three packages:
 
 ### Conventions
 
-- Every CLI `--json` output carries `schemaVersion: "1"`. Errors are `ImstudiumError` with `code`, `message` and `hint`.
+- Every CLI `--json` output carries `schemaVersion: "1"` and matches its schema in `@imstudium/contract` (`imstudium schema <command>`). Type new payloads against the contract (`const payload: TodayOutput = …`); a new key is additive, a removed or retyped key is breaking. Errors are `ImstudiumError` with `code`, `message` and `hint`.
 - **Read-only by default.** New Stud.IP calls are GETs. Anything that writes goes behind `--write` and stays off the MCP allowlist. Check reads for side effects before using a route (see [docs/API.md](docs/API.md)):
   - `/forum-discussions/{id}/postings` marks threads read
   - `GET /courseware-structural-elements/{id}` stores the last-visited page
@@ -163,6 +164,7 @@ Bun workspaces, three packages:
 - **Synthetic fixtures only** (`packages/sdk/src/test/*-fixtures.ts`). Never put real course content, names, messages or grades in tests, docs, issues or commits.
 - `bun run validate` runs typecheck, build and tests, and must pass before you propose a change.
 - Build and check commands with `bun run build`, then `node packages/cli/dist/cli.js <command> --help`.
+- CLI integration tests use `packages/cli/src/test/harness.ts`: a synthetic workspace, a throwaway `HOME`, the file session store and a preload that fails every network call.
 - Never commit anything from `~/Studium`, `~/.config/imstudium` or `~/.local/share/imstudium`.
 
 User-facing changes go in [CHANGELOG.md](CHANGELOG.md), plus the README, [docs/](docs/) and the bundled skills when behaviour changes.

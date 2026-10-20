@@ -9,6 +9,7 @@ import {
   type ForumDiscussion,
   type NewsItem,
 } from "@imstudium/sdk";
+import type { ForumCourseOutput, ForumSaveOutput, ForumListOutput, MessagesOutput, NewsOutput } from "@imstudium/contract";
 import { act, getSdk, note, output } from "../runtime.js";
 import { meId } from "../me.js";
 import { currentCourses, resolveCourse, type CourseRef } from "../course-arg.js";
@@ -85,14 +86,15 @@ export function registerCommunication(program: Command): void {
         if (opts.global) {
           if (query) throw new ImstudiumError("--global lists Stud.IP-wide news; leave out the course", "BAD_ARGS");
           const news = await sdk.news.global({ since, limit });
-          output({ scope: "global", since: since?.toISOString() ?? null, count: news.length, news }, formatNews(news, { showCourse: true }));
+          const payload: NewsOutput = { scope: "global", since: since?.toISOString() ?? null, count: news.length, news };
+          output(payload, formatNews(news, { showCourse: true }));
           return;
         }
 
         const courses = query ? [await resolveCourse(sdk, query)] : await currentCourses(sdk);
         const fetched = await perCourse(courses, (c) => sdk.news.course(c.id, { courseTitle: c.title }), !!query);
 
-        const saved = [];
+        const saved: NonNullable<NewsOutput["saved"]> = [];
         if (opts.save) {
           for (const { course, value } of fetched) {
             if (!course.dir && !query) {
@@ -107,17 +109,15 @@ export function registerCommunication(program: Command): void {
 
         const all: NewsItem[] = fetched.flatMap((f) => f.value);
         const news = selectNews(all, { since, limit });
-        output(
-          {
-            scope: query ? "course" : "courses",
-            courses: fetched.map((f) => courseJson(f.course)),
-            since: since?.toISOString() ?? null,
-            count: news.length,
-            news,
-            ...(opts.save ? { saved } : {}),
-          },
-          formatNews(news, { showCourse: !query }),
-        );
+        const payload: NewsOutput = {
+          scope: query ? "course" : "courses",
+          courses: fetched.map((f) => courseJson(f.course)),
+          since: since?.toISOString() ?? null,
+          count: news.length,
+          news,
+          ...(opts.save ? { saved } : {}),
+        };
+        output(payload, formatNews(news, { showCourse: !query }));
       }),
     );
 
@@ -137,10 +137,8 @@ export function registerCommunication(program: Command): void {
           since,
           limit: intOpt(opts.limit, "limit", 20),
         });
-        output(
-          { box: "inbox", unreadOnly: !!opts.unread, since: since?.toISOString() ?? null, count: messages.length, messages },
-          formatMessages(messages) + (messages.length ? "\n\nRead one: imstudium message <id>" : ""),
-        );
+        const payload: MessagesOutput = { box: "inbox", unreadOnly: !!opts.unread, since: since?.toISOString() ?? null, count: messages.length, messages };
+        output(payload, formatMessages(messages) + (messages.length ? "\n\nRead one: imstudium message <id>" : ""));
       }),
     );
 
@@ -154,7 +152,8 @@ export function registerCommunication(program: Command): void {
         const sdk = await getSdk();
         const since = optionalSince(opts.since);
         const messages = await sdk.messages.outbox(await meId(sdk), { since, limit: intOpt(opts.limit, "limit", 20) });
-        output({ box: "outbox", since: since?.toISOString() ?? null, count: messages.length, messages }, formatMessages(messages));
+        const payload: MessagesOutput = { box: "outbox", since: since?.toISOString() ?? null, count: messages.length, messages };
+        output(payload, formatMessages(messages));
       }),
     );
 
@@ -192,7 +191,7 @@ export function registerCommunication(program: Command): void {
         const courses = query ? [await resolveCourse(sdk, query)] : await currentCourses(sdk);
 
         if (opts.save) {
-          const saved = [];
+          const saved: ForumSaveOutput["saved"] = [];
           for (const course of courses) {
             if (!course.dir && !query) {
               note(`not saved: ${course.title} is not in the workspace (run imstudium sync)`);
@@ -224,14 +223,16 @@ export function registerCommunication(program: Command): void {
           const header = value.available
             ? `${course.title} — forum: ${value.topics.length} topics, ${value.discussions.length} discussions${unread ? `, ${unread} unread postings` : ""}`
             : `${course.title} has no forum (or you cannot read it).`;
+          const payload: ForumCourseOutput = { course: courseJson(course), forum: { ...value, discussions } };
           output(
-            { course: courseJson(course), forum: { ...value, discussions } },
+            payload,
             value.available ? `${header}\n\n${formatDiscussions(discussions)}\n\nRead one: imstudium forum --discussion <id>` : header,
           );
           return;
         }
+        const payload: ForumListOutput = { courses: overviews.map((o) => ({ ...courseJson(o.course), available: o.value.available })), since: since?.toISOString() ?? null, count: discussions.length, discussions };
         output(
-          { courses: overviews.map((o) => ({ ...courseJson(o.course), available: o.value.available })), since: since?.toISOString() ?? null, count: discussions.length, discussions },
+          payload,
           formatDiscussions(discussions, { showCourse: true }),
         );
       }),

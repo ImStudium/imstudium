@@ -35,6 +35,7 @@ import {
   runGlobalUpdate,
 } from "./version.js";
 import { fileURLToPath } from "node:url";
+import type { KlausurenOutput, SyncOutput } from "@imstudium/contract";
 
 import { act, fail, getSdk, globalOpts, note, output, type GlobalOpts } from "./runtime.js";
 import { runSync, writeEchoSnapshot } from "./pipeline.js";
@@ -470,7 +471,8 @@ program
         const ws = await sdk.studium.loadWorkspace(dir);
         if (!ws) fail(new ImstudiumError("No workspace", "NO_WORKSPACE"));
         const exams: StudiumExamDate[] = ws.courses.flatMap((c) => c.examDates);
-        output({ exams, nextDeadlines: ws.nextDeadlines });
+        const payload: KlausurenOutput = { exams, nextDeadlines: ws.nextDeadlines };
+        output(payload);
       } else {
         const md = await readFile(join(dir, "klausuren.md"), "utf-8");
         output(md);
@@ -687,10 +689,9 @@ program
         ...(report.courseErrors ?? []).map((e) => `      ⚠ ${e.courseTitle}: ${e.message}`),
         result.changes.length ? "      What's new: imstudium changes · NEW.md" : "",
       ];
-      output(
-        { ...report, files: undefined, semesters: result.semesters, changes: result.changes, extracted: opts.extract ? result.extracted : undefined },
-        lines.filter(Boolean).join("\n"),
-      );
+      const { files: _files, ...counts } = report;
+      const payload: SyncOutput = { ...counts, semesters: result.semesters, changes: result.changes, extracted: opts.extract ? result.extracted : undefined };
+      output(payload, lines.filter(Boolean).join("\n"));
     } catch (e) {
       fail(e);
     }

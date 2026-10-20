@@ -52,7 +52,13 @@ export interface InteractiveLoginOptions {
   onMessage?: (text: string) => void;
 }
 
+/** IMSTUDIUM_SESSION_STORE=file: plain 0600 file only — no keychain, no ImSicheren (tests, CI, headless boxes). */
+function fileStoreOnly(): boolean {
+  return process.env.IMSTUDIUM_SESSION_STORE === "file";
+}
+
 async function getKeytar() {
+  if (fileStoreOnly()) return null;
   try {
     return await import("keytar");
   } catch {
@@ -68,7 +74,7 @@ type SecureContext = {
 
 /** ImSicheren is an optional peer: when installed it holds the session, nothing else does. */
 async function getSecureContext(): Promise<SecureContext | null> {
-  if (process.env.IMSTUDIUM_PLAIN_SESSION === "1") return null;
+  if (process.env.IMSTUDIUM_PLAIN_SESSION === "1" || fileStoreOnly()) return null;
   try {
     const mod = (await import(/* webpackIgnore: true */ "@imsicheren/sdk" as string)) as {
       createSecureContext: (o: { app: string; enforceAccessMode?: boolean }) => SecureContext;

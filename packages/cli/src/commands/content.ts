@@ -18,6 +18,7 @@ import {
   type CwTask,
   type CwUnit,
 } from "@imstudium/sdk";
+import type { CoursewareCourseOutput, CoursewareListOutput, TasksOutput } from "@imstudium/contract";
 import { act, getSdk, note, output, type Sdk } from "../runtime.js";
 import { currentCourses, resolveCourse, type CourseRef } from "../course-arg.js";
 
@@ -146,10 +147,8 @@ export function registerContent(program: Command): void {
             for (const u of value) lines.push(`  ${u.title}${u.visibleFrom && Date.parse(u.visibleFrom) > Date.now() ? ` (from ${formatLocalDate(u.visibleFrom)})` : ""}`);
           }
           if (withUnits.length) lines.push("", "Outline: imstudium courseware <course>   ·   Save: imstudium courseware <course> --save");
-          output(
-            { courses: rows.map(({ course, value }) => ({ id: course.id, title: course.title, units: value })), count: total },
-            lines.join("\n").trimEnd(),
-          );
+          const payload: CoursewareListOutput = { courses: rows.map(({ course, value }) => ({ id: course.id, title: course.title, units: value })), count: total };
+          output(payload, lines.join("\n").trimEnd());
           return;
         }
 
@@ -186,14 +185,12 @@ export function registerContent(program: Command): void {
         const open = tasks.filter((t) => t.status !== "submitted");
         if (tasks.length) lines.push(`Tasks: ${open.length} open of ${tasks.length}`, ...taskLines(open.slice(0, 5), false), "");
         if (units.length) lines.push(`Save as markdown: imstudium courseware "${courseQuery}" --save`);
-        output(
-          {
-            course: { id: course.id, title: course.title },
-            units: selected.map((u, i) => ({ ...u, elements: outlines[i]!.map((el) => elementJson(origin, course.id, u.id, el)) })),
-            tasks,
-          },
-          lines.join("\n").trimEnd(),
-        );
+        const payload: CoursewareCourseOutput = {
+          course: { id: course.id, title: course.title },
+          units: selected.map((u, i) => ({ ...u, elements: outlines[i]!.map((el) => elementJson(origin, course.id, u.id, el)) })),
+          tasks,
+        };
+        output(payload, lines.join("\n").trimEnd());
       }),
     );
 
@@ -222,7 +219,8 @@ export function registerContent(program: Command): void {
         const lines = shown.length
           ? [header, "", ...taskLines(shown, !courseQuery)]
           : [all.length ? `${header}\n\nNothing open.` : "No courseware tasks."];
-        output({ count: shown.length, open, overdue, tasks: shown }, lines.join("\n"));
+        const payload: TasksOutput = { count: shown.length, open, overdue, tasks: shown };
+        output(payload, lines.join("\n"));
       }),
     );
 

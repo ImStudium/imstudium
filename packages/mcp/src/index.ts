@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createSdk, expandPath, extractSlug, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, type StudiumWorkspace } from "@imstudium/sdk";
+import type { KlausurenOutput } from "@imstudium/contract";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { MCP_TOOLS } from "./tools.js";
@@ -71,7 +72,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const exams = ws.courses.flatMap((c) =>
           c.examDates.map((e) => ({ ...e, courseTitle: c.title })),
         );
-        return jsonText({ nextDeadlines: ws.nextDeadlines, exams });
+        const payload: KlausurenOutput = { nextDeadlines: ws.nextDeadlines, exams };
+        return jsonText(payload);
       }
 
       case "studium_modules": {

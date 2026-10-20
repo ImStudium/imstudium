@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { expandPath, pickCourse, searchWorkspace, type SearchKind } from "@imstudium/sdk";
+import type { SearchOutput } from "@imstudium/contract";
 import { act, getSdk, output } from "../runtime.js";
 
 const KINDS: SearchKind[] = ["material", "news", "forum", "courseware", "wiki", "note"];
@@ -40,10 +41,8 @@ export function registerSearch(program: Command): void {
               `    ${h.path}${h.page ? `  (page ${h.page})` : ""}`,
             ])
           : [`No hits for "${query}". Try fewer words, --archive, or imstudium sync --extract to index new files.`];
-        output(
-          { query, count: hits.length, hits: hits.map(({ text: _text, ...h }) => ({ ...h, score: Math.round(h.score * 100) / 100 })) },
-          lines.join("\n"),
-        );
+        const payload: SearchOutput = { query, count: hits.length, hits: hits.map(({ text: _text, ...h }) => ({ ...h, score: Math.round(h.score * 100) / 100 })) };
+        output(payload, lines.join("\n"));
       }),
     );
 }

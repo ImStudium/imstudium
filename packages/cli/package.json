@@ -40,6 +40,7 @@
     "prepublishOnly": "bun run build && bun run typecheck"
   },
   "dependencies": {
+    "@imstudium/contract": "^0.2.0",
     "@imstudium/sdk": "^0.2.0",
     "commander": "^13.1.0",
     "playwright": "^1.52.0"

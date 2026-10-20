@@ -4,6 +4,16 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+### Added
+
+- **`@imstudium/contract`** (new package, MIT): zod schemas for every documented `--json` output (`context`, `today`, `week`, `holidays`, `tasks`, `courseware`, `news`, `inbox`/`outbox`, `forum`, `search`, `changes`, `klausuren`, `semester`, `semester start`, `sync`), the error document, and the `imstudium/source/v1` feed shapes (discovery, item, page, ingest). The CLI and MCP type their payloads against it, so a drift fails the build.
+- **`imstudium schema [command]`** prints the JSON Schema of a command's `--json` output (`imstudium schema today`, `imstudium schema "semester start"`, `imstudium schema feed.FeedItem`); without an argument it lists them. The contract loads only for this command, so startup stays fast.
+- `IMSTUDIUM_SESSION_STORE=file` keeps the session in the 0600 file only (no keychain, no ImSicheren) — for tests, CI and headless machines.
+
+### Fixed
+
+- `today --offline` and `week --offline` no longer ask Stud.IP for holidays; they use the cached list or none.
+
 ## [0.2.0] — 2026-10-19
 
 "Semester start": the whole Stud.IP within reach of one CLI, with a workspace that knows what's new, what's due and which semester it is.

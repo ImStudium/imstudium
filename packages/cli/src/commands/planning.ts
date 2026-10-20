@@ -27,6 +27,7 @@ import {
   type TimetableOptions,
   type TimetableSources,
 } from "@imstudium/sdk";
+import type { HolidaysOutput, TodayOutput, WeekOutput } from "@imstudium/contract";
 import { act, getSdk, note, output, type Sdk } from "../runtime.js";
 import { meId } from "../me.js";
 import { currentCourses } from "../course-arg.js";
@@ -156,7 +157,7 @@ function sourceNote(tt: { source: string; stale: boolean; icsUpdatedAt: string |
   for (const w of tt.warnings) note(`Hinweis: ${w}`);
 }
 
-function timetableJson(tt: Timetable) {
+function timetableJson(tt: Timetable): WeekOutput {
   return {
     from: tt.from,
     to: tt.to,
@@ -204,7 +205,8 @@ export function registerPlanning(program: Command): void {
         if (next && (!today.entries.length || today.entries.every((e) => Date.parse(e.end) <= now.getTime()))) {
           lines.push("", `Als Nächstes: ${dayLabel(dateKey(new Date(next.start)))} ${formatEntry(next, now)}`);
         }
-        output({ ...timetableJson({ ...tt, to: day, days: [today] }), date: day, entries: today.entries, next }, lines.join("\n"));
+        const payload: TodayOutput = { ...timetableJson({ ...tt, to: day, days: [today] }), date: day, entries: today.entries, next };
+        output(payload, lines.join("\n"));
       }),
     );
 
@@ -350,7 +352,8 @@ export function registerPlanning(program: Command): void {
           ...holidays.map((h) => `${dayLabel(h.date)}${h.date.slice(0, 4)}  ${h.name}${h.official ? "" : " (kein Feiertag)"}`),
         ];
         if (!holidays.length) lines.push("Keine Feiertage im Zeitraum.");
-        output({ from, to, semester, holidays }, lines.join("\n"));
+        const payload: HolidaysOutput = { from, to, semester, holidays };
+        output(payload, lines.join("\n"));
       }),
     );
 }

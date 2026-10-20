@@ -11,6 +11,7 @@ import {
   semesterSlug,
   type SemesterResource,
 } from "@imstudium/sdk";
+import type { ChangesOutput, SemesterOutput, SemesterStartOutput } from "@imstudium/contract";
 import { act, getSdk, note, output } from "../runtime.js";
 import { readChanges, runSync } from "../pipeline.js";
 import { resetCourseCache } from "../course-arg.js";
@@ -62,15 +63,15 @@ export function registerSemester(program: Command): void {
               ? "→ Up to date. Daily: imstudium sync --extract"
               : "→ imstudium login && imstudium semester start",
         ];
-        output(
-          {
+        const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+        const payload: SemesterOutput = {
             current: now
               ? {
                   id: now.id,
-                  title: now.attributes?.title,
+                  title: String(now.attributes?.title ?? ""),
                   slug: nowSlug,
-                  start: now.attributes?.start,
-                  end: now.attributes?.end,
+                  start: str(now.attributes?.start),
+                  end: str(now.attributes?.end),
                   startOfLectures: lectures?.["start-of-lectures"],
                   endOfLectures: lectures?.["end-of-lectures"],
                   ...progress,
@@ -82,9 +83,8 @@ export function registerSemester(program: Command): void {
             archive,
             needsRollover,
             next: needsRollover ? "imstudium semester start" : ws ? "imstudium sync --extract" : "imstudium semester start",
-          },
-          lines.join("\n"),
-        );
+          };
+        output(payload, lines.join("\n"));
       }),
     );
 
@@ -119,8 +119,9 @@ export function registerSemester(program: Command): void {
 
         if (opts.dryRun) {
           const preview = await runSync(sdk, { out, semesterId: target.id, dryRun: true, onProgress: note });
+          const dry: SemesterStartOutput = { semester: { id: target.id, title, slug }, plan, downloads: preview.report.downloaded };
           output(
-            { semester: { id: target.id, title, slug }, plan, downloads: preview.report.downloaded },
+            dry,
             `Dry run: ${plan.moves.length} folder(s) to archive, ${preview.report.downloaded} file(s) to download.`,
           );
           return;
@@ -137,8 +138,10 @@ export function registerSemester(program: Command): void {
           onProgress: note,
         });
         const ws = result.workspace;
+        const { files: _files, ...report } = result.report;
+        const payload: SemesterStartOutput = { semester: { id: target.id, title, slug }, rollover: rolled, report, extracted: result.extracted };
         output(
-          { semester: { id: target.id, title, slug }, rollover: rolled, report: { ...result.report, files: undefined }, extracted: result.extracted },
+          payload,
           [
             `${title} ready in ${slug}/ — ${ws?.courses.length ?? 0} courses, ${result.report.downloaded} files downloaded${opts.extract ? `, ${result.extracted} extracted` : ""}.`,
             rolled.moved.length ? `Archived: ${rolled.moved.map((s) => `archive/${s}/`).join(", ")}` : "",
@@ -176,7 +179,8 @@ export function registerSemester(program: Command): void {
                 `${new Date(c.at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Berlin" })}  ${c.change === "new" ? "new    " : "updated"}  ${(c.courseTitle ?? "").slice(0, 34).padEnd(34)}  ${c.name ?? c.path}`,
             )
           : [`Nothing new since ${new Date(since).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}. Run imstudium sync to check Stud.IP.`];
-        output({ since: new Date(since).toISOString(), count: changes.length, changes }, lines.join("\n"));
+        const payload: ChangesOutput = { since: new Date(since).toISOString(), count: changes.length, changes };
+        output(payload, lines.join("\n"));
       }),
     );
 }

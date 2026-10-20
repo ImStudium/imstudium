@@ -9,6 +9,7 @@ import { registerPlanning } from "./planning.js";
 import { registerCatalog } from "./catalog.js";
 import { registerPeople } from "./people.js";
 import { registerSprechstunden } from "./sprechstunden.js";
+import { registerSchema } from "./schema.js";
 
 /**
  * Command modules. Each file owns one area of Stud.IP and registers its
@@ -25,4 +26,5 @@ export function registerCommands(program: Command): void {
   registerCatalog(program);
   registerPeople(program);
   registerSprechstunden(program);
+  registerSchema(program);
 }

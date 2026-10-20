@@ -10,10 +10,9 @@ import {
   listArchivedSemesters,
   parseFrontmatter,
   semesterSlug,
-  type CourseDate,
-  type CwTask,
   type StudiumWorkspace,
 } from "@imstudium/sdk";
+import type { ContextOutput } from "@imstudium/contract";
 import { act, getSdk, globalOpts, output, type Sdk } from "../runtime.js";
 import { readChanges, readTasks } from "../pipeline.js";
 import { formatEntry, icsPath, timetableSources, workspaceCourses } from "./planning.js";
@@ -33,23 +32,8 @@ interface NewsLine {
   path: string;
 }
 
-interface ContextReport {
-  generatedAt: string;
-  semester: {
-    studip: { title: string; slug: string; week?: number } | null;
-    workspace: { title: string; folder: string; courses: number } | null;
-    rolloverNeeded: boolean;
-    archive: number;
-  };
-  lastSync: string | null;
-  today: { date: string; source: string; entries: CourseDate[]; next: CourseDate | null } | null;
-  tasks: Array<Pick<CwTask, "title" | "courseTitle" | "deadline" | "daysLeft" | "status" | "url">>;
-  exams: Array<{ course: string; title: string; date?: string; daysRemaining?: number; confirmed: boolean }>;
-  newFiles: Array<{ at: string; course?: string; name?: string; path: string; change: string }>;
-  news: NewsLine[];
-  unreadMessages: number | null;
-  next: string[];
-}
+/** The payload is the contract: drift fails tsc, not an agent. */
+type ContextReport = ContextOutput;
 
 async function recentNews(out: string, ws: StudiumWorkspace | null, sinceMs: number): Promise<NewsLine[]> {
   if (!ws) return [];

@@ -8,9 +8,23 @@ import { paths } from "./config.js";
  * holidays). Fresh copy within `ttlMs`; a stale copy still answers when the
  * network fails. Never used for anything personal.
  */
+function cacheFile(key: string): string {
+  return join(paths.dataDir, "cache", `${createHash("sha256").update(key).digest("hex").slice(0, 24)}.json`);
+}
+
+/** The cached value however old it is, or null — never touches the network (`--offline`). */
+export async function peekCachedJson<T>(key: string): Promise<T | null> {
+  if (process.env.IMSTUDIUM_NO_CACHE === "1") return null;
+  try {
+    return (JSON.parse(await readFile(cacheFile(key), "utf-8")) as { value: T }).value;
+  } catch {
+    return null;
+  }
+}
+
 export async function cachedJson<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
   if (process.env.IMSTUDIUM_NO_CACHE === "1") return load();
-  const file = join(paths.dataDir, "cache", `${createHash("sha256").update(key).digest("hex").slice(0, 24)}.json`);
+  const file = cacheFile(key);
   let stale: { at: number; value: T } | null = null;
   try {
     stale = JSON.parse(await readFile(file, "utf-8")) as { at: number; value: T };

@@ -435,7 +435,7 @@ export async function buildTimetable(sources: TimetableSources, options: Timetab
   const holidaysP: Promise<Holiday[]> =
     options.holidays === false
       ? Promise.resolve([])
-      : sources.planning.holidays(options.from, options.to).catch(() => {
+      : sources.planning.holidays(options.from, options.to, { offline: options.offline }).catch(() => {
           warnings.push("holidays unavailable");
           return [];
         });

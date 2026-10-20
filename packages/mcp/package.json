@@ -38,9 +38,10 @@
     "prepublishOnly": "bun run build && bun run typecheck"
   },
   "dependencies": {
+    "@imstudium/cli": "^0.2.0",
+    "@imstudium/contract": "^0.2.0",
     "@imstudium/sdk": "^0.2.0",
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "@imstudium/cli": "^0.2.0"
+    "@modelcontextprotocol/sdk": "^1.12.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",

@@ -29,6 +29,11 @@ jobs:
       - name: Validate
         run: bun run validate
 
+      - name: Publish contract
+        run: cd packages/contract && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish SDK
         run: cd packages/sdk && npm publish --access public
         env:
