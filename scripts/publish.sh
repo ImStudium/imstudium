@@ -7,15 +7,16 @@ source "$(dirname "$0")/lib/common.sh"
 
 ensure_bun
 
-log "Building..."
-bun run build
+log "Validating..."
+bun run validate
+bun run docs:check
 
+version=$(node -p "require('./packages/cli/package.json').version")
 echo ""
-echo "Ready to publish to npm org @imstudium (publish SDK first):"
-echo "  bun run validate"
-echo "  cd packages/sdk && npm publish --access public"
-echo "  cd packages/mcp && npm publish --access public"
-echo "  cd packages/cli && npm publish --access public"
+echo "Releases publish from CI only (npm trusted publishing, provenance, no token)."
+echo "Order: $(bun scripts/release-order.ts | tr '\n' ' ')"
 echo ""
-echo "Requires: npm login + membership in the imstudium org"
+echo "  git tag v$version && git push origin v$version"
+echo ""
+echo "→ .github/workflows/release.yml (see CONTRIBUTING.md)"
 echo ""

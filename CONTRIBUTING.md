@@ -43,12 +43,12 @@ Do not commit session files or cookies.
 
 ## Release (maintainers)
 
+Releases publish from CI only, with npm trusted publishing (OIDC, no token) and provenance. Every package on npmjs.com trusts `ImStudium/imstudium`, workflow `release.yml`.
+
 ```bash
-bun run validate
-bun run build
-cd packages/sdk && bun publish --access public
-cd packages/cli && bun publish --access public
-cd packages/mcp && bun publish --access public
-git tag vX.Y.Z && git push origin vX.Y.Z
-gh release create vX.Y.Z --generate-notes
+bun run validate && bun run docs:check
+# all four packages carry the same version X.Y.Z; CHANGELOG has ## [X.Y.Z]
+git tag vX.Y.Z && git push origin vX.Y.Z   # → .github/workflows/release.yml
 ```
+
+The workflow publishes in dependency order — contract → sdk → cli → mcp (`bun scripts/release-order.ts`; `scripts/release-order.test.ts` pins it) — and fails unless npm shows a provenance attestation for each package. Bun is pinned to 1.4.2 (`packageManager`, CI, release).

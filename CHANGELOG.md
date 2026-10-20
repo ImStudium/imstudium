@@ -14,6 +14,7 @@ All notable changes to ImStudium.
 - **A session only goes to the Stud.IP that issued it.** Sessions are stored with their origin (keychain account `session:<origin>`); the client refuses to attach the cookie or token to any other origin (`SESSION_ORIGIN_MISMATCH`, nothing is sent). Sessions saved by 0.1.x are moved once to the configured `instanceOrigin`.
 - **No session, no request.** Signed out, the client throws `AUTH_REQUIRED` before any network call (only public routes such as `discovery` go out).
 - **MCP tool `imstudium_sync` removed.** A full sync over MCP downloaded files and rewrote the workspace on an agent's say-so; it is a terminal step now (`imstudium sync`). `imstudium_sync_dry_run` stays.
+- **Releases with provenance, no npm token.** Tags `v*` publish from `.github/workflows/release.yml` through npm trusted publishing (OIDC) in dependency order contract → sdk → cli → mcp; the job fails unless npm shows a provenance attestation for each package. The token-based `publish.yml` is gone.
 - **Session store order:** ImSicheren (when installed), then the OS keychain, then `~/.config/imstudium/session.json` (mode 0600). No plaintext copy is left next to a secure store.
 - **Credentials:** silent renewal never types credentials; it works only while the university IdP still remembers you.
 - **Read-only by default:** `imstudium api` refuses non-GET methods without `--write`, and the MCP door refuses `--write`, `--save` and every command outside its allowlist.

@@ -1,0 +1,71 @@
+name: Release
+
+# Tag vX.Y.Z on main → publish @imstudium/{contract,sdk,cli,mcp} with npm
+# trusted publishing (OIDC). There is no npm token anywhere: each package on
+# npmjs.com trusts this repository and this workflow file (release.yml).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      # Trusted publishing needs npm >= 11.5.1 (Node 24 ships 11.x; make sure).
+      # No registry-url: setup-node would export a placeholder NODE_AUTH_TOKEN;
+      # the registry comes from each package's publishConfig.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: npm >= 11.5.1
+        run: |
+          npm install -g npm@^11.5.1
+          npm --version
+
+      - name: Tag matches every package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for p in contract sdk cli mcp; do
+            v=$(node -p "require('./packages/$p/package.json').version")
+            if [ "$v" != "$tag" ]; then echo "packages/$p is $v, tag is $GITHUB_REF_NAME" >&2; exit 1; fi
+          done
+          echo "VERSION=$tag" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate
+        run: bun run validate
+
+      - name: Generated docs are current
+        run: bun run docs:check
+
+      # Order = topological order of the internal dependencies
+      # (scripts/release-order.test.ts keeps these steps in that order).
+      - name: Publish contract
+        run: bash scripts/release-publish.sh contract
+
+      - name: Publish sdk
+        run: bash scripts/release-publish.sh sdk
+
+      - name: Publish cli
+        run: bash scripts/release-publish.sh cli
+
+      - name: Publish mcp
+        run: bash scripts/release-publish.sh mcp
