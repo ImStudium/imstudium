@@ -1,4 +1,5 @@
 import {
+  expandPath,
   ImstudiumError,
   pickCourse,
   resolveCourseDir,
@@ -95,6 +96,53 @@ export async function currentCourses(sdk: Sdk): Promise<CourseRef[]> {
     const title = String(c.attributes?.title ?? c.id);
     return { id: c.id, title, slug: slugify(title) };
   });
+}
+
+/**
+ * A course of a loaded workspace by title fragment, shortcut, slug or id —
+ * the offline resolver for commands that only make sense on synced courses
+ * (extract, index, view, changes, search). Throws COURSE_NOT_FOUND.
+ */
+export function workspaceCourse(sdk: Pick<Sdk, "config">, ws: StudiumWorkspace, query: string): StudiumWorkspace["courses"][number] {
+  const hit = pickCourse(ws, query, sdk.config.courseAliases);
+  if (!hit) {
+    throw new ImstudiumError(`No course in the workspace matches "${query}"`, "COURSE_NOT_FOUND", 404, "Pass a title fragment, shortcut, slug or id", {
+      available: ws.courses.map((c) => c.title),
+    });
+  }
+  return hit;
+}
+
+/**
+ * Run `fn` for each course in parallel. With `strict` (one course the
+ * student named) errors surface; otherwise a course that fails (no access,
+ * tool disabled) is noted on stderr and skipped.
+ */
+export async function perCourse<T>(
+  courses: CourseRef[],
+  fn: (c: CourseRef) => Promise<T>,
+  options: { strict?: boolean; onSkip?: (course: CourseRef, message: string) => void } = {},
+): Promise<Array<{ course: CourseRef; value: T }>> {
+  if (options.strict) return Promise.all(courses.map(async (course) => ({ course, value: await fn(course) })));
+  const settled = await Promise.allSettled(courses.map(async (course) => ({ course, value: await fn(course) })));
+  const out: Array<{ course: CourseRef; value: T }> = [];
+  settled.forEach((s, i) => {
+    if (s.status === "fulfilled") out.push(s.value);
+    else options.onSkip?.(courses[i]!, s.reason instanceof Error ? s.reason.message : String(s.reason));
+  });
+  return out;
+}
+
+/** The course's workspace folder, or WORKSPACE_MISSING (for --save). `override` (-o) wins. */
+export function courseDir(course: CourseRef, workspacePath: string, override?: string): string {
+  if (override) return expandPath(override);
+  if (course.dir) return course.dir;
+  throw new ImstudiumError(
+    `${course.title} is not in your workspace yet`,
+    "WORKSPACE_MISSING",
+    undefined,
+    `Run imstudium sync first, or pass -o <course folder> (workspace: ${workspacePath})`,
+  );
 }
 
 /** Forget the cached workspace (after a sync rewrote studium.json). */

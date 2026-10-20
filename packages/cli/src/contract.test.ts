@@ -32,6 +32,28 @@ describe("CLI --json matches @imstudium/contract (offline, synthetic)", () => {
     expect(out.count).toBe(1);
   });
 
+  it("changes --course resolves like every other command, -n limits", () => {
+    const out = expectContract("changes", ["changes", "--course", "statistik", "-n", "5"]);
+    expect(out.count).toBe(1);
+    expect(expectContract("changes", ["changes", "-n", "1"]).count).toBe(1);
+    const bad = runCli(fx, ["--json", "changes", "--course", "nope"]);
+    expect(bad.status).toBe(5);
+    expect(JSON.parse(bad.stderr).error.code).toBe("COURSE_NOT_FOUND");
+  });
+
+  it("context --offline stays local", () => {
+    const out = expectContract("context", ["context", "--offline", "--since", "2w"]);
+    expect((out.semester as { workspace: { courses: number } }).workspace.courses).toBe(2);
+    expect((out.tasks as unknown[]).length).toBe(1);
+    expect((out.newFiles as unknown[]).length).toBe(2);
+  });
+
+  it("a bad --limit is a usage error (exit 2), never a silent default", () => {
+    const r = runCli(fx, ["--json", "search", "x", "--limit", "abc"]);
+    expect(r.status).toBe(2);
+    expect(JSON.parse(r.stderr).error.code).toBe("BAD_ARGS");
+  });
+
   it("klausuren", () => {
     expectContract("klausuren", ["klausuren"]);
   });

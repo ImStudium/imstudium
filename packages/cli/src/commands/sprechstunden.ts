@@ -10,6 +10,7 @@ import {
   type CoursePerson,
 } from "@imstudium/sdk";
 import { act, getSdk, note, output, type Sdk } from "../runtime.js";
+import { courseOption } from "../kit/args.js";
 import { currentCourses, resolveCourse } from "../course-arg.js";
 
 interface Owner {
@@ -59,10 +60,12 @@ export function registerSprechstunden(program: Command): void {
     .alias("consultations")
     .description("Upcoming office hours (Sprechstunden) of your lecturers — read-only, booking stays in Stud.IP")
     .argument("[query]", "Course (title/slug/number/id) or lecturer name; default: all current courses")
+    .addOption(courseOption("Same as the [query] argument, for a course"))
     .option("--expired", "Include past blocks")
     .option("--slots", "List every free slot time")
     .action(
-      act(async (query: string | undefined, opts: { expired?: boolean; slots?: boolean }) => {
+      act(async (positional: string | undefined, opts: { course?: string; expired?: boolean; slots?: boolean }) => {
+        const query = opts.course ?? positional;
         const sdk = await getSdk();
         const now = Date.now();
         const owners = new Map<string, Owner>();

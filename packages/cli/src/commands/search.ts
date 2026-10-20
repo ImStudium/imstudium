@@ -1,7 +1,8 @@
 import type { Command } from "commander";
-import { expandPath, pickCourse, searchWorkspace, type SearchKind } from "@imstudium/sdk";
+import { ImstudiumError, pickCourse, searchWorkspace, type SearchKind } from "@imstudium/sdk";
 import type { SearchOutput } from "@imstudium/contract";
 import { act, getSdk, output } from "../runtime.js";
+import { courseOption, limitOption, outputOption, parseLimit, workspaceDir } from "../kit/args.js";
 
 const KINDS: SearchKind[] = ["material", "news", "forum", "courseware", "wiki", "note"];
 
@@ -10,17 +11,21 @@ export function registerSearch(program: Command): void {
     .command("search")
     .description("Ranked search across slides, scripts, news, forum, courseware and wiki — offline")
     .argument("<query...>", "Words to find (umlauts optional: Ubung finds Übung)")
-    .option("--course <name>", "Only one course (folder or title fragment)")
+    .addOption(courseOption("Only one course (shortcut, title fragment, slug or folder name)"))
     .option("--kind <kinds>", `Comma-separated: ${KINDS.join(",")}`)
     .option("--archive", "Also search past semesters (archive/)")
-    .option("-n, --limit <n>", "Results", "10")
-    .option("-o, --output <dir>", "Workspace directory")
+    .addOption(limitOption(10, "Results"))
+    .addOption(outputOption())
     .action(
-      act(async (words: string[], opts: { course?: string; kind?: string; archive?: boolean; limit: string; output?: string }) => {
+      act(async (words: string[], opts: { course?: string; kind?: string; archive?: boolean; limit?: string; output?: string }) => {
         const sdk = await getSdk();
-        const out = expandPath(opts.output || sdk.workspacePath);
+        const out = workspaceDir(sdk, opts);
         const query = words.join(" ");
-        const kinds = opts.kind?.split(",").map((k) => k.trim()).filter((k): k is SearchKind => KINDS.includes(k as SearchKind));
+        const limit = parseLimit(opts.limit, 10);
+        const kindList = opts.kind?.split(",").map((k) => k.trim()).filter(Boolean);
+        const badKinds = kindList?.filter((k) => !KINDS.includes(k as SearchKind)) ?? [];
+        if (badKinds.length) throw new ImstudiumError(`Unknown --kind: ${badKinds.join(", ")}`, "BAD_ARGS", undefined, `Choose from: ${KINDS.join(",")}`);
+        const kinds = kindList as SearchKind[] | undefined;
         // "nlp", a title fragment or a slug → the course folder name
         let course = opts.course?.replace(/\s+/g, "-");
         if (opts.course) {
@@ -29,7 +34,7 @@ export function registerSearch(program: Command): void {
           if (hit) course = hit.slug;
         }
         const hits = await searchWorkspace(out, query, {
-          limit: Number(opts.limit) || 10,
+          limit,
           course,
           kinds,
           includeArchive: opts.archive,

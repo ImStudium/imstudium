@@ -12,8 +12,8 @@ import {
 import type { ForumCourseOutput, ForumSaveOutput, ForumListOutput, MessagesOutput, NewsOutput } from "@imstudium/contract";
 import { act, getSdk, note, output } from "../runtime.js";
 import { meId } from "../me.js";
-import { currentCourses, resolveCourse, type CourseRef } from "../course-arg.js";
-import { optionalSince, parseSince } from "../since.js";
+import { courseDir, currentCourses, perCourse as runPerCourse, resolveCourse, type CourseRef } from "../course-arg.js";
+import { courseArg, courseOption, limitOption, optionalSince, parseLimit, parseSince, sinceOption } from "../kit/args.js";
 import {
   formatActivities,
   formatBlubberComments,
@@ -25,44 +25,9 @@ import {
   formatThread,
 } from "./communication-format.js";
 
-function intOpt(value: string | undefined, flag: string, fallback?: number): number | undefined {
-  if (value === undefined) return fallback;
-  const n = Number(value);
-  if (!Number.isInteger(n) || n <= 0) {
-    throw new ImstudiumError(`--${flag} expects a positive whole number, got "${value}"`, "BAD_ARGS");
-  }
-  return n;
-}
-
-function requireDir(course: CourseRef): string {
-  if (!course.dir) {
-    throw new ImstudiumError(
-      `"${course.title}" is not in your Studium workspace yet`,
-      "WORKSPACE_MISSING",
-      undefined,
-      "Run imstudium sync (or init) first, then --save writes into the course folder.",
-    );
-  }
-  return course.dir;
-}
-
-/**
- * Run `fn` per course. With `strict` (one course the student named) errors surface;
- * otherwise a course that fails (no access, no forum) is noted and skipped.
- */
-async function perCourse<T>(
-  courses: CourseRef[],
-  fn: (c: CourseRef) => Promise<T>,
-  strict = false,
-): Promise<Array<{ course: CourseRef; value: T }>> {
-  if (strict) return Promise.all(courses.map(async (course) => ({ course, value: await fn(course) })));
-  const settled = await Promise.allSettled(courses.map(async (course) => ({ course, value: await fn(course) })));
-  const out: Array<{ course: CourseRef; value: T }> = [];
-  settled.forEach((s, i) => {
-    if (s.status === "fulfilled") out.push(s.value);
-    else note(`skipped ${courses[i]!.title}: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`);
-  });
-  return out;
+/** Errors of a named course surface; with several courses a failing one is skipped with a note. */
+function perCourse<T>(courses: CourseRef[], fn: (c: CourseRef) => Promise<T>, strict: boolean) {
+  return runPerCourse(courses, fn, { strict, onSkip: (c, msg) => note(`skipped ${c.title}: ${msg}`) });
 }
 
 const courseJson = (c: CourseRef) => ({ id: c.id, title: c.title, dir: c.dir ?? null });
@@ -73,15 +38,17 @@ export function registerCommunication(program: Command): void {
     .command("news")
     .description("Announcements: one course, or all current courses merged newest-first")
     .argument("[course]", "Course title fragment, slug or id (default: all current courses)")
-    .option("--since <when>", "Only since 7d, 24h, 2w, today or a date like 2026-10-01")
+    .addOption(courseOption("Same as the [course] argument"))
+    .addOption(sinceOption())
     .option("--global", "Stud.IP-wide announcements instead of course news")
-    .option("--limit <n>", "Newest N (default 30)")
+    .addOption(limitOption(30))
     .option("--save", "Write news/<date>-<title>.md + news/README.md into the course folder(s)")
     .action(
-      act(async (query: string | undefined, opts: { since?: string; global?: boolean; limit?: string; save?: boolean }) => {
+      act(async (positional: string | undefined, opts: { course?: string; since?: string; global?: boolean; limit?: string; save?: boolean }) => {
+        const query = courseArg(positional, opts);
         const sdk = await getSdk();
         const since = optionalSince(opts.since);
-        const limit = intOpt(opts.limit, "limit", 30);
+        const limit = parseLimit(opts.limit, 30);
 
         if (opts.global) {
           if (query) throw new ImstudiumError("--global lists Stud.IP-wide news; leave out the course", "BAD_ARGS");
@@ -101,7 +68,7 @@ export function registerCommunication(program: Command): void {
               note(`not saved: ${course.title} is not in the workspace (run imstudium sync)`);
               continue;
             }
-            const res = await writeNewsMarkdown(join(requireDir(course), "news"), value, { courseTitle: course.title });
+            const res = await writeNewsMarkdown(join(courseDir(course, sdk.workspacePath), "news"), value, { courseTitle: course.title });
             saved.push({ course: courseJson(course), ...res });
             note(`${course.title}: ${res.written} written, ${res.unchanged} unchanged → ${res.dir}`);
           }
@@ -126,8 +93,8 @@ export function registerCommunication(program: Command): void {
     .command("inbox")
     .description("Your Stud.IP messages, newest first (reading never marks them read)")
     .option("--unread", "Only unread messages")
-    .option("--since <when>", "Only since 7d, 24h, today or a date")
-    .option("--limit <n>", "Newest N (default 20)")
+    .addOption(sinceOption())
+    .addOption(limitOption(20))
     .action(
       act(async (opts: { unread?: boolean; since?: string; limit?: string }) => {
         const sdk = await getSdk();
@@ -135,7 +102,7 @@ export function registerCommunication(program: Command): void {
         const messages = await sdk.messages.inbox(await meId(sdk), {
           unread: opts.unread,
           since,
-          limit: intOpt(opts.limit, "limit", 20),
+          limit: parseLimit(opts.limit, 20),
         });
         const payload: MessagesOutput = { box: "inbox", unreadOnly: !!opts.unread, since: since?.toISOString() ?? null, count: messages.length, messages };
         output(payload, formatMessages(messages) + (messages.length ? "\n\nRead one: imstudium message <id>" : ""));
@@ -145,13 +112,13 @@ export function registerCommunication(program: Command): void {
   program
     .command("outbox")
     .description("Messages you sent, newest first")
-    .option("--since <when>", "Only since 7d, 24h, today or a date")
-    .option("--limit <n>", "Newest N (default 20)")
+    .addOption(sinceOption())
+    .addOption(limitOption(20))
     .action(
       act(async (opts: { since?: string; limit?: string }) => {
         const sdk = await getSdk();
         const since = optionalSince(opts.since);
-        const messages = await sdk.messages.outbox(await meId(sdk), { since, limit: intOpt(opts.limit, "limit", 20) });
+        const messages = await sdk.messages.outbox(await meId(sdk), { since, limit: parseLimit(opts.limit, 20) });
         const payload: MessagesOutput = { box: "outbox", since: since?.toISOString() ?? null, count: messages.length, messages };
         output(payload, formatMessages(messages));
       }),
@@ -174,12 +141,14 @@ export function registerCommunication(program: Command): void {
     .command("forum")
     .description("Course forum: discussions newest activity first, one thread, or --save as markdown")
     .argument("[course]", "Course (default: recent discussions of all current courses)")
+    .addOption(courseOption("Same as the [course] argument"))
     .option("--discussion <id>", "Show one discussion with all postings")
-    .option("--since <when>", "Only discussions active since 7d, today or a date")
-    .option("--limit <n>", "Newest N discussions (default 30)")
+    .addOption(sinceOption("Only discussions active since 24h, 7d, today or a date"))
+    .addOption(limitOption(30, "Newest N discussions"))
     .option("--save", "Write forum/<topic>/<discussion>.md + forum/README.md into the course folder(s)")
     .action(
-      act(async (query: string | undefined, opts: { discussion?: string; since?: string; limit?: string; save?: boolean }) => {
+      act(async (positional: string | undefined, opts: { course?: string; discussion?: string; since?: string; limit?: string; save?: boolean }) => {
+        const query = courseArg(positional, opts);
         const sdk = await getSdk();
         if (opts.discussion) {
           const thread = await sdk.forum.thread(opts.discussion);
@@ -187,7 +156,7 @@ export function registerCommunication(program: Command): void {
           return;
         }
         const since = optionalSince(opts.since);
-        const limit = intOpt(opts.limit, "limit", 30);
+        const limit = parseLimit(opts.limit, 30);
         const courses = query ? [await resolveCourse(sdk, query)] : await currentCourses(sdk);
 
         if (opts.save) {
@@ -197,7 +166,7 @@ export function registerCommunication(program: Command): void {
               note(`not saved: ${course.title} is not in the workspace (run imstudium sync)`);
               continue;
             }
-            const res = await sdk.forum.exportCourseForum(course.id, join(requireDir(course), "forum"), {
+            const res = await sdk.forum.exportCourseForum(course.id, join(courseDir(course, sdk.workspacePath), "forum"), {
               courseTitle: course.title,
             });
             saved.push({ course: courseJson(course), ...res });
@@ -243,17 +212,19 @@ export function registerCommunication(program: Command): void {
     .command("blubber")
     .description("Blubber chats: a course's threads with latest comments, or your stream")
     .argument("[course]", "Course (default: your Blubber stream)")
+    .addOption(courseOption("Same as the [course] argument"))
     .option("--thread <id>", "Show the latest comments of one thread")
-    .option("--since <when>", "Only since 7d, today or a date")
-    .option("--limit <n>", "Threads (stream) or comments per thread (default 10)")
+    .addOption(sinceOption())
+    .addOption(limitOption(10, "Threads (stream) or comments per thread"))
     .action(
-      act(async (query: string | undefined, opts: { thread?: string; since?: string; limit?: string }) => {
+      act(async (positional: string | undefined, opts: { course?: string; thread?: string; since?: string; limit?: string }) => {
+        const query = courseArg(positional, opts);
         const sdk = await getSdk();
         const since = optionalSince(opts.since);
-        const limit = intOpt(opts.limit, "limit", 10);
+        const limit = parseLimit(opts.limit, 10);
 
         if (opts.thread) {
-          const comments = await sdk.blubber.comments(opts.thread, { limit: intOpt(opts.limit, "limit", 30), since });
+          const comments = await sdk.blubber.comments(opts.thread, { limit: parseLimit(opts.limit, 30), since });
           output({ threadId: opts.thread, count: comments.length, comments }, formatBlubberComments(comments));
           return;
         }
@@ -280,10 +251,10 @@ export function registerCommunication(program: Command): void {
   program
     .command("feed")
     .description("What happened in your courses: Stud.IP's activity stream, newest first")
-    .option("--since <when>", "Since 24h, 7d, 2w, today or a date", "7d")
+    .addOption(sinceOption("Since 24h, 7d, 2w, today or a date", "7d"))
     .option("--type <types>", "documents, news, forum, wiki, message, participants, schedule, courseware (comma-separated)")
-    .option("--course <course>", "Only this course")
-    .option("--limit <n>", "Newest N (default 50)")
+    .addOption(courseOption())
+    .addOption(limitOption(50))
     .action(
       act(async (opts: { since: string; type?: string; course?: string; limit?: string }) => {
         const sdk = await getSdk();
@@ -299,7 +270,7 @@ export function registerCommunication(program: Command): void {
           since,
           types,
           courseId: course?.id,
-          limit: intOpt(opts.limit, "limit", 50),
+          limit: parseLimit(opts.limit, 50),
         });
         output(
           {

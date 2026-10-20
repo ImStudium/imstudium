@@ -1,0 +1,890 @@
+### imstudium 
+Usage: imstudium [options] [command]
+
+ImStudium — extract, sync, and plan your studies
+
+Options:
+  -V, --version                                  output the version number
+  --json                                         JSON output for agents (one document on stdout;
+                                                 errors as JSON on stderr)
+  --quiet                                        Minimal output
+  --instance <url>                               Stud.IP instance origin (default:
+                                                 digicampus.uni-augsburg.de)
+  -h, --help                                     display help for command
+
+Commands:
+  onboard [options]                              First-time setup: login, sync workspace, wire
+                                                 agents (idempotent)
+  init [options]                                 Login + sync Studium workspace (use onboard for
+                                                 first-time agent setup)
+  login [options]                                Sign in via browser — opens Stud.IP login every
+                                                 time
+  logout                                         Clear stored session
+  status                                         Auth and instance status
+  context [options]                              Your study briefing in one call — semester, today,
+                                                 Abgaben, Klausuren, new files, news
+  today [options]                                Today's dates across all current courses (cancelled
+                                                 ones marked)
+  week [options]                                 This week's dates, grouped by day (Mo–So)
+  stundenplan [options]                          Your regular weekly plan (cycles), single dates and
+                                                 cancellations
+  holidays [options]                             Public holidays and the lecture period (no lectures
+                                                 on Feiertage)
+  tasks [options] [course]                       Courseware tasks (Aufgaben) with deadlines, soonest
+                                                 first
+  klausuren [options]                            Exam timeline (klausuren.md; --json from
+                                                 studium.json)
+  changes [options]                              What arrived from Stud.IP recently (new and updated
+                                                 files)
+  news [options] [course]                        Announcements: one course, or all current courses
+                                                 merged newest-first
+  inbox [options]                                Your Stud.IP messages, newest first (reading never
+                                                 marks them read)
+  outbox [options]                               Messages you sent, newest first
+  message <id>                                   One message in full, with sender and recipients
+                                                 (does not mark it read)
+  forum [options] [course]                       Course forum: discussions newest activity first,
+                                                 one thread, or --save as markdown
+  blubber [options] [course]                     Blubber chats: a course's threads with latest
+                                                 comments, or your stream
+  feed [options]                                 What happened in your courses: Stud.IP's activity
+                                                 stream, newest first
+  search [options] <query...>                    Ranked search across slides, scripts, news, forum,
+                                                 courseware and wiki — offline
+  courseware|cw [options] [course]               Courseware (Lernmaterial): units, page outline;
+                                                 --save writes markdown + files
+  wiki [options] [course] [page]                 Course wiki: page tree, one page as markdown, or
+                                                 --save into the workspace
+  files                                          Course files: folder tree and single downloads
+  courses                                        Your enrolled courses (live from Stud.IP)
+  studium [options]                              Show STUDIUM.md (human) or studium.json (--json)
+  people [options] [course]                      Who teaches what: lecturers, tutors, groups and
+                                                 student count per course
+  sprechstunden|consultations [options] [query]  Upcoming office hours (Sprechstunden) of your
+                                                 lecturers — read-only, booking stays in Stud.IP
+  catalog                                        Course catalog for semester planning
+                                                 (Vorlesungsverzeichnis)
+  semester [options]                             Where you are in the semester; start a new one
+                                                 (archive the last, sync the new)
+  sync [options]                                 Sync files and rebuild the Studium workspace
+                                                 (current semester by default)
+  extract|ingest [options]                       Local ingest: pdf-inspector (PDF) + AnyDoc (Office)
+                                                 → content.md; photos copied to pages/
+  index [options]                                Build/rebuild page index (corpus.jsonl) — for agent
+                                                 grep / semantic search, not a custom search engine
+  view [options]                                 Build viewer.html for slide PNGs — fast path for
+                                                 Playwright / browser agents
+  watch [options]                                Continuous sync loop (--json: one JSON line per
+                                                 round)
+  export                                         Export Stud.IP data as files (calendar.ics)
+  routes [options] [query]                       Every JSON:API route this Stud.IP offers (cached
+                                                 from /discovery)
+  api [options] <path>                           Call any Stud.IP JSON:API route — the escape hatch
+                                                 for agents
+  schema [command...]                            JSON Schema of a command's --json output (from
+                                                 @imstudium/contract)
+  setup                                          Idempotent agent wiring (skills, MCP) — only
+                                                 updates what changed
+  config                                         Show or change ~/.config/imstudium/config.json
+  session                                        Session management: import a Stud.IP session cookie
+  doctor                                         Check local ingest pipeline (AnyDoc +
+                                                 pdf-inspector)
+  update                                         Upgrade CLI (if needed) and refresh agent
+                                                 skills/MCP
+  module [options]                               Harness modules for mina — course/exam counts, no
+                                                 student id
+  semesters                                      List Stud.IP semesters and show the
+                                                 calendar-current one (see also: semester)
+  discover                                       List JSON:API routes (see also: routes)
+  help [command]                                 display help for command
+
+### imstudium onboard
+Usage: imstudium onboard [options]
+
+First-time setup: login, sync workspace, wire agents (idempotent)
+
+Options:
+  -o, --output <dir>  Workspace directory (default: "~/Studium")
+  -y, --yes           Non-interactive
+  --agents-only       Skip login/sync — only configure Cursor, Claude Code, Claude Desktop, Codex,
+                      Windsurf, OpenCode
+  --skip-sync         Login + agent setup, no file sync
+  --force             Re-install skills/MCP even when unchanged
+  --all-agents        Configure every harness path, not only detected ones
+  -h, --help          display help for command
+
+### imstudium init
+Usage: imstudium init [options]
+
+Login + sync Studium workspace (use onboard for first-time agent setup)
+
+Options:
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -y, --yes           Non-interactive (skip prompts)
+  --relogin           Sign in again even if a session is already stored
+  --chrome-profile    Use your Chrome profile with saved passwords (quit Chrome first)
+  --extract           Extract new/changed files to markdown and rebuild the search index
+  -h, --help          display help for command
+
+### imstudium login
+Usage: imstudium login [options]
+
+Sign in via browser — opens Stud.IP login every time
+
+Options:
+  --oauth                     Use OAuth2 PKCE (requires registered client_id)
+  --chrome-profile            Use your Chrome profile with saved passwords (quit Chrome first)
+  --profile-directory <name>  Chrome profile folder with --chrome-profile (default: "Default")
+  --manual                    Expert fallback: local helper page with manual session paste
+  --relogin                   Alias for login (browser sign-in always runs)
+  -h, --help                  display help for command
+
+### imstudium logout
+Usage: imstudium logout [options]
+
+Clear stored session
+
+Options:
+  -h, --help  display help for command
+
+### imstudium status
+Usage: imstudium status [options]
+
+Auth and instance status
+
+Options:
+  -h, --help  display help for command
+
+### imstudium context
+Usage: imstudium context [options]
+
+Your study briefing in one call — semester, today, Abgaben, Klausuren, new files, news
+
+Options:
+  --live              Also ask Stud.IP for unread messages
+  --offline           Local files only: no Stud.IP calls (semester, live dates, messages)
+  --since <when>      How far back 'new' reaches: 24h, 7d, 2w or a date (default: "7d")
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium today
+Usage: imstudium today [options]
+
+Today's dates across all current courses (cancelled ones marked)
+
+Options:
+  --date <day>        Another day: YYYY-MM-DD, DD.MM. or morgen
+  --offline           Use the cached calendar.ics instead of Stud.IP
+  --ics <file>        Calendar file for --offline (default: <workspace>/calendar.ics)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium week
+Usage: imstudium week [options]
+
+This week's dates, grouped by day (Mo–So)
+
+Options:
+  --next              Next week
+  --from <day>        Week containing this day (YYYY-MM-DD or DD.MM.)
+  --offline           Use the cached calendar.ics instead of Stud.IP
+  --ics <file>        Calendar file for --offline (default: <workspace>/calendar.ics)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium stundenplan
+Usage: imstudium stundenplan [options]
+
+Your regular weekly plan (cycles), single dates and cancellations
+
+Options:
+  --save              Write <workspace>/stundenplan.md
+  --semester <name>   Semester title, e.g. "WS 2026/27" (default: current)
+  --offline           Derive the plan from the cached calendar.ics
+  --ics <file>        Calendar file for --offline (default: <workspace>/calendar.ics)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium holidays
+Usage: imstudium holidays [options]
+
+Public holidays and the lecture period (no lectures on Feiertage)
+
+Options:
+  --year <year>  A whole calendar year
+  --all          Include commemorative days (Muttertag, Advent …)
+  -h, --help     display help for command
+
+### imstudium tasks
+Usage: imstudium tasks [options] [course]
+
+Courseware tasks (Aufgaben) with deadlines, soonest first
+
+Arguments:
+  course           Course (default: all current courses)
+
+Options:
+  --course <name>  Same as the [course] argument
+  --open           Hide submitted tasks
+  -n, --limit <n>  Soonest N (default all)
+  -h, --help       display help for command
+
+### imstudium klausuren
+Usage: imstudium klausuren [options]
+
+Exam timeline (klausuren.md; --json from studium.json)
+
+Options:
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium changes
+Usage: imstudium changes [options]
+
+What arrived from Stud.IP recently (new and updated files)
+
+Options:
+  --since <when>      24h, 7d, 2w or a date (default: "7d")
+  --course <name>     Only this course: title fragment, shortcut, slug, number or id
+  -n, --limit <n>     Newest N (default all)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium news
+Usage: imstudium news [options] [course]
+
+Announcements: one course, or all current courses merged newest-first
+
+Arguments:
+  course           Course title fragment, slug or id (default: all current courses)
+
+Options:
+  --course <name>  Same as the [course] argument
+  --since <when>   Only since 24h, 7d, 2w, today or a date like 2026-10-01
+  --global         Stud.IP-wide announcements instead of course news
+  -n, --limit <n>  Newest N (default 30)
+  --save           Write news/<date>-<title>.md + news/README.md into the course folder(s)
+  -h, --help       display help for command
+
+### imstudium inbox
+Usage: imstudium inbox [options]
+
+Your Stud.IP messages, newest first (reading never marks them read)
+
+Options:
+  --unread         Only unread messages
+  --since <when>   Only since 24h, 7d, 2w, today or a date like 2026-10-01
+  -n, --limit <n>  Newest N (default 20)
+  -h, --help       display help for command
+
+### imstudium outbox
+Usage: imstudium outbox [options]
+
+Messages you sent, newest first
+
+Options:
+  --since <when>   Only since 24h, 7d, 2w, today or a date like 2026-10-01
+  -n, --limit <n>  Newest N (default 20)
+  -h, --help       display help for command
+
+### imstudium message
+Usage: imstudium message [options] <id>
+
+One message in full, with sender and recipients (does not mark it read)
+
+Arguments:
+  id          Message id from imstudium inbox/outbox
+
+Options:
+  -h, --help  display help for command
+
+### imstudium forum
+Usage: imstudium forum [options] [course]
+
+Course forum: discussions newest activity first, one thread, or --save as markdown
+
+Arguments:
+  course             Course (default: recent discussions of all current courses)
+
+Options:
+  --course <name>    Same as the [course] argument
+  --discussion <id>  Show one discussion with all postings
+  --since <when>     Only discussions active since 24h, 7d, today or a date
+  -n, --limit <n>    Newest N discussions (default 30)
+  --save             Write forum/<topic>/<discussion>.md + forum/README.md into the course folder(s)
+  -h, --help         display help for command
+
+### imstudium blubber
+Usage: imstudium blubber [options] [course]
+
+Blubber chats: a course's threads with latest comments, or your stream
+
+Arguments:
+  course           Course (default: your Blubber stream)
+
+Options:
+  --course <name>  Same as the [course] argument
+  --thread <id>    Show the latest comments of one thread
+  --since <when>   Only since 24h, 7d, 2w, today or a date like 2026-10-01
+  -n, --limit <n>  Threads (stream) or comments per thread (default 10)
+  -h, --help       display help for command
+
+### imstudium feed
+Usage: imstudium feed [options]
+
+What happened in your courses: Stud.IP's activity stream, newest first
+
+Options:
+  --since <when>   Since 24h, 7d, 2w, today or a date (default: "7d")
+  --type <types>   documents, news, forum, wiki, message, participants, schedule, courseware
+                   (comma-separated)
+  --course <name>  Only this course: title fragment, shortcut, slug, number or id
+  -n, --limit <n>  Newest N (default 50)
+  -h, --help       display help for command
+
+### imstudium search
+Usage: imstudium search [options] <query...>
+
+Ranked search across slides, scripts, news, forum, courseware and wiki — offline
+
+Arguments:
+  query               Words to find (umlauts optional: Ubung finds Übung)
+
+Options:
+  --course <name>     Only one course (shortcut, title fragment, slug or folder name)
+  --kind <kinds>      Comma-separated: material,news,forum,courseware,wiki,note
+  --archive           Also search past semesters (archive/)
+  -n, --limit <n>     Results (default 10)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium courseware
+Usage: imstudium courseware|cw [options] [course]
+
+Courseware (Lernmaterial): units, page outline; --save writes markdown + files
+
+Arguments:
+  course              Course title fragment, slug, number or id (default: all current courses)
+
+Options:
+  --course <name>     Same as the [course] argument
+  --unit <idOrTitle>  Only this unit
+  --save              Write courseware/<unit>/<NN>-<page>.md and block files into the course folder
+  -o, --output <dir>  Course folder for --save (default: the course's workspace folder)
+  --no-files          With --save: skip downloading block files
+  --force             With --save: rewrite pages even when unchanged
+  -h, --help          display help for command
+
+### imstudium wiki
+Usage: imstudium wiki [options] [course] [page]
+
+Course wiki: page tree, one page as markdown, or --save into the workspace
+
+Arguments:
+  course              Course (default: all current courses)
+  page                Page name or id to print
+
+Options:
+  --course <name>     Same as the [course] argument (then the first argument is the page)
+  --save              Write wiki/<page>.md + wiki/README.md into the course folder
+  -o, --output <dir>  Course folder for --save
+  --force             With --save: rewrite unchanged pages
+  -h, --help          display help for command
+
+### imstudium files
+Usage: imstudium files [options] [command]
+
+Course files: folder tree and single downloads
+
+Options:
+  -h, --help                      display help for command
+
+Commands:
+  tree [options] <course>         Folder/file tree of a course with sizes and change dates
+  download [options] <fileRefId>  Download a single file (writes to -o or the file's own name)
+  help [command]                  display help for command
+
+### imstudium files tree
+Usage: imstudium files tree [options] <course>
+
+Folder/file tree of a course with sizes and change dates
+
+Options:
+  --depth <n>  Only show folders down to this depth
+  -h, --help   display help for command
+
+### imstudium files download
+Usage: imstudium files download [options] <fileRefId>
+
+Download a single file (writes to -o or the file's own name)
+
+Options:
+  -o, --output <path>  Output file path (a write destination, not the workspace)
+  -h, --help           display help for command
+
+### imstudium courses
+Usage: imstudium courses [options] [command]
+
+Your enrolled courses (live from Stud.IP)
+
+Options:
+  -h, --help      display help for command
+
+Commands:
+  list [options]  List my courses (current semester by default)
+  show <course>   One course in detail (title fragment, shortcut, slug or id)
+  help [command]  display help for command
+
+### imstudium courses list
+Usage: imstudium courses list [options]
+
+List my courses (current semester by default)
+
+Options:
+  --semester <name>  Semester title or slug (default: calendar current)
+  --all-semesters    List every enrollment
+  -h, --help         display help for command
+
+### imstudium courses show
+Usage: imstudium courses show [options] <course>
+
+One course in detail (title fragment, shortcut, slug or id)
+
+Options:
+  -h, --help  display help for command
+
+### imstudium studium
+Usage: imstudium studium [options]
+
+Show STUDIUM.md (human) or studium.json (--json)
+
+Options:
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium people
+Usage: imstudium people [options] [course]
+
+Who teaches what: lecturers, tutors, groups and student count per course
+
+Arguments:
+  course           Course title fragment, slug, number or id (default: all current courses)
+
+Options:
+  --course <name>  Same as the [course] argument
+  -h, --help       display help for command
+
+### imstudium sprechstunden
+Usage: imstudium sprechstunden|consultations [options] [query]
+
+Upcoming office hours (Sprechstunden) of your lecturers — read-only, booking stays in Stud.IP
+
+Arguments:
+  query            Course (title/slug/number/id) or lecturer name; default: all current courses
+
+Options:
+  --course <name>  Same as the [query] argument, for a course
+  --expired        Include past blocks
+  --slots          List every free slot time
+  -h, --help       display help for command
+
+### imstudium catalog
+Usage: imstudium catalog [options] [command]
+
+Course catalog for semester planning (Vorlesungsverzeichnis)
+
+Options:
+  -h, --help                    display help for command
+
+Commands:
+  search [options] <query...>   Search a semester's courses by title or number (public, works
+                                without login)
+  areas [options] [id]          Browse study areas (Studienbereiche); --courses lists a subtree's
+                                courses
+  modules [options] [query...]  Modules (MVV) by name or code — needs login
+  studies [options] [query...]  Courses of study (Studiengänge) — needs login
+  help [command]                display help for command
+
+### imstudium catalog search
+Usage: imstudium catalog search [options] <query...>
+
+Search a semester's courses by title or number (public, works without login)
+
+Arguments:
+  query              At least 3 characters
+
+Options:
+  --semester <name>  Semester, e.g. "WS 2026/27" or "all" (default: current)
+  --area <id>        Only inside this study area (see catalog areas)
+  --by <field>       Search via /courses (login): all, title, lecturer, number, comment
+  -n, --limit <n>    Max results (default 15)
+  --no-details       Skip lecturers and dates (faster)
+  -h, --help         display help for command
+
+### imstudium catalog areas
+Usage: imstudium catalog areas [options] [id]
+
+Browse study areas (Studienbereiche); --courses lists a subtree's courses
+
+Arguments:
+  id                 Study area id (default: top level)
+
+Options:
+  --courses          List the area's courses for the semester
+  --semester <name>  Semester for --courses (default: current)
+  -n, --limit <n>    Max courses (default 40)
+  -h, --help         display help for command
+
+### imstudium catalog modules
+Usage: imstudium catalog modules [options] [query...]
+
+Modules (MVV) by name or code — needs login
+
+Arguments:
+  query              Name or module code, at least 3 characters
+
+Options:
+  --semester <name>  Only modules valid in this semester (default: current; "all" for any)
+  -n, --limit <n>    Max results (default 30)
+  -h, --help         display help for command
+
+### imstudium catalog studies
+Usage: imstudium catalog studies [options] [query...]
+
+Courses of study (Studiengänge) — needs login
+
+Arguments:
+  query            Name, at least 3 characters
+
+Options:
+  -n, --limit <n>  Max results (default 30)
+  -h, --help       display help for command
+
+### imstudium semester
+Usage: imstudium semester [options] [command]
+
+Where you are in the semester; start a new one (archive the last, sync the new)
+
+Options:
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+Commands:
+  start [options]     Archive the previous semester folder and sync the new semester
+
+### imstudium semester start
+Usage: imstudium semester start [options]
+
+Archive the previous semester folder and sync the new semester
+
+Options:
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  --semester <label>  Target semester (default: the one running now)
+  --extract           Extract materials and build the search index after syncing
+  --dry-run           Show what would move and download
+  -h, --help          display help for command
+
+### imstudium sync
+Usage: imstudium sync [options]
+
+Sync files and rebuild the Studium workspace (current semester by default)
+
+Options:
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  --course <name>     Sync a single course
+  --semester <label>  Semester title or slug (e.g. SS2026, WS2025-26)
+  --all-semesters     Every enrolled semester: current at the root, the rest under archive/
+  --layout <mode>     tree (mirror Stud.IP folders) or flat (default: "tree")
+  --dry-run           List changes without downloading
+  --include <items>   Comma-separated: calendar,wiki,news,forum,courseware,tasks (default: all)
+  --extract           Extract new/changed files to markdown and rebuild the search index
+  -h, --help          display help for command
+
+### imstudium extract
+Usage: imstudium extract|ingest [options]
+
+Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md; photos copied to pages/
+
+Options:
+  --course <name>     Only one course (title fragment, shortcut, slug or id)
+  --file <path>       Extract a single file to <file>-extracted/
+  --no-images         Don't copy photos into pages/
+  --force             Re-extract even if unchanged
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium index
+Usage: imstudium index [options]
+
+Build/rebuild page index (corpus.jsonl) — for agent grep / semantic search, not a custom search
+engine
+
+Options:
+  --course <name>     Only one course
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium view
+Usage: imstudium view [options]
+
+Build viewer.html for slide PNGs — fast path for Playwright / browser agents
+
+Options:
+  --dir <path>        Already-extracted directory (contains pages/)
+  --course <name>     Course (title fragment, shortcut, slug or id)
+  --file <name>       Material filename substring
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium watch
+Usage: imstudium watch [options]
+
+Continuous sync loop (--json: one JSON line per round)
+
+Options:
+  --interval <duration>  Pause between rounds: 30m, 1h, 6h (at least 5m) (default: "1h")
+  -o, --output <dir>     Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help             display help for command
+
+### imstudium export
+Usage: imstudium export [options] [command]
+
+Export Stud.IP data as files (calendar.ics)
+
+Options:
+  -h, --help          display help for command
+
+Commands:
+  calendar [options]  Write your Stud.IP calendar as calendar.ics into the workspace
+  help [command]      display help for command
+
+### imstudium export calendar
+Usage: imstudium export calendar [options]
+
+Write your Stud.IP calendar as calendar.ics into the workspace
+
+Options:
+  -o, --output <dir>  Directory for calendar.ics (default: the workspace)
+  -h, --help          display help for command
+
+### imstudium routes
+Usage: imstudium routes [options] [query]
+
+Every JSON:API route this Stud.IP offers (cached from /discovery)
+
+Arguments:
+  query              Filter by substring, e.g. forum, courseware, users
+
+Options:
+  --method <method>  Only routes with this HTTP method (default: "GET")
+  --all-methods      Include POST/PATCH/DELETE routes
+  --refresh          Fetch the catalog again
+  -h, --help         display help for command
+
+### imstudium api
+Usage: imstudium api [options] <path>
+
+Call any Stud.IP JSON:API route — the escape hatch for agents
+
+Arguments:
+  path                      Route path, e.g. /users/me/courses or /courses/<id>/forum-categories
+
+Options:
+  -i, --include <rels>      JSON:API include, comma-separated
+  -f, --filter <key=value>  filter[key]=value (repeatable)
+  --fields <type=a,b>       Sparse fieldset (repeatable)
+  -p, --param <key=value>   Raw query parameter (repeatable)
+  -n, --limit <n>           Page size / max items
+  --all                     Follow pagination to the end
+  --flat                    Flatten resources: attributes up front, relationships as ids
+  -X, --method <method>     HTTP method (non-GET needs --write) (default: "GET")
+  -d, --data <json>         Request body for POST/PATCH
+  --write                   Allow a request that changes data in Stud.IP
+  -h, --help                display help for command
+
+### imstudium schema
+Usage: imstudium schema [options] [command...]
+
+JSON Schema of a command's --json output (from @imstudium/contract)
+
+Arguments:
+  command     Command path, e.g. today, "semester start", error or feed.FeedItem
+
+Options:
+  -h, --help  display help for command
+
+### imstudium setup
+Usage: imstudium setup [options] [command]
+
+Idempotent agent wiring (skills, MCP) — only updates what changed
+
+Options:
+  -h, --help           display help for command
+
+Commands:
+  status               Show detected agents and setup manifest
+  skills [options]     Install or refresh the bundled agent skills
+  workflows [options]  Install or refresh agent workflows / slash commands
+  mcp [options]        Register the imstudium MCP server with your agents (opt-in)
+  migrate [options]    Migrate DigiCampus config/skills/MCP to ImStudium (idempotent)
+  all [options]        Skills + workflows (idempotent — skips unchanged). MCP is opt-in: setup mcp
+  help [command]       display help for command
+
+### imstudium setup status
+Usage: imstudium setup status [options]
+
+Show detected agents and setup manifest
+
+Options:
+  -h, --help  display help for command
+
+### imstudium setup skills
+Usage: imstudium setup skills [options]
+
+Install or refresh the bundled agent skills
+
+Options:
+  --agent <agent>  cursor | claude-code | claude-desktop | codex | windsurf | opencode | all
+  --all-agents     Configure every harness, not only detected
+  --force          Overwrite unchanged skills
+  -y, --yes        Non-interactive
+  -h, --help       display help for command
+
+### imstudium setup workflows
+Usage: imstudium setup workflows [options]
+
+Install or refresh agent workflows / slash commands
+
+Options:
+  --agent <agent>  cursor | claude-code | claude-desktop | codex | windsurf | opencode | all
+  --all-agents     Configure every harness, not only detected
+  --force          Overwrite unchanged workflows
+  -h, --help       display help for command
+
+### imstudium setup mcp
+Usage: imstudium setup mcp [options]
+
+Register the imstudium MCP server with your agents (opt-in)
+
+Options:
+  --agent <agent>     cursor | claude-code | claude-desktop | codex | windsurf | opencode | all
+  --all-agents        Configure every harness, not only detected
+  --force             Rewrite MCP config even if identical
+  -o, --output <dir>  Studium workspace path (default: config / IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium setup migrate
+Usage: imstudium setup migrate [options]
+
+Migrate DigiCampus config/skills/MCP to ImStudium (idempotent)
+
+Options:
+  --all-agents        Configure every harness, not only detected
+  -y, --yes           Non-interactive
+  -o, --output <dir>  Studium workspace path (default: config / IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium setup all
+Usage: imstudium setup all [options]
+
+Skills + workflows (idempotent — skips unchanged). MCP is opt-in: setup mcp
+
+Options:
+  --agent <agent>     cursor | claude-code | claude-desktop | codex | windsurf | opencode | all
+  --all-agents        Configure every harness, not only detected
+  --force             Overwrite even when unchanged
+  -y, --yes           Non-interactive
+  -o, --output <dir>  Studium workspace path (default: config / IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium config
+Usage: imstudium config [options] [command]
+
+Show or change ~/.config/imstudium/config.json
+
+Options:
+  -h, --help         display help for command
+
+Commands:
+  show               Effective configuration (file + environment + flags)
+  set <key> <value>  Set a key: base-url | workspace
+  help [command]     display help for command
+
+### imstudium config show
+Usage: imstudium config show [options]
+
+Effective configuration (file + environment + flags)
+
+Options:
+  -h, --help  display help for command
+
+### imstudium config set
+Usage: imstudium config set [options] <key> <value>
+
+Set a key: base-url | workspace
+
+Options:
+  -h, --help  display help for command
+
+### imstudium session
+Usage: imstudium session [options] [command]
+
+Session management: import a Stud.IP session cookie
+
+Options:
+  -h, --help        display help for command
+
+Commands:
+  import [options]  Store a Seminar_Session cookie (from --cookie or a Netscape cookie file)
+  help [command]    display help for command
+
+### imstudium session import
+Usage: imstudium session import [options]
+
+Store a Seminar_Session cookie (from --cookie or a Netscape cookie file)
+
+Options:
+  --cookie <value>  Seminar_Session cookie value
+  --file <path>     Netscape cookie file
+  -h, --help        display help for command
+
+### imstudium doctor
+Usage: imstudium doctor [options]
+
+Check local ingest pipeline (AnyDoc + pdf-inspector)
+
+Options:
+  -h, --help  display help for command
+
+### imstudium update
+Usage: imstudium update [options]
+
+Upgrade CLI (if needed) and refresh agent skills/MCP
+
+Options:
+  -h, --help  display help for command
+
+### imstudium module
+Usage: imstudium module [options]
+
+Harness modules for mina — course/exam counts, no student id
+
+Options:
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium semesters
+Usage: imstudium semesters [options]
+
+List Stud.IP semesters and show the calendar-current one (see also: semester)
+
+Options:
+  -h, --help  display help for command
+
+### imstudium discover
+Usage: imstudium discover [options]
+
+List JSON:API routes (see also: routes)
+
+Options:
+  -h, --help  display help for command

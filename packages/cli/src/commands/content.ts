@@ -3,10 +3,7 @@ import {
   buildWikiTree,
   contentDeps,
   coursewareElementUrl,
-  expandPath,
   formatBytes,
-  formatLocalDate,
-  formatLocalDateTime,
   ImstudiumError,
   matchUnit,
   renderWiki,
@@ -19,29 +16,14 @@ import {
   type CwUnit,
 } from "@imstudium/sdk";
 import type { CoursewareCourseOutput, CoursewareListOutput, TasksOutput } from "@imstudium/contract";
-import { act, getSdk, note, output, type Sdk } from "../runtime.js";
-import { currentCourses, resolveCourse, type CourseRef } from "../course-arg.js";
+import { act, getSdk, note, output } from "../runtime.js";
+import { courseDir, currentCourses, perCourse as runPerCourse, resolveCourse, type CourseRef } from "../course-arg.js";
+import { courseArg, courseOption, limitOption, optionalLimit } from "../kit/args.js";
+import { berlinIsoDay, berlinIsoMinute } from "../kit/format.js";
 
 /** Run per course, keep going when one course fails (permissions, tool off). */
-async function perCourse<T>(courses: CourseRef[], fn: (c: CourseRef) => Promise<T>): Promise<Array<{ course: CourseRef; value: T }>> {
-  const settled = await Promise.allSettled(courses.map(async (course) => ({ course, value: await fn(course) })));
-  const out: Array<{ course: CourseRef; value: T }> = [];
-  settled.forEach((s, i) => {
-    if (s.status === "fulfilled") out.push(s.value);
-    else note(`${courses[i]!.title}: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`);
-  });
-  return out;
-}
-
-function courseDirFor(sdk: Sdk, course: CourseRef, override?: string): string {
-  if (override) return expandPath(override);
-  if (course.dir) return course.dir;
-  throw new ImstudiumError(
-    `${course.title} is not in your workspace yet`,
-    "WORKSPACE_MISSING",
-    undefined,
-    `Run imstudium sync first, or pass -o <course folder> (workspace: ${sdk.workspacePath})`,
-  );
+function perCourse<T>(courses: CourseRef[], fn: (c: CourseRef) => Promise<T>) {
+  return runPerCourse(courses, fn, { onSkip: (c, msg) => note(`${c.title}: ${msg}`) });
 }
 
 function pickUnits(units: CwUnit[], query?: string): CwUnit[] {
@@ -78,7 +60,7 @@ function taskLines(tasks: CwTask[], showCourse: boolean): string[] {
       t.renewal ? `extension ${t.renewal}` : null,
     ].filter(Boolean);
     const title = t.title.length > width ? `${t.title.slice(0, width - 1)}…` : t.title.padEnd(width);
-    return `  ${dueLabel(t).padEnd(9)} ${(formatLocalDateTime(t.deadline) || "—").padEnd(16)}  ${title}  ${meta.join(" · ")}`.trimEnd();
+    return `  ${dueLabel(t).padEnd(9)} ${(berlinIsoMinute(t.deadline) || "—").padEnd(16)}  ${title}  ${meta.join(" · ")}`.trimEnd();
   });
 }
 
@@ -125,13 +107,15 @@ export function registerContent(program: Command): void {
     .alias("cw")
     .description("Courseware (Lernmaterial): units, page outline; --save writes markdown + files")
     .argument("[course]", "Course title fragment, slug, number or id (default: all current courses)")
+    .addOption(courseOption("Same as the [course] argument"))
     .option("--unit <idOrTitle>", "Only this unit")
     .option("--save", "Write courseware/<unit>/<NN>-<page>.md and block files into the course folder")
     .option("-o, --output <dir>", "Course folder for --save (default: the course's workspace folder)")
     .option("--no-files", "With --save: skip downloading block files")
     .option("--force", "With --save: rewrite pages even when unchanged")
     .action(
-      act(async (courseQuery: string | undefined, opts: { unit?: string; save?: boolean; output?: string; files?: boolean; force?: boolean }) => {
+      act(async (positional: string | undefined, opts: { course?: string; unit?: string; save?: boolean; output?: string; files?: boolean; force?: boolean }) => {
+        const courseQuery = courseArg(positional, opts);
         const sdk = await getSdk();
         const origin = sdk.config.instanceOrigin;
 
@@ -144,7 +128,7 @@ export function registerContent(program: Command): void {
           const lines = [`Courseware · ${total} unit${total === 1 ? "" : "s"} in ${withUnits.length} of ${courses.length} courses`, ""];
           for (const { course, value } of withUnits) {
             lines.push(course.title);
-            for (const u of value) lines.push(`  ${u.title}${u.visibleFrom && Date.parse(u.visibleFrom) > Date.now() ? ` (from ${formatLocalDate(u.visibleFrom)})` : ""}`);
+            for (const u of value) lines.push(`  ${u.title}${u.visibleFrom && Date.parse(u.visibleFrom) > Date.now() ? ` (from ${berlinIsoDay(u.visibleFrom)})` : ""}`);
           }
           if (withUnits.length) lines.push("", "Outline: imstudium courseware <course>   ·   Save: imstudium courseware <course> --save");
           const payload: CoursewareListOutput = { courses: rows.map(({ course, value }) => ({ id: course.id, title: course.title, units: value })), count: total };
@@ -154,7 +138,7 @@ export function registerContent(program: Command): void {
 
         const course = await resolveCourse(sdk, courseQuery);
         if (opts.save) {
-          const dir = courseDirFor(sdk, course, opts.output);
+          const dir = courseDir(course, sdk.workspacePath, opts.output);
           const result = await syncContent(contentDeps(sdk), { id: course.id, title: course.title }, dir, {
             include: ["courseware", "tasks"],
             unit: opts.unit,
@@ -198,9 +182,13 @@ export function registerContent(program: Command): void {
     .command("tasks")
     .description("Courseware tasks (Aufgaben) with deadlines, soonest first")
     .argument("[course]", "Course (default: all current courses)")
+    .addOption(courseOption("Same as the [course] argument"))
     .option("--open", "Hide submitted tasks")
+    .addOption(limitOption("all", "Soonest N"))
     .action(
-      act(async (courseQuery: string | undefined, opts: { open?: boolean }) => {
+      act(async (positional: string | undefined, opts: { course?: string; open?: boolean; limit?: string }) => {
+        const courseQuery = courseArg(positional, opts);
+        const limit = optionalLimit(opts.limit);
         const sdk = await getSdk();
         const courses = courseQuery ? [await resolveCourse(sdk, courseQuery)] : await currentCourses(sdk);
         const rows = await perCourse(courses, async (c) => {
@@ -212,7 +200,7 @@ export function registerContent(program: Command): void {
           return tasks.map((t) => ({ ...t, unitTitle: t.unitId ? (titles.get(t.unitId) ?? null) : null }));
         });
         const all = sortTasks(rows.flatMap((r) => r.value));
-        const shown = opts.open ? all.filter((t) => t.status !== "submitted") : all;
+        const shown = (opts.open ? all.filter((t) => t.status !== "submitted") : all).slice(0, limit);
         const open = all.filter((t) => t.status !== "submitted").length;
         const overdue = all.filter((t) => t.status === "overdue").length;
         const header = `Courseware tasks · ${open} open${overdue ? ` (${overdue} overdue)` : ""} · ${all.length - open} submitted`;
@@ -229,11 +217,15 @@ export function registerContent(program: Command): void {
     .description("Course wiki: page tree, one page as markdown, or --save into the workspace")
     .argument("[course]", "Course (default: all current courses)")
     .argument("[page]", "Page name or id to print")
+    .addOption(courseOption("Same as the [course] argument (then the first argument is the page)"))
     .option("--save", "Write wiki/<page>.md + wiki/README.md into the course folder")
     .option("-o, --output <dir>", "Course folder for --save")
     .option("--force", "With --save: rewrite unchanged pages")
     .action(
-      act(async (courseQuery: string | undefined, pageQuery: string | undefined, opts: { save?: boolean; output?: string; force?: boolean }) => {
+      act(async (first: string | undefined, second: string | undefined, opts: { course?: string; save?: boolean; output?: string; force?: boolean }) => {
+        // `wiki <course> [page]` or `wiki --course <course> [page]`
+        const courseQuery = opts.course ?? first;
+        const pageQuery = opts.course ? (second ?? first) : second;
         const sdk = await getSdk();
         const origin = sdk.config.instanceOrigin;
 
@@ -244,7 +236,7 @@ export function registerContent(program: Command): void {
           const lines = [`Wiki · ${withPages.length} of ${courses.length} courses have pages`, ""];
           for (const { course, value } of withPages) {
             const latest = value.map((p) => p.chdate ?? "").sort().pop();
-            lines.push(`  ${String(value.length).padStart(3)} pages  ${course.title}${latest ? `  (updated ${formatLocalDate(latest)})` : ""}`);
+            lines.push(`  ${String(value.length).padStart(3)} pages  ${course.title}${latest ? `  (updated ${berlinIsoDay(latest)})` : ""}`);
           }
           output(
             {
@@ -262,7 +254,7 @@ export function registerContent(program: Command): void {
 
         const course = await resolveCourse(sdk, courseQuery);
         if (opts.save) {
-          const dir = courseDirFor(sdk, course, opts.output);
+          const dir = courseDir(course, sdk.workspacePath, opts.output);
           const result = await syncContent(contentDeps(sdk), { id: course.id, title: course.title }, dir, {
             include: ["wiki"],
             force: opts.force,
@@ -300,7 +292,7 @@ export function registerContent(program: Command): void {
         const labels = nodes.map((n) => `${"  ".repeat(n.depth + 1)}${n.name}${n.isStart ? " (start)" : ""}`);
         const width = Math.min(60, Math.max(0, ...labels.map((l) => l.length)));
         nodes.forEach((n, i) => {
-          lines.push(`${labels[i]!.padEnd(width)}  ${formatLocalDate(n.chdate)}${n.version ? `  v${n.version}` : ""}`.trimEnd());
+          lines.push(`${labels[i]!.padEnd(width)}  ${berlinIsoDay(n.chdate)}${n.version ? `  v${n.version}` : ""}`.trimEnd());
         });
         if (!nodes.length) lines.push("No wiki pages.");
         else lines.push("", `Read a page: imstudium wiki "${courseQuery}" "<page>"   ·   Save: --save`);

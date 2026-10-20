@@ -2,7 +2,6 @@ import type { Command } from "commander";
 import {
   applyRollover,
   computeSemesterProgress,
-  expandPath,
   findCurrentSemester,
   ImstudiumError,
   listArchivedSemesters,
@@ -14,23 +13,19 @@ import {
 import type { ChangesOutput, SemesterOutput, SemesterStartOutput } from "@imstudium/contract";
 import { act, getSdk, note, output } from "../runtime.js";
 import { readChanges, runSync } from "../pipeline.js";
-import { resetCourseCache } from "../course-arg.js";
-import { parseSince } from "../since.js";
-
-const fmtDate = (iso?: string) =>
-  iso
-    ? new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" })
-    : "?";
+import { resetCourseCache, workspaceCourse } from "../course-arg.js";
+import { courseOption, limitOption, optionalLimit, outputOption, parseSince, sinceOption, workspaceDir } from "../kit/args.js";
+import { berlinDate as fmtDate, berlinDateTime, berlinDayMonth, cell, courseLabel } from "../kit/format.js";
 
 export function registerSemester(program: Command): void {
   const semester = program
     .command("semester")
     .description("Where you are in the semester; start a new one (archive the last, sync the new)")
-    .option("-o, --output <dir>", "Workspace directory")
+    .addOption(outputOption())
     .action(
       act(async (opts: { output?: string }) => {
         const sdk = await getSdk();
-        const out = expandPath(opts.output || sdk.workspacePath);
+        const out = workspaceDir(sdk, opts);
         // /semesters is public: this works before login and offline from cache below.
         let all: SemesterResource[] = [];
         try {
@@ -91,14 +86,14 @@ export function registerSemester(program: Command): void {
   semester
     .command("start")
     .description("Archive the previous semester folder and sync the new semester")
-    .option("-o, --output <dir>", "Workspace directory")
+    .addOption(outputOption())
     .option("--semester <label>", "Target semester (default: the one running now)")
     .option("--extract", "Extract materials and build the search index after syncing")
     .option("--dry-run", "Show what would move and download")
     .action(
       act(async (opts: { output?: string; semester?: string; extract?: boolean; dryRun?: boolean }) => {
         const sdk = await getSdk();
-        const out = expandPath(opts.output || sdk.workspacePath);
+        const out = workspaceDir(sdk, opts);
         const all = await sdk.courses.semesters.listAll();
         const target = opts.semester ? resolveSemesterByLabel(all, opts.semester) : findCurrentSemester(all);
         if (!target) {
@@ -159,26 +154,31 @@ export function registerSemester(program: Command): void {
   program
     .command("changes")
     .description("What arrived from Stud.IP recently (new and updated files)")
-    .option("--since <when>", "7d, 24h, 2w or a date", "7d")
-    .option("--course <name>", "Only one course (title fragment)")
-    .option("-o, --output <dir>", "Workspace directory")
+    .addOption(sinceOption("24h, 7d, 2w or a date", "7d"))
+    .addOption(courseOption())
+    .addOption(limitOption("all"))
+    .addOption(outputOption())
     .action(
-      act(async (opts: { since: string; course?: string; output?: string }) => {
+      act(async (opts: { since: string; course?: string; limit?: string; output?: string }) => {
         const sdk = await getSdk();
-        const out = expandPath(opts.output || sdk.workspacePath);
+        const out = workspaceDir(sdk, opts);
         const since = parseSince(opts.since).getTime();
+        const limit = optionalLimit(opts.limit);
+        // Same resolver as search/extract: shortcuts, slugs and ids work; a title fragment without a workspace.
+        const ws = opts.course ? await sdk.studium.loadWorkspace(out) : null;
+        const course = ws && opts.course ? workspaceCourse(sdk, ws, opts.course) : null;
         const q = opts.course?.toLowerCase();
+        const matches = (c: { courseId?: string; courseTitle?: string }) =>
+          !opts.course || (course ? c.courseId === course.id || c.courseTitle === course.title : (c.courseTitle ?? "").toLowerCase().includes(q!));
         const seen = new Set<string>();
         const changes = (await readChanges(out, since))
           .reverse()
-          .filter((c) => !q || (c.courseTitle ?? "").toLowerCase().includes(q))
-          .filter((c) => (seen.has(c.path) ? false : (seen.add(c.path), true)));
+          .filter(matches)
+          .filter((c) => (seen.has(c.path) ? false : (seen.add(c.path), true)))
+          .slice(0, limit);
         const lines = changes.length
-          ? changes.map(
-              (c) =>
-                `${new Date(c.at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Berlin" })}  ${c.change === "new" ? "new    " : "updated"}  ${(c.courseTitle ?? "").slice(0, 34).padEnd(34)}  ${c.name ?? c.path}`,
-            )
-          : [`Nothing new since ${new Date(since).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}. Run imstudium sync to check Stud.IP.`];
+          ? changes.map((c) => `${berlinDayMonth(c.at)}  ${cell(c.change === "new" ? "new" : "updated", 7)}  ${courseLabel(c.courseTitle, 34)}  ${c.name ?? c.path}`)
+          : [`Nothing new since ${berlinDateTime(since)}. Run imstudium sync to check Stud.IP.`];
         const payload: ChangesOutput = { since: new Date(since).toISOString(), count: changes.length, changes };
         output(payload, lines.join("\n"));
       }),

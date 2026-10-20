@@ -9,6 +9,7 @@ import {
   type JsonApiQuery,
 } from "@imstudium/sdk";
 import { act, getSdk, globalOpts, output, type Sdk } from "../runtime.js";
+import { optionalLimit } from "../kit/args.js";
 import { meId } from "../me.js";
 
 function collect(value: string, previous: string[] = []): string[] {
@@ -71,7 +72,7 @@ export function registerApi(program: Command): void {
     .option("-f, --filter <key=value>", "filter[key]=value (repeatable)", collect)
     .option("--fields <type=a,b>", "Sparse fieldset (repeatable)", collect)
     .option("-p, --param <key=value>", "Raw query parameter (repeatable)", collect)
-    .option("--limit <n>", "Page size / max items")
+    .option("-n, --limit <n>", "Page size / max items")
     .option("--all", "Follow pagination to the end")
     .option("--flat", "Flatten resources: attributes up front, relationships as ids")
     .option("-X, --method <method>", "HTTP method (non-GET needs --write)", "GET")
@@ -133,7 +134,7 @@ export function registerApi(program: Command): void {
             filter: parsePairs(opts.filter, "filter"),
             fields: Object.keys(fields).length ? fields : undefined,
           };
-          const limit = opts.limit ? Number(opts.limit) : undefined;
+          const limit = optionalLimit(opts.limit);
 
           if (opts.all) {
             const page = await sdk.client.paginate(path, { ...query, page: limit ? { limit: Math.min(limit, 100) } : undefined }, { max: limit });

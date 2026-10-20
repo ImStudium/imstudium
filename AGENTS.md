@@ -128,8 +128,14 @@ Bun workspaces, four packages:
 
 **CLI** (`packages/cli/src`)
 
-- `cli.ts`: the program, global flags and core commands (login, sync, studium, klausuren, files, extract, setup, …).
-- `commands/*.ts`: one module per area, each with a `register…(program)` function wired in `commands/index.ts`:
+- `cli.ts`: the entry point only (`buildProgram().parseAsync()`).
+- `program.ts`: `buildProgram()` — global flags, the Commander exit hook (usage errors → exit 2 / JSON), help order (`HELP_ORDER`). No side effects at import; tests and the docs generator build the tree the same way.
+- `commands/*.ts`: one module per area, each with a `register…(program)` function listed in `commands/index.ts`. Every action is wrapped in `act()`:
+  - `auth.ts`: login, logout, status, session import (`runLogin`)
+  - `workspace.ts`: onboard, init, studium, klausuren, module
+  - `courses.ts`: courses list/show, files tree/download
+  - `sync.ts`: sync, extract, index, view, export calendar, watch
+  - `setup.ts`: setup *, update · `config.ts` · `doctor.ts` · `schema.ts` · `legacy.ts` (semesters, discover)
   - `api.ts`: routes, api
   - `semester.ts`: semester, semester start, changes
   - `search.ts`
@@ -139,7 +145,8 @@ Bun workspaces, four packages:
   - `planning.ts`: today, week, stundenplan, holidays
   - `catalog.ts`, `people.ts`, `sprechstunden.ts`
 - `pipeline.ts`: `runSync`, **the one sync pipeline** for `sync`, `semester start`, `init` and `onboard`. It runs files → studium overview → news/forum → courseware/wiki/tasks → `stundenplan.md` → extraction and search index → `.imstudium/changes.jsonl`, `NEW.md`, `abgaben.md`, `.imstudium/tasks.json` → `snapshots/studium.json`.
-- `runtime.ts` (`getSdk`, `output`, `act`), `course-arg.ts` (one course resolver), `setup.ts` and `agents.ts` (harness wiring), `skills/` (bundled skills).
+- `kit/args.ts`: the shared flags (`-o, --output` = workspace, `-n, --limit`, `--since`, `--course`), strict `parseLimit`, one duration grammar (`parseDuration`/`parseSince`), `workspaceDir()`. `kit/format.ts`: the one human-output formatter — dates always in Europe/Berlin (`berlinDate`, `berlinDateTime`, `berlinWeekday`, …), `cell`/`table`/`courseLabel`. Don't call `toLocale*String` in commands.
+- `runtime.ts` (`getSdk`, `output`, `act`, `fail`), `course-arg.ts` (course resolution: `resolveCourse`, `workspaceCourse`, `currentCourses`, `perCourse`, `courseDir`), `setup.ts` and `agents.ts` (harness wiring), `skills/` (bundled skills).
 
 **MCP** (`packages/mcp/src`)
 

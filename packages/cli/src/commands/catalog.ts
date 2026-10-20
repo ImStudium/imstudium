@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { ImstudiumError, type CatalogCourse } from "@imstudium/sdk";
 import { act, getSdk, output } from "../runtime.js";
+import { limitOption, parseLimit } from "../kit/args.js";
 import { resolveSemester } from "./planning.js";
 
 /** "INF-1001  Datenbanken  · Vorlesung · 120 Teilnehmende" + lecturers / dates / id lines. */
@@ -24,10 +25,10 @@ export function registerCatalog(program: Command): void {
     .option("--semester <name>", 'Semester, e.g. "WS 2026/27" or "all" (default: current)')
     .option("--area <id>", "Only inside this study area (see catalog areas)")
     .option("--by <field>", "Search via /courses (login): all, title, lecturer, number, comment")
-    .option("--limit <n>", "Max results", "15")
+    .addOption(limitOption(15, "Max results"))
     .option("--no-details", "Skip lecturers and dates (faster)")
     .action(
-      act(async (queryParts: string[], opts: { semester?: string; area?: string; by?: string; limit: string; details: boolean }) => {
+      act(async (queryParts: string[], opts: { semester?: string; area?: string; by?: string; limit?: string; details: boolean }) => {
         const sdk = await getSdk();
         const q = queryParts.join(" ").trim();
         const semester = await resolveSemester(sdk, opts.semester);
@@ -36,7 +37,7 @@ export function registerCatalog(program: Command): void {
           q,
           semesterId: semester?.id,
           areaId: opts.area,
-          limit: Number(opts.limit) || 15,
+          limit: parseLimit(opts.limit, 15),
           source: fields ? "courses" : "tree",
           fields,
         });
@@ -71,7 +72,7 @@ export function registerCatalog(program: Command): void {
     .argument("[id]", "Study area id (default: top level)")
     .option("--courses", "List the area's courses for the semester")
     .option("--semester <name>", "Semester for --courses (default: current)")
-    .option("--limit <n>", "Max courses", "40")
+    .addOption(limitOption(40, "Max courses"))
     .action(
       act(async (id: string | undefined, opts: { courses?: boolean; semester?: string; limit: string }) => {
         const sdk = await getSdk();
@@ -79,7 +80,7 @@ export function registerCatalog(program: Command): void {
         if (opts.courses) {
           if (!id) throw new ImstudiumError("--courses needs a study area id", "BAD_ARGS", undefined, "imstudium catalog areas shows ids");
           const semester = await resolveSemester(sdk, opts.semester);
-          const res = await sdk.catalog.studyAreaCourses(id, { semesterId: semester?.id, limit: Number(opts.limit) || 40 });
+          const res = await sdk.catalog.studyAreaCourses(id, { semesterId: semester?.id, limit: parseLimit(opts.limit, 40) });
           const lines = [
             `${node?.path.join(" › ") ?? id} · ${semester?.title ?? "alle Semester"} · ${res.total ?? res.courses.length} Veranstaltungen`,
             "",
@@ -101,13 +102,13 @@ export function registerCatalog(program: Command): void {
     .description("Modules (MVV) by name or code — needs login")
     .argument("[query...]", "Name or module code, at least 3 characters")
     .option("--semester <name>", 'Only modules valid in this semester (default: current; "all" for any)')
-    .option("--limit <n>", "Max results", "30")
+    .addOption(limitOption(30, "Max results"))
     .action(
       act(async (queryParts: string[], opts: { semester?: string; limit: string }) => {
         const sdk = await getSdk();
         const q = queryParts.join(" ").trim() || undefined;
         const semester = await resolveSemester(sdk, opts.semester);
-        const res = await sdk.catalog.modules({ q, semesterId: semester?.id, limit: Number(opts.limit) || 30 });
+        const res = await sdk.catalog.modules({ q, semesterId: semester?.id, limit: parseLimit(opts.limit, 30) });
         const lines = [`Module${q ? ` · "${q}"` : ""} · ${semester?.title ?? "alle Semester"} · ${res.total ?? res.modules.length} Treffer`, ""];
         for (const m of res.modules) {
           const meta = [m.cp != null ? `${m.cp} LP` : null, m.cycle, m.responsible].filter(Boolean).join(" · ");
@@ -121,12 +122,12 @@ export function registerCatalog(program: Command): void {
     .command("studies")
     .description("Courses of study (Studiengänge) — needs login")
     .argument("[query...]", "Name, at least 3 characters")
-    .option("--limit <n>", "Max results", "30")
+    .addOption(limitOption(30, "Max results"))
     .action(
       act(async (queryParts: string[], opts: { limit: string }) => {
         const sdk = await getSdk();
         const q = queryParts.join(" ").trim() || undefined;
-        const res = await sdk.catalog.coursesOfStudy({ q, limit: Number(opts.limit) || 30 });
+        const res = await sdk.catalog.coursesOfStudy({ q, limit: parseLimit(opts.limit, 30) });
         const lines = [`Studiengänge${q ? ` · "${q}"` : ""} · ${res.total ?? res.courses.length} Treffer`, ""];
         for (const c of res.courses) lines.push(`${c.displayName ?? c.name}${c.status ? ` · ${c.status}` : ""}  [${c.id}]`);
         output({ query: q ?? null, total: res.total, courses: res.courses }, lines.join("\n"));

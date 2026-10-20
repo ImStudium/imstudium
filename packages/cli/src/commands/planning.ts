@@ -31,13 +31,14 @@ import type { HolidaysOutput, TodayOutput, WeekOutput } from "@imstudium/contrac
 import { act, getSdk, note, output, type Sdk } from "../runtime.js";
 import { meId } from "../me.js";
 import { currentCourses } from "../course-arg.js";
+import { outputOption, workspaceDir } from "../kit/args.js";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-export function icsPath(sdk: Sdk, override?: string): string {
-  return override ? resolve(override) : join(sdk.workspacePath, "calendar.ics");
+export function icsPath(sdk: Sdk, override?: string, workspace?: string): string {
+  return override ? resolve(override) : join(workspace ?? sdk.workspacePath, "calendar.ics");
 }
 
 /** "2026-10-20", "20.10.", "20.10.2026", "heute", "morgen" → YYYY-MM-DD (Berlin). */
@@ -87,8 +88,8 @@ export async function resolveSemester(sdk: Sdk, label?: string): Promise<Semeste
   }
 }
 
-export async function workspaceCourses(sdk: Sdk): Promise<CourseRefLite[]> {
-  const ws = await sdk.studium.loadWorkspace(sdk.workspacePath).catch(() => null);
+export async function workspaceCourses(sdk: Sdk, workspace?: string): Promise<CourseRefLite[]> {
+  const ws = await sdk.studium.loadWorkspace(workspace ?? sdk.workspacePath).catch(() => null);
   return (ws?.courses ?? []).map((c) => ({ id: c.id, title: c.title, number: c.courseNumber ?? null }));
 }
 
@@ -180,8 +181,9 @@ export function registerPlanning(program: Command): void {
     .option("--date <day>", "Another day: YYYY-MM-DD, DD.MM. or morgen")
     .option("--offline", "Use the cached calendar.ics instead of Stud.IP")
     .option("--ics <file>", "Calendar file for --offline (default: <workspace>/calendar.ics)")
+    .addOption(outputOption())
     .action(
-      act(async (opts: { date?: string; offline?: boolean; ics?: string }) => {
+      act(async (opts: { date?: string; offline?: boolean; ics?: string; output?: string }) => {
         const sdk = await getSdk();
         const now = new Date();
         const day = parseDayArg(opts.date, now);
@@ -190,8 +192,8 @@ export function registerPlanning(program: Command): void {
           from: day,
           to: addDays(day, 13),
           offline: opts.offline,
-          icsPath: icsPath(sdk, opts.ics),
-          knownCourses: await workspaceCourses(sdk),
+          icsPath: icsPath(sdk, opts.ics, workspaceDir(sdk, opts)),
+          knownCourses: await workspaceCourses(sdk, workspaceDir(sdk, opts)),
         };
         const tt = await buildTimetable(timetableSources(sdk), ttOpts);
         const today = tt.days[0]!;
@@ -217,16 +219,17 @@ export function registerPlanning(program: Command): void {
     .option("--from <day>", "Week containing this day (YYYY-MM-DD or DD.MM.)")
     .option("--offline", "Use the cached calendar.ics instead of Stud.IP")
     .option("--ics <file>", "Calendar file for --offline (default: <workspace>/calendar.ics)")
+    .addOption(outputOption())
     .action(
-      act(async (opts: { next?: boolean; from?: string; offline?: boolean; ics?: string }) => {
+      act(async (opts: { next?: boolean; from?: string; offline?: boolean; ics?: string; output?: string }) => {
         const sdk = await getSdk();
         const now = new Date();
         const range = weekRange(parseDayArg(opts.from, now), opts.next ? 1 : 0);
         const tt = await buildTimetable(timetableSources(sdk), {
           ...range,
           offline: opts.offline,
-          icsPath: icsPath(sdk, opts.ics),
-          knownCourses: await workspaceCourses(sdk),
+          icsPath: icsPath(sdk, opts.ics, workspaceDir(sdk, opts)),
+          knownCourses: await workspaceCourses(sdk, workspaceDir(sdk, opts)),
         });
         sourceNote(tt);
         const count = tt.entries.filter((e) => !e.cancelled).length;
@@ -248,16 +251,17 @@ export function registerPlanning(program: Command): void {
     .option("--semester <name>", "Semester title, e.g. \"WS 2026/27\" (default: current)")
     .option("--offline", "Derive the plan from the cached calendar.ics")
     .option("--ics <file>", "Calendar file for --offline (default: <workspace>/calendar.ics)")
+    .addOption(outputOption())
     .action(
-      act(async (opts: { save?: boolean; semester?: string; offline?: boolean; ics?: string }) => {
+      act(async (opts: { save?: boolean; semester?: string; offline?: boolean; ics?: string; output?: string }) => {
         const sdk = await getSdk();
         const semester = await resolveSemester(sdk, opts.semester);
         let snapshot: PlanningSnapshot;
         let offlineFrom: string | null = null;
         const offline = async (reason?: string) => {
           if (reason) note(`Hinweis: ${reason} — Stundenplan aus calendar.ics abgeleitet`);
-          const snap = await offlinePlanningSnapshot(icsPath(sdk, opts.ics), {
-            knownCourses: await workspaceCourses(sdk),
+          const snap = await offlinePlanningSnapshot(icsPath(sdk, opts.ics, workspaceDir(sdk, opts)), {
+            knownCourses: await workspaceCourses(sdk, workspaceDir(sdk, opts)),
             semester,
           });
           offlineFrom = snap.icsUpdatedAt;
@@ -283,7 +287,7 @@ export function registerPlanning(program: Command): void {
             snapshot = await offline(err instanceof Error ? err.message : String(err));
           }
         }
-        if (opts.save) snapshot.markdownPath = await writeStundenplanMarkdown(sdk.workspacePath, snapshot);
+        if (opts.save) snapshot.markdownPath = await writeStundenplanMarkdown(workspaceDir(sdk, opts), snapshot);
         for (const w of snapshot.warnings) note(`Hinweis: ${w}`);
 
         const lines: string[] = [];

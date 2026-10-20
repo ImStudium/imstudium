@@ -13,6 +13,13 @@ All notable changes to ImStudium.
 
 ### Changed
 
+- **Consistent flags.** `-o, --output <dir>` is the workspace on every command that reads it (now also `today`, `week`, `stundenplan`, `setup mcp|migrate|all`; `--workspace` stays as a hidden alias there). `-n, --limit <n>` everywhere a list is cut (`news`, `inbox`, `outbox`, `forum`, `blubber`, `feed`, `search`, `catalog`, `api`; new on `changes` and `tasks`), and a bad value is an error instead of a silent default. `--course <name>` works on every course command, also those that take a `[course]` argument (`news`, `forum`, `blubber`, `courseware`, `tasks`, `wiki`, `people`, `sprechstunden`), and resolves shortcuts the same way everywhere (`changes --course nlp` now works).
+- `context --since <when>` replaces `--days <n>` (still accepted), and `context --offline` makes no Stud.IP call at all.
+- `watch --interval` uses the same duration grammar as `--since` (`30m`, `30min`, `1h`); bad input is an error (it silently became 1 h). `watch --json` prints one JSON line per round.
+- `--help` lists commands in the order of a student's day (start → today → what's new → material → workspace → API → setup).
+- Human output: every date is formatted in Europe/Berlin by one kit (task deadlines used the laptop's zone). `config show`, `status`, `courses show` and `discover` now print text without `--json` (they printed nothing). `courses show` resolves shortcuts like the other commands. `login --json` prints exactly one JSON document; sign-in prompts go to stderr.
+- Internals: `cli.ts` (1,234 lines) is now a 5-line entry point; commands live in `commands/*.ts`, assembled by `program.ts`.
+
 - **Exit codes** follow the error table: 0 ok · 1 internal · 2 usage · 3 gated · 4 auth · 5 not found · 6 offline · 7 Stud.IP error · 8 workspace (was always 1).
 - **Error codes merged** (old code kept as `legacyCode` for one minor): `NO_SESSION`/`NOT_LOGGED_IN`/`SESSION_EXPIRED` → `AUTH_REQUIRED`; `NO_WORKSPACE`/`NO_COURSE_DIR`/`NOT_IN_WORKSPACE` → `WORKSPACE_MISSING`; `MISSING_ARG`/`INVALID_KEY` → `BAD_ARGS`; `NO_SEMESTER` → `SEMESTER_NOT_FOUND`; `NO_ROUTE(S)` → `ROUTE_NOT_FOUND`; `HTTP_ERROR`/`API_ERROR` → `UPSTREAM_ERROR` (HTTP 401 → `AUTH_REQUIRED`, 404 → `NOT_FOUND`). Stud.IP's own error code moves to `details.upstream.code`.
 - The JSON error body gains `retryable` and `exitCode`.

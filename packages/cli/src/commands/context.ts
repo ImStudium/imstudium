@@ -1,11 +1,11 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { Command } from "commander";
+import { Option, type Command } from "commander";
 import {
   addDays,
   buildTimetable,
+  computeSemesterProgress,
   dateKey,
-  expandPath,
   findCurrentSemester,
   listArchivedSemesters,
   parseFrontmatter,
@@ -17,6 +17,8 @@ import { act, getSdk, globalOpts, output, type Sdk } from "../runtime.js";
 import { readChanges, readTasks } from "../pipeline.js";
 import { formatEntry, icsPath, timetableSources, workspaceCourses } from "./planning.js";
 import { meId } from "../me.js";
+import { outputOption, parseLimit, parseSince, sinceOption, workspaceDir } from "../kit/args.js";
+import { berlinDateTime, berlinDayMonth, berlinWeekday, courseLabel, daysLeftLabel } from "../kit/format.js";
 
 /**
  * One call, the whole picture: where the semester stands, today's dates,
@@ -65,41 +67,40 @@ async function lastSyncAt(out: string): Promise<string | null> {
   }
 }
 
-const de = (iso: string, withTime = false) =>
-  new Date(iso).toLocaleString("de-DE", {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-    ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
-    timeZone: "Europe/Berlin",
-  });
+interface ContextOptions {
+  live?: boolean;
+  /** Lower bound (ms) for "new" files and news. */
+  since: number;
+  /** Local files only: no semester lookup, no live timetable. */
+  offline?: boolean;
+}
 
-async function buildContext(sdk: Sdk, out: string, opts: { live?: boolean; days: number }): Promise<ContextReport> {
+async function buildContext(sdk: Sdk, out: string, opts: ContextOptions): Promise<ContextReport> {
   const now = new Date();
-  const since = now.getTime() - opts.days * 86_400_000;
+  const since = opts.since;
   const ws = await sdk.studium.loadWorkspace(out);
 
   let studip: ContextReport["semester"]["studip"] = null;
-  try {
-    const all = await sdk.courses.semesters.listAll();
-    const cur = findCurrentSemester(all);
-    if (cur) {
-      const start = Date.parse(String(cur.attributes?.start));
-      studip = {
-        title: String(cur.attributes?.title),
-        slug: semesterSlug(String(cur.attributes?.title)),
-        week: Number.isFinite(start) ? Math.max(1, Math.ceil((now.getTime() - start) / (7 * 86_400_000))) : undefined,
-      };
+  if (!opts.offline) {
+    try {
+      const cur = findCurrentSemester(await sdk.courses.semesters.listAll());
+      if (cur) {
+        studip = {
+          title: String(cur.attributes?.title),
+          slug: semesterSlug(String(cur.attributes?.title)),
+          week: computeSemesterProgress(cur, now)?.weekNumber,
+        };
+      }
+    } catch {
+      // offline — workspace view only
     }
-  } catch {
-    // offline — workspace view only
   }
 
   let today: ContextReport["today"] = null;
   const day = dateKey(now);
-  const ttOpts = { from: day, to: addDays(day, 6), icsPath: icsPath(sdk), knownCourses: await workspaceCourses(sdk) };
+  const ttOpts = { from: day, to: addDays(day, 6), icsPath: icsPath(sdk, undefined, out), knownCourses: await workspaceCourses(sdk, out) };
   const signedIn = !!(await sdk.auth.loadSession());
-  for (const offline of signedIn ? [false, true] : [true]) {
+  for (const offline of signedIn && !opts.offline ? [false, true] : [true]) {
     try {
       const tt = await buildTimetable(timetableSources(sdk), { ...ttOpts, offline });
       const entries = tt.days[0]?.entries ?? [];
@@ -134,7 +135,7 @@ async function buildContext(sdk: Sdk, out: string, opts: { live?: boolean; days:
   const news = (await recentNews(out, ws, since)).slice(0, 8);
 
   let unreadMessages: number | null = null;
-  if (opts.live && signedIn) {
+  if (opts.live && signedIn && !opts.offline) {
     try {
       unreadMessages = (await sdk.messages.inbox(await meId(sdk), { unread: true, limit: 50 })).length;
     } catch {
@@ -178,7 +179,7 @@ function render(ctx: ContextReport): string {
   L.push(
     `${s.studip ? `${s.studip.title} · Woche ${s.studip.week ?? "?"}` : "Semester unbekannt (offline)"}` +
       `${s.workspace ? ` · Workspace ${s.workspace.title} (${s.workspace.courses} Kurse)` : " · kein Workspace"}` +
-      `${ctx.lastSync ? ` · Sync ${de(ctx.lastSync, true)}` : ""}`,
+      `${ctx.lastSync ? ` · Sync ${berlinDateTime(ctx.lastSync)}` : ""}`,
   );
   if (s.rolloverNeeded) L.push("⚠ Neues Semester — der Workspace hängt noch am letzten.");
 
@@ -188,32 +189,29 @@ function render(ctx: ContextReport): string {
     if (!ctx.today.entries.length) L.push("  Keine Termine.");
     for (const e of ctx.today.entries) L.push(`  ${formatEntry(e)}`);
     if (ctx.today.next && !ctx.today.entries.some((e) => Date.parse(e.start) > Date.now())) {
-      L.push(`  Als Nächstes: ${de(ctx.today.next.start)} ${formatEntry(ctx.today.next)}`);
+      L.push(`  Als Nächstes: ${berlinWeekday(ctx.today.next.start)} ${formatEntry(ctx.today.next)}`);
     }
     if (ctx.today.source !== "live") L.push("  (aus calendar.ics)");
   }
 
   if (ctx.tasks.length) {
     L.push("", "Abgaben");
-    for (const t of ctx.tasks) {
-      const left = t.daysLeft === null ? "" : t.daysLeft < 0 ? `${-t.daysLeft} d überfällig` : t.daysLeft === 0 ? "heute" : `in ${t.daysLeft} d`;
-      L.push(`  ${left.padEnd(14)} ${t.title} · ${t.courseTitle ?? ""}`);
-    }
+    for (const t of ctx.tasks) L.push(`  ${daysLeftLabel(t.daysLeft).padEnd(14)} ${t.title} · ${t.courseTitle ?? ""}`);
   }
   if (ctx.exams.length) {
     L.push("", "Klausuren");
     for (const e of ctx.exams) {
-      L.push(`  ${e.date ? `${de(e.date)} (${e.daysRemaining} d)` : "Termin offen"}  ${e.course}${e.confirmed ? "" : " · unbestätigt"}`);
+      L.push(`  ${e.date ? `${berlinWeekday(e.date)} (${e.daysRemaining} d)` : "Termin offen"}  ${e.course}${e.confirmed ? "" : " · unbestätigt"}`);
     }
   }
   if (ctx.newFiles.length) {
     L.push("", "Neu");
-    for (const f of ctx.newFiles.slice(0, 8)) L.push(`  ${(f.course ?? "").slice(0, 30).padEnd(30)} ${f.name ?? f.path}`);
+    for (const f of ctx.newFiles.slice(0, 8)) L.push(`  ${courseLabel(f.course, 30)} ${f.name ?? f.path}`);
     if (ctx.newFiles.length > 8) L.push(`  … ${ctx.newFiles.length - 8} mehr: imstudium changes`);
   }
   if (ctx.news.length) {
     L.push("", "Ankündigungen");
-    for (const n of ctx.news.slice(0, 5)) L.push(`  ${n.date.slice(5, 10).split("-").reverse().join(".")}. ${n.course.slice(0, 28)} · ${n.title}`);
+    for (const n of ctx.news.slice(0, 5)) L.push(`  ${berlinDayMonth(n.date)} ${courseLabel(n.course, 28).trimEnd()} · ${n.title}`);
   }
   if (ctx.unreadMessages !== null) L.push("", `Nachrichten: ${ctx.unreadMessages} ungelesen`);
   if (ctx.next.length) L.push("", "Als Nächstes", ...ctx.next.map((n) => `  → ${n}`));
@@ -225,13 +223,16 @@ export function registerContext(program: Command): void {
     .command("context")
     .description("Your study briefing in one call — semester, today, Abgaben, Klausuren, new files, news")
     .option("--live", "Also ask Stud.IP for unread messages")
-    .option("--days <n>", "How far back 'new' reaches", "7")
-    .option("-o, --output <dir>", "Workspace directory")
+    .option("--offline", "Local files only: no Stud.IP calls (semester, live dates, messages)")
+    .addOption(sinceOption("How far back 'new' reaches: 24h, 7d, 2w or a date", "7d"))
+    .addOption(new Option("--days <n>", "Deprecated: use --since <n>d").hideHelp())
+    .addOption(outputOption())
     .action(
-      act(async (opts: { live?: boolean; days: string; output?: string }) => {
+      act(async (opts: { live?: boolean; offline?: boolean; since: string; days?: string; output?: string }) => {
         const sdk = await getSdk();
-        const out = expandPath(opts.output || sdk.workspacePath);
-        const ctx = await buildContext(sdk, out, { live: opts.live, days: Number(opts.days) || 7 });
+        const out = workspaceDir(sdk, opts);
+        const since = opts.days ? Date.now() - parseLimit(opts.days, 7, "days") * 86_400_000 : parseSince(opts.since).getTime();
+        const ctx = await buildContext(sdk, out, { live: opts.live, offline: opts.offline, since });
         if (globalOpts.json) output(ctx);
         else output(ctx, render(ctx));
       }),

@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import type { CoursePeople, CoursePerson } from "@imstudium/sdk";
 import { act, getSdk, note, output } from "../runtime.js";
+import { courseOption } from "../kit/args.js";
 import { currentCourses, resolveCourse } from "../course-arg.js";
 
 function names(people: CoursePerson[]): string {
@@ -25,8 +26,10 @@ export function registerPeople(program: Command): void {
     .command("people")
     .description("Who teaches what: lecturers, tutors, groups and student count per course")
     .argument("[course]", "Course title fragment, slug, number or id (default: all current courses)")
+    .addOption(courseOption("Same as the [course] argument"))
     .action(
-      act(async (courseArg?: string) => {
+      act(async (positional: string | undefined, opts: { course?: string }) => {
+        const courseArg = opts.course ?? positional;
         const sdk = await getSdk();
         const courses = courseArg ? [await resolveCourse(sdk, courseArg)] : await currentCourses(sdk);
         const results = await Promise.all(

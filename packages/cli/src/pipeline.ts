@@ -20,6 +20,7 @@ import {
 } from "@imstudium/sdk";
 import type { Sdk } from "./runtime.js";
 import { meId } from "./me.js";
+import { berlinDayMonth, berlinWeekday, nowStamp } from "./kit/format.js";
 
 export interface RunSyncOptions {
   out: string;
@@ -355,19 +356,17 @@ export async function writeNewMd(out: string, days = 14): Promise<void> {
     const key = c.courseTitle ?? "Other";
     byCourse.set(key, [...(byCourse.get(key) ?? []), c]);
   }
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Berlin" });
   const lines = [
     "# New in Stud.IP",
     "",
-    `Last ${days} days · updated ${new Date().toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}`,
+    `Last ${days} days · updated ${nowStamp()}`,
     "",
   ];
   if (!byCourse.size) lines.push("_Nothing new._", "");
   for (const [course, list] of byCourse) {
     lines.push(`## ${course}`, "");
     for (const c of list) {
-      lines.push(`- ${fmt(c.at)} ${c.change === "new" ? "🆕" : "✏️"} [${c.name ?? c.path}](${encodeURI(c.path)})`);
+      lines.push(`- ${berlinDayMonth(c.at)} ${c.change === "new" ? "🆕" : "✏️"} [${c.name ?? c.path}](${encodeURI(c.path)})`);
     }
     lines.push("");
   }
@@ -380,13 +379,10 @@ export async function writeTasks(out: string, tasks: CwTask[]): Promise<void> {
   const sorted = [...tasks].sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"));
   await mkdir(join(out, STATE_DIR), { recursive: true });
   await writeFile(join(out, STATE_DIR, "tasks.json"), JSON.stringify({ updatedAt: new Date().toISOString(), tasks: sorted }, null, 2) + "\n");
-  const fmt = (iso: string | null) =>
-    iso
-      ? new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" })
-      : "ohne Frist";
+  const fmt = (iso: string | null) => (iso ? berlinWeekday(iso, { time: true }) : "ohne Frist");
   const open = sorted.filter((t) => t.status === "open" || t.status === "overdue" || t.status === "upcoming");
   const done = sorted.filter((t) => t.status === "submitted");
-  const lines = ["# Abgaben", "", `Courseware tasks · updated ${new Date().toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}`, ""];
+  const lines = ["# Abgaben", "", `Courseware tasks · updated ${nowStamp()}`, ""];
   if (!open.length) lines.push("_Nothing open._", "");
   for (const t of open) {
     const left = t.daysLeft === null ? "" : t.daysLeft < 0 ? ` · **${-t.daysLeft} d overdue**` : ` · in ${t.daysLeft} d`;
