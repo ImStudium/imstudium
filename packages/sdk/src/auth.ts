@@ -2,7 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright";
 import type { SessionData } from "./types.js";
-import { paths } from "./config.js";
+import { getDefaultConfig, paths } from "./config.js";
+import { assertSameOrigin, originOf } from "./client.js";
 import { ImstudiumError } from "./errors.js";
 import {
   type BrowserProfileMode,
@@ -97,91 +98,80 @@ async function removePlainSessionFile(): Promise<void> {
 /** valid: Stud.IP answered JSON for /users/me · rejected: 401 or login page · offline: no answer */
 export type CookieCheck = "valid" | "rejected" | "offline";
 
-export class AuthManager {
-  private session: SessionData | null = null;
-  private instanceOrigin = "";
+/** Keychain / ImSicheren account for the session of one Stud.IP origin. */
+export function sessionAccount(origin: string): string {
+  return `session:${originOf(origin)}`;
+}
 
-  setInstanceOrigin(origin: string): void {
-    this.instanceOrigin = origin.replace(/\/$/, "");
-  }
-
-  async loadSession(): Promise<SessionData | null> {
-    if (this.session) return this.session;
-
-    // Prefer ImSicheren (global credential plane; optional peer)
+/**
+ * One store (ImSicheren → keychain → 0600 file). Raw values only; the
+ * AuthManager decides which account it reads. The file holds one session
+ * (with its origin); the keyed stores hold one per origin.
+ */
+const store = {
+  async get(account: string): Promise<{ where: "imsicheren" | "keychain" | "file"; value: unknown } | null> {
     const secure = await getSecureContext();
     if (secure) {
       try {
-        const raw = await secure.getRaw("generic_json", "session");
-        if (raw && typeof raw === "object") {
-          this.session = raw as SessionData;
-          return this.session;
-        }
+        const raw = await secure.getRaw("generic_json", account);
+        if (raw && typeof raw === "object") return { where: "imsicheren", value: raw };
       } catch {
         // fall through
       }
     }
-
     const keytar = await getKeytar();
     if (keytar?.getPassword) {
       try {
-        const raw = await keytar.getPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT);
-        if (raw) {
-          this.session = JSON.parse(raw) as SessionData;
-          return this.session;
-        }
+        const raw = await keytar.getPassword(KEYTAR_SERVICE, account);
+        if (raw) return { where: "keychain", value: JSON.parse(raw) };
       } catch {
         // fall through to file storage
       }
     }
-
     try {
       const { readFile } = await import("node:fs/promises");
-      const raw = await readFile(join(paths.configDir, "session.json"), "utf-8");
-      this.session = JSON.parse(raw) as SessionData;
-      return this.session;
+      const value = JSON.parse(await readFile(join(paths.configDir, "session.json"), "utf-8")) as SessionData;
+      // The file is shared by every account: the legacy account reads a
+      // session without origin, an origin account only its own origin.
+      const fileAccount = value.origin ? sessionAccount(value.origin) : KEYTAR_ACCOUNT;
+      if (fileAccount === account) return { where: "file", value };
     } catch {
-      return null;
+      // no file
     }
-  }
+    return null;
+  },
 
-  async saveSession(session: SessionData): Promise<void> {
-    this.session = session;
-    const raw = JSON.stringify(session);
-
+  async set(account: string, session: SessionData): Promise<void> {
     const secure = await getSecureContext();
     if (secure) {
       try {
-        await secure.set("generic_json", "session", session as unknown as Record<string, unknown>);
+        await secure.set("generic_json", account, session as unknown as Record<string, unknown>);
         await removePlainSessionFile();
         return;
       } catch {
         // fall through
       }
     }
-
     const keytar = await getKeytar();
     if (keytar?.setPassword) {
       try {
-        await keytar.setPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT, raw);
+        await keytar.setPassword(KEYTAR_SERVICE, account, JSON.stringify(session));
         await removePlainSessionFile();
         return;
       } catch {
         // fall through to file storage
       }
     }
-
     const { mkdir, writeFile } = await import("node:fs/promises");
     await mkdir(paths.configDir, { recursive: true });
-    await writeFile(`${paths.configDir}/session.json`, raw, { mode: 0o600 });
-  }
+    await writeFile(join(paths.configDir, "session.json"), JSON.stringify(session), { mode: 0o600 });
+  },
 
-  async clearSession(): Promise<void> {
-    this.session = null;
+  async delete(account: string): Promise<void> {
     const secure = await getSecureContext();
     if (secure) {
       try {
-        await secure.delete("generic_json", "session");
+        await secure.delete("generic_json", account);
       } catch {
         // ignore
       }
@@ -189,39 +179,81 @@ export class AuthManager {
     const keytar = await getKeytar();
     if (keytar?.deletePassword) {
       try {
-        await keytar.deletePassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT);
+        await keytar.deletePassword(KEYTAR_SERVICE, account);
       } catch {
         // ignore
       }
     }
-    await removePlainSessionFile();
+    if ((await this.get(account))?.where === "file") await removePlainSessionFile();
+  },
+};
+
+export class AuthManager {
+  private session: SessionData | null = null;
+  private instanceOrigin = originOf(getDefaultConfig().instanceOrigin);
+  /** The origin a pre-0.2 session (stored without origin) is assumed to belong to: the configured one. */
+  private legacyOrigin = this.instanceOrigin;
+
+  setInstanceOrigin(origin: string): void {
+    const next = originOf(origin);
+    if (next !== this.instanceOrigin) this.session = null;
+    this.instanceOrigin = next;
+  }
+
+  /** Set by createSdk from the saved config — never from --instance. */
+  setConfiguredOrigin(origin: string): void {
+    this.legacyOrigin = originOf(origin);
+  }
+
+  /** Origin this manager reads and writes sessions for. */
+  get origin(): string {
+    return this.instanceOrigin;
+  }
+
+  /**
+   * The session for this manager's origin (keychain account
+   * `session:<origin>`). A legacy session (account `session`, no origin) is
+   * moved once to the configured origin's account.
+   */
+  async loadSession(): Promise<SessionData | null> {
+    if (this.session) return this.session;
+    await this.migrateLegacySession();
+    const found = await store.get(sessionAccount(this.instanceOrigin));
+    if (!found) return null;
+    const session = found.value as SessionData;
+    if (!session.origin || originOf(session.origin) !== this.instanceOrigin) return null;
+    this.session = session;
+    return session;
+  }
+
+  /** One-time move of the pre-0.2 `session` entry to `session:<configured origin>`. */
+  async migrateLegacySession(): Promise<boolean> {
+    const legacy = await store.get(KEYTAR_ACCOUNT);
+    if (!legacy) return false;
+    const session = { ...(legacy.value as SessionData) };
+    session.origin = originOf(session.origin || this.legacyOrigin);
+    if (!(await store.get(sessionAccount(session.origin)))) {
+      await store.set(sessionAccount(session.origin), session);
+    }
+    if (legacy.where !== "file") await store.delete(KEYTAR_ACCOUNT);
+    return true;
+  }
+
+  /** Stores the session under its origin (default: this manager's origin). */
+  async saveSession(session: SessionData): Promise<void> {
+    const stamped: SessionData = { ...session, origin: originOf(session.origin || this.instanceOrigin) };
+    if (stamped.origin === this.instanceOrigin) this.session = stamped;
+    await store.set(sessionAccount(stamped.origin!), stamped);
+  }
+
+  async clearSession(): Promise<void> {
+    this.session = null;
+    await store.delete(sessionAccount(this.instanceOrigin));
   }
 
   /** Where the session lives right now — for status output, never the value. */
   async sessionStore(): Promise<"imsicheren" | "keychain" | "file" | "none"> {
-    const secure = await getSecureContext();
-    if (secure) {
-      try {
-        if (await secure.getRaw("generic_json", "session")) return "imsicheren";
-      } catch {
-        // ignore
-      }
-    }
-    const keytar = await getKeytar();
-    if (keytar?.getPassword) {
-      try {
-        if (await keytar.getPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT)) return "keychain";
-      } catch {
-        // ignore
-      }
-    }
-    try {
-      const { access } = await import("node:fs/promises");
-      await access(join(paths.configDir, "session.json"));
-      return "file";
-    } catch {
-      return "none";
-    }
+    return (await store.get(sessionAccount(this.instanceOrigin)))?.where ?? "none";
   }
 
   /** Result of the last ensureValidSession() check. */
@@ -243,7 +275,9 @@ export class AuthManager {
       return null;
     }
 
-    const origin = (options?.instanceOrigin || this.instanceOrigin).replace(/\/$/, "");
+    // The session only ever goes to the origin it was issued by.
+    const origin = originOf(session.origin!);
+    if (options?.instanceOrigin) assertSameOrigin(session, options.instanceOrigin);
     if (session.type === "cookie" && origin && session.cookies?.Seminar_Session) {
       const check = await this.checkCookie(origin, session.cookies.Seminar_Session);
       this.lastCheck = check;
@@ -273,6 +307,7 @@ export class AuthManager {
 
     const refreshed: SessionData = {
       type: "oauth",
+      origin,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token ?? session.refreshToken,
       expiresAt: tokens.expires_in
@@ -344,7 +379,7 @@ export class AuthManager {
         }
       }
       if (!cookie) return false;
-      await this.persistCookieSession(cookie);
+      await this.persistCookieSession(cookie, origin);
       return true;
     } catch {
       return false;
@@ -361,6 +396,11 @@ export class AuthManager {
       .count()
       .catch(() => 0);
     return count > 0;
+  }
+
+  /** Origin of the loaded session (undefined when signed out). */
+  getSessionOrigin(): string | undefined {
+    return this.session?.origin;
   }
 
   getCookies(): Record<string, string> {
@@ -430,6 +470,7 @@ export class AuthManager {
     }
     const session: SessionData = {
       type: "cookie",
+      origin,
       cookies: { Seminar_Session: seminarSession },
     };
     await this.saveSession(session);
@@ -618,7 +659,7 @@ export class AuthManager {
     if (!options.force) {
       const stored = await this.loadSession();
       const storedCookie = stored?.cookies?.Seminar_Session;
-      if (storedCookie && (await this.isCookieValid(origin, storedCookie))) {
+      if (storedCookie && stored?.origin === originOf(origin) && (await this.isCookieValid(origin, storedCookie))) {
         options.onMessage?.("Already signed in — reusing saved session.");
         return stored;
       }
@@ -648,7 +689,7 @@ export class AuthManager {
       if (!options.force) {
         seminarSession = await this.extractSeminarSession(context, origin);
         if (seminarSession) {
-          return this.persistCookieSession(seminarSession);
+          return this.persistCookieSession(seminarSession, origin);
         }
       }
 
@@ -692,7 +733,7 @@ export class AuthManager {
         );
       }
 
-      const session = await this.persistCookieSession(seminarSession);
+      const session = await this.persistCookieSession(seminarSession, origin);
 
       try {
         const donePage = context.pages().find((p) => !p.isClosed()) ?? page;
@@ -736,11 +777,12 @@ export class AuthManager {
     }
   }
 
-  private async persistCookieSession(seminarSession: string): Promise<SessionData> {
+  private async persistCookieSession(seminarSession: string, origin: string): Promise<SessionData> {
     const { unlink } = await import("node:fs/promises");
     await unlink(join(paths.dataDir, "silent-refresh-failed")).catch(() => undefined);
     const session: SessionData = {
       type: "cookie",
+      origin: originOf(origin),
       cookies: { Seminar_Session: seminarSession },
     };
     await this.saveSession(session);
@@ -932,6 +974,7 @@ export class AuthManager {
 
     const session: SessionData = {
       type: "oauth",
+      origin,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
       expiresAt: tokens.expires_in

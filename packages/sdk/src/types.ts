@@ -247,6 +247,12 @@ export interface ImstudiumConfig {
 
 export interface SessionData {
   type: "cookie" | "oauth";
+  /**
+   * Stud.IP origin that issued the session (e.g. https://digicampus.uni-augsburg.de).
+   * The client never sends the cookie or token anywhere else. Always set
+   * since 0.2.0; sessions stored before are migrated to the configured origin.
+   */
+  origin?: string;
   cookies?: Record<string, string>;
   accessToken?: string;
   refreshToken?: string;

@@ -1,5 +1,29 @@
-import type { JsonApiDocument, JsonApiResource } from "./types.js";
+import type { JsonApiDocument, JsonApiResource, SessionData } from "./types.js";
 import { ImstudiumError, readResponseError } from "./errors.js";
+
+/** `https://Host:443/x/` → `https://host`; a non-URL is returned trimmed of its trailing slash. */
+export function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url.replace(/\/+$/, "");
+  }
+}
+
+function originMismatch(sessionOrigin: string | undefined, target: string): ImstudiumError {
+  return new ImstudiumError(
+    `The stored session belongs to ${sessionOrigin ?? "an unknown instance"}, not ${originOf(target)} — it is not sent there.`,
+    "SESSION_ORIGIN_MISMATCH",
+    undefined,
+    `Run: imstudium login --instance ${originOf(target)}`,
+    { sessionOrigin: sessionOrigin ?? null, requestOrigin: originOf(target) },
+  );
+}
+
+/** Throws SESSION_ORIGIN_MISMATCH unless the session was issued by the origin of `target`. */
+export function assertSameOrigin(session: Pick<SessionData, "origin">, target: string): void {
+  if (!session.origin || originOf(session.origin) !== originOf(target)) throw originMismatch(session.origin, target);
+}
 
 /** JSON:API query: include, sparse fieldsets, filters, paging, sort, plus raw params. */
 export interface JsonApiQuery {
@@ -15,6 +39,12 @@ export interface StudIpClientOptions {
   baseUrl: string;
   getAuthHeaders?: () => Record<string, string>;
   getCookies?: () => Record<string, string>;
+  /**
+   * Origin the credentials from getCookies/getAuthHeaders were issued by.
+   * When given, the client attaches them only to requests on that origin and
+   * throws SESSION_ORIGIN_MISMATCH otherwise (no request is sent).
+   */
+  getSessionOrigin?: () => string | undefined;
   fetchImpl?: typeof fetch;
   /** Per-request timeout for JSON calls (default 30 s). Downloads get 10 min. */
   timeoutMs?: number;
@@ -115,6 +145,7 @@ export class StudIpClient {
   private readonly baseUrl: string;
   private readonly getAuthHeaders?: () => Record<string, string>;
   private readonly getCookies?: () => Record<string, string>;
+  private readonly getSessionOrigin?: () => string | undefined;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
   private readonly retries: number;
@@ -127,6 +158,7 @@ export class StudIpClient {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.getAuthHeaders = options.getAuthHeaders;
     this.getCookies = options.getCookies;
+    this.getSessionOrigin = options.getSessionOrigin;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.retries = options.retries ?? 3;
@@ -140,14 +172,19 @@ export class StudIpClient {
     return this.baseUrl;
   }
 
-  private buildHeaders(extra?: Record<string, string>): Record<string, string> {
+  private buildHeaders(url: string, extra?: Record<string, string>): Record<string, string> {
+    const auth = this.getAuthHeaders?.() ?? {};
+    const cookies = this.getCookies?.();
+    const hasCredentials = Object.keys(auth).length > 0 || (!!cookies && Object.keys(cookies).length > 0);
+    if (hasCredentials && this.getSessionOrigin) {
+      assertSameOrigin({ origin: this.getSessionOrigin() }, url);
+    }
     const headers: Record<string, string> = {
       Accept: "application/vnd.api+json",
       ...(this.userAgent ? { "User-Agent": this.userAgent } : {}),
-      ...this.getAuthHeaders?.(),
+      ...auth,
       ...extra,
     };
-    const cookies = this.getCookies?.();
     if (cookies && Object.keys(cookies).length > 0) {
       headers.Cookie = Object.entries(cookies)
         .map(([k, v]) => `${k}=${v}`)
@@ -190,11 +227,13 @@ export class StudIpClient {
 
     return this.gate.run(async () => {
       for (let attempt = 0; ; attempt++) {
+        // Outside the try: an origin mismatch is not a network error.
+        const headers = this.buildHeaders(url, init?.headers);
         let res: Response;
         try {
           res = await this.fetchImpl(url, {
             method,
-            headers: this.buildHeaders(init?.headers),
+            headers,
             body: init?.body,
             signal: AbortSignal.timeout(init?.timeoutMs ?? this.timeoutMs),
           });

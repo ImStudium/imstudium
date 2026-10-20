@@ -228,8 +228,11 @@ export async function createSdk(
   configOverride?: Partial<ReturnType<typeof getDefaultConfig>>,
   options: CreateSdkOptions = {},
 ) {
-  const config = { ...(await loadConfig()), ...configOverride };
+  const saved = await loadConfig();
+  const config = { ...saved, ...configOverride };
   const auth = new AuthManager();
+  // A pre-0.2 session (no origin) belongs to the *saved* instance, never to --instance.
+  auth.setConfiguredOrigin(saved.instanceOrigin);
   auth.setInstanceOrigin(config.instanceOrigin);
   await auth.loadSession();
 
@@ -237,6 +240,7 @@ export async function createSdk(
     baseUrl: config.baseUrl,
     getAuthHeaders: () => auth.getAuthHeaders(),
     getCookies: () => auth.getCookies(),
+    getSessionOrigin: () => auth.getSessionOrigin(),
     userAgent: `imstudium/${SDK_VERSION} (+https://github.com/ImStudium/imstudium)`,
     onUnauthorized:
       options.silentRefresh === false

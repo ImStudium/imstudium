@@ -14,7 +14,7 @@ ImStudium reads with GET and nothing else unless you pass `--write`. All counts 
 | OAuth2 Bearer | `Authorization: Bearer` | Yes, once the university registers a client. See [OAUTH.md](OAUTH.md) |
 | HTTP Basic | `Authorization: Basic` | No. Shibboleth/MFA instances don't allow it |
 
-ImStudium stores the session in ImSicheren when installed, otherwise the OS keychain, otherwise `~/.config/imstudium/session.json` (0600). An HTML login page in place of JSON means the session expired (`SESSION_EXPIRED`). A 401 triggers one silent headless renewal from the isolated login profile.
+ImStudium stores the session in ImSicheren when installed, otherwise the OS keychain (account `session:<origin>`), otherwise `~/.config/imstudium/session.json` (0600). Every session is bound to the Stud.IP origin that issued it: the client never attaches its cookie or token to a request on another origin (`SESSION_ORIGIN_MISMATCH`). Sessions stored before 0.2.0 (no origin) are moved once to the configured `instanceOrigin`. An HTML login page in place of JSON means the session expired (`SESSION_EXPIRED`). A 401 triggers one silent headless renewal from the isolated login profile.
 
 ## Public routes (no session)
 
