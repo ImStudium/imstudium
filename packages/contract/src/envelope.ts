@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ErrorPayload } from "./errors.js";
 
 /**
  * CLI JSON envelope v1 (the default until 1.0): the payload's keys sit at the
@@ -27,10 +28,15 @@ export const ErrorBody = z
       message: z.string(),
       status: z.number().int().optional().describe("HTTP status when Stud.IP answered"),
       hint: z.string().optional().describe("What to run or check next"),
-      retryable: z.boolean().optional(),
-      exitCode: z.number().int().optional(),
+      retryable: z.boolean(),
+      exitCode: z.number().int().describe("The process exit code (0 ok · 1 internal · 2 usage · 3 gated · 4 auth · 5 not found · 6 offline · 7 upstream · 8 workspace)"),
+      legacyCode: z.string().optional().describe("Pre-0.3 code when an alias was thrown"),
       details: z.record(z.string(), z.unknown()).optional(),
     }),
   })
   .describe("Error document (CLI stderr, MCP isError content)");
 export type ErrorBody = z.infer<typeof ErrorBody>;
+
+// The zod schema and the zod-free payload type must describe the same document.
+const _sameShape: ErrorPayload = {} as ErrorBody;
+void _sameShape;

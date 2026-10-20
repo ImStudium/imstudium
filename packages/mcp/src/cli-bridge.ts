@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { errorPayload } from "@imstudium/contract/errors";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -96,7 +97,7 @@ export async function runCli(args: string[], timeoutMs = 120_000): Promise<{ ok:
     });
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve({ ok: false, json: { error: { code: "CLI_NOT_FOUND", message: e.message, hint: "npm i -g @imstudium/cli" } }, stderr: "" });
+      resolve({ ok: false, json: errorPayload({ code: "CLI_NOT_FOUND", message: e.message }), stderr: "" });
     });
   });
 }

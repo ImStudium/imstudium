@@ -149,7 +149,8 @@ Bun workspaces, four packages:
 
 ### Conventions
 
-- Every CLI `--json` output carries `schemaVersion: "1"` and matches its schema in `@imstudium/contract` (`imstudium schema <command>`). Type new payloads against the contract (`const payload: TodayOutput = …`); a new key is additive, a removed or retyped key is breaking. Errors are `ImstudiumError` with `code`, `message` and `hint`.
+- Every CLI `--json` output carries `schemaVersion: "1"` and matches its schema in `@imstudium/contract` (`imstudium schema <command>`). Type new payloads against the contract (`const payload: TodayOutput = …`); a new key is additive, a removed or retyped key is breaking.
+- Errors are `ImstudiumError(message, code, status?, hint?, details?)`. The code must be in the table in `packages/contract/src/errors.ts` (a test scans every throw site); the exit code, `retryable` and the default hint come from there. After changing the table run `bun run docs` (regenerates docs/ERRORS.md; `bun run docs:check` and the test suite fail on drift).
 - **Read-only by default.** New Stud.IP calls are GETs. Anything that writes goes behind `--write` and stays off the MCP allowlist. Check reads for side effects before using a route (see [docs/API.md](docs/API.md)):
   - `/forum-discussions/{id}/postings` marks threads read
   - `GET /courseware-structural-elements/{id}` stores the last-visited page

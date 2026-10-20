@@ -48,10 +48,38 @@ describe("CLI --json matches @imstudium/contract (offline, synthetic)", () => {
     expect(JSON.parse(r.stdout).title).toBe("imstudium today --json");
   });
 
-  it("errors are an ErrorBody on stderr", () => {
+  it("errors are an ErrorBody on stderr with the table's exit code", () => {
     const r = runCli(fx, ["--json", "schema", "nope"]);
-    expect(r.status).not.toBe(0);
+    expect(r.status).toBe(5);
     expect(r.stdout).toBe("");
-    expect(ErrorBody.safeParse(JSON.parse(r.stderr)).success).toBe(true);
+    const body = ErrorBody.parse(JSON.parse(r.stderr));
+    expect(body.error).toMatchObject({ code: "NOT_FOUND", exitCode: 5, retryable: false });
+  });
+});
+
+describe("usage errors (Commander)", () => {
+  it("unknown command exits 2 with BAD_ARGS JSON under --json", () => {
+    const r = runCli(fx, ["--json", "nonsense"]);
+    expect(r.status).toBe(2);
+    expect(r.stdout).toBe("");
+    expect(ErrorBody.parse(JSON.parse(r.stderr)).error.code).toBe("BAD_ARGS");
+  });
+
+  it("missing argument exits 2; human mode keeps Commander's message", () => {
+    const r = runCli(fx, ["search"]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/missing required argument/);
+  });
+
+  it("help and version still exit 0", () => {
+    expect(runCli(fx, ["--help"]).status).toBe(0);
+    expect(runCli(fx, ["--version"]).status).toBe(0);
+    expect(runCli(fx, ["today", "--help"]).status).toBe(0);
+  });
+
+  it("a missing workspace exits 8", () => {
+    const r = runCli(fx, ["--json", "klausuren"], { IMSTUDIUM_WORKSPACE: `${fx.root}/nowhere` });
+    expect(r.status).toBe(8);
+    expect(JSON.parse(r.stderr).error.code).toBe("WORKSPACE_MISSING");
   });
 });

@@ -104,7 +104,7 @@ export function registerSemester(program: Command): void {
         if (!target) {
           throw new ImstudiumError(
             opts.semester ? `No semester matches "${opts.semester}"` : "No semester is running right now",
-            "NO_SEMESTER",
+            "SEMESTER_NOT_FOUND",
             undefined,
             "imstudium semester start --semester \"WS 2026/27\"",
           );

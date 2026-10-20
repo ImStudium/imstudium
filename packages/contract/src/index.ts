@@ -10,6 +10,7 @@
  */
 export * from "./common.js";
 export * from "./envelope.js";
+export * from "./errors.js";
 export * from "./cli/context.js";
 export * from "./cli/planning.js";
 export * from "./cli/content.js";

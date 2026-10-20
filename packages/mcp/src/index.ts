@@ -4,8 +4,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createSdk, expandPath, extractSlug, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, type StudiumWorkspace } from "@imstudium/sdk";
-import type { KlausurenOutput } from "@imstudium/contract";
+import { createSdk, expandPath, extractSlug, ImstudiumError, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, toImstudiumError, type StudiumWorkspace } from "@imstudium/sdk";
+import type { ErrorBody, KlausurenOutput } from "@imstudium/contract";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { MCP_TOOLS } from "./tools.js";
@@ -32,6 +32,18 @@ function jsonText(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
 
+/** Every failure: the contract error body (docs/ERRORS.md) with isError set. */
+function errorResult(e: unknown) {
+  const body: ErrorBody = toImstudiumError(e).toJSON();
+  return { ...jsonText(body), isError: true };
+}
+
+function courseNotFound(query: string, ws: StudiumWorkspace): ImstudiumError {
+  return new ImstudiumError(`No course matches "${query}"`, "COURSE_NOT_FOUND", 404, "Pass a title fragment, shortcut or id from details.available", {
+    available: ws.courses.map((c) => c.title),
+  });
+}
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [...MCP_TOOLS],
 }));
@@ -43,7 +55,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const cliArgs = ((args as { args?: unknown })?.args ?? []) as unknown[];
     const list = cliArgs.map(String);
     const refused = checkArgs(list);
-    if (refused) return { content: [{ type: "text" as const, text: refused }], isError: true };
+    if (refused) return errorResult(new ImstudiumError(refused, "WRITE_NOT_ALLOWED", undefined, "Run it in a terminal"));
     const res = await runCli(list);
     return { ...jsonText(res.json), ...(res.ok ? {} : { isError: true }) };
   }
@@ -111,9 +123,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");
         const course = pickCourse(ws, courseArg, sdk.config.courseAliases);
-        if (!course) {
-          return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
-        }
+        if (!course) throw courseNotFound(courseArg, ws);
         const courseDir = resolveCourseDir(workspacePath, course, ws);
         let courseMd = "";
         try {
@@ -135,7 +145,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const courseArg = String((args as { course?: string })?.course || "");
         const query = String((args as { query?: string })?.query || "").toLowerCase();
         const course = pickCourse(ws, courseArg, sdk.config.courseAliases);
-        if (!course) return jsonText({ error: "Course not found" });
+        if (!course) throw courseNotFound(courseArg, ws);
 
         const filesDir = join(resolveCourseDir(workspacePath, course, ws), "files");
         const matches = await findFilesRecursive(filesDir, query);
@@ -149,26 +159,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const page = (args as { page?: number })?.page;
 
         const course = pickCourse(ws, courseArg, sdk.config.courseAliases);
-        if (!course) {
-          return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
-        }
+        if (!course) throw courseNotFound(courseArg, ws);
 
         const courseDir = resolveCourseDir(workspacePath, course, ws);
         const filesDir = join(courseDir, "files");
         const candidates = await findFilesRecursive(filesDir, fileArg);
         if (candidates.length === 0) {
-          return jsonText({
-            error: `No file matching "${fileArg}" in ${course.title}`,
-            path: course.path,
-            hint: "Use studium_find_materials to list files, or imstudium_sync to refresh",
-          });
+          throw new ImstudiumError(
+            `No file matching "${fileArg}" in ${course.title}`,
+            "NOT_FOUND",
+            404,
+            "Use studium_find_materials to list files; run imstudium sync in a terminal to refresh",
+            { path: course.path },
+          );
         }
         const src = candidates[0];
 
         const outDir = join(courseDir, "extracted", extractSlug(basename(src)));
         const result = await sdk.extractor.extractFile(src, outDir);
         if (result.error) {
-          return jsonText({ error: result.error, hint: result.hint, source: src });
+          throw new ImstudiumError(result.error, "UNKNOWN", undefined, result.hint, { source: src });
         }
 
         let content = "";
@@ -273,22 +283,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       default:
-        return jsonText({ error: `Unknown tool: ${name}` });
+        throw new ImstudiumError(`Unknown tool: ${name}`, "BAD_ARGS", undefined, "tools/list shows the available tools");
     }
   } catch (e) {
-    return jsonText({
-      error: e instanceof Error ? e.message : String(e),
-      hint: "Run imstudium login if not authenticated",
-    });
+    return errorResult(e);
   }
 });
 
 async function loadWorkspace(sdk: Awaited<ReturnType<typeof createSdk>>): Promise<StudiumWorkspace> {
   const ws = await sdk.studium.loadWorkspace(workspacePath);
   if (!ws) {
-    throw new Error(
-      `No Studium workspace at ${workspacePath}. Run: imstudium init`,
-    );
+    throw new ImstudiumError(`No Studium workspace at ${workspacePath}`, "WORKSPACE_MISSING", undefined, "Run in a terminal: imstudium semester start");
   }
   return normalizeStudiumWorkspace(ws);
 }

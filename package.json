@@ -18,7 +18,10 @@
     "clean": "turbo run clean",
     "test": "vitest run",
     "validate": "turbo run typecheck build && vitest run",
-    "install:dev": "bash scripts/install-dev.sh"
+    "install:dev": "bash scripts/install-dev.sh",
+    "docs": "bun scripts/gen-docs.ts",
+    "docs:check": "bun scripts/gen-docs.ts --check",
+    "docs:errors": "bun scripts/gen-docs.ts errors"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@^7.0.2",

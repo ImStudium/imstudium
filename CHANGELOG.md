@@ -8,7 +8,16 @@ All notable changes to ImStudium.
 
 - **`@imstudium/contract`** (new package, MIT): zod schemas for every documented `--json` output (`context`, `today`, `week`, `holidays`, `tasks`, `courseware`, `news`, `inbox`/`outbox`, `forum`, `search`, `changes`, `klausuren`, `semester`, `semester start`, `sync`), the error document, and the `imstudium/source/v1` feed shapes (discovery, item, page, ingest). The CLI and MCP type their payloads against it, so a drift fails the build.
 - **`imstudium schema [command]`** prints the JSON Schema of a command's `--json` output (`imstudium schema today`, `imstudium schema "semester start"`, `imstudium schema feed.FeedItem`); without an argument it lists them. The contract loads only for this command, so startup stays fast.
+- **One error table** ([docs/ERRORS.md](docs/ERRORS.md), generated): every failure has a stable `code`, an exit code, a default hint and `retryable`. The CLI, the MCP server and the SDK all read it.
 - `IMSTUDIUM_SESSION_STORE=file` keeps the session in the 0600 file only (no keychain, no ImSicheren) — for tests, CI and headless machines.
+
+### Changed
+
+- **Exit codes** follow the error table: 0 ok · 1 internal · 2 usage · 3 gated · 4 auth · 5 not found · 6 offline · 7 Stud.IP error · 8 workspace (was always 1).
+- **Error codes merged** (old code kept as `legacyCode` for one minor): `NO_SESSION`/`NOT_LOGGED_IN`/`SESSION_EXPIRED` → `AUTH_REQUIRED`; `NO_WORKSPACE`/`NO_COURSE_DIR`/`NOT_IN_WORKSPACE` → `WORKSPACE_MISSING`; `MISSING_ARG`/`INVALID_KEY` → `BAD_ARGS`; `NO_SEMESTER` → `SEMESTER_NOT_FOUND`; `NO_ROUTE(S)` → `ROUTE_NOT_FOUND`; `HTTP_ERROR`/`API_ERROR` → `UPSTREAM_ERROR` (HTTP 401 → `AUTH_REQUIRED`, 404 → `NOT_FOUND`). Stud.IP's own error code moves to `details.upstream.code`.
+- The JSON error body gains `retryable` and `exitCode`.
+- Usage errors (unknown command, missing argument) exit 2 and, under `--json`, print the JSON error body instead of Commander's plain text.
+- MCP: every curated tool failure returns the error body with `isError: true` (was a successful text result).
 
 ### Fixed
 

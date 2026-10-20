@@ -248,7 +248,7 @@ export class StudIpClient {
       await res.body?.cancel().catch(() => undefined);
       throw new ImstudiumError(
         "Expected JSON from Stud.IP but got a web page — the session has most likely expired.",
-        "SESSION_EXPIRED",
+        "AUTH_REQUIRED",
         undefined,
         "Run imstudium login",
       );

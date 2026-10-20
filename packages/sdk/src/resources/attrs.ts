@@ -43,7 +43,7 @@ export function arrayish(value: unknown): unknown[] {
 /** True for errors that mean "not logged in / session gone" rather than "doesn't exist". */
 export function isAuthError(err: unknown): boolean {
   if (!(err instanceof ImstudiumError)) return false;
-  return err.status === 401 || err.code === "SESSION_EXPIRED" || err.code === "NOT_LOGGED_IN";
+  return err.status === 401 || err.code === "AUTH_REQUIRED" || err.code === "SESSION_ORIGIN_MISMATCH";
 }
 
 /** True for errors where an offline fallback (ICS, workspace) makes sense. */

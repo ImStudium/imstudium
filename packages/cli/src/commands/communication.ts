@@ -38,7 +38,7 @@ function requireDir(course: CourseRef): string {
   if (!course.dir) {
     throw new ImstudiumError(
       `"${course.title}" is not in your Studium workspace yet`,
-      "NOT_IN_WORKSPACE",
+      "WORKSPACE_MISSING",
       undefined,
       "Run imstudium sync (or init) first, then --save writes into the course folder.",
     );

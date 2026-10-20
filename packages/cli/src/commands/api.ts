@@ -45,7 +45,7 @@ export function registerApi(program: Command): void {
         const sdk = await getSdk();
         const catalog = await loadRouteCatalog(sdk.config.instanceOrigin, { refresh: opts.refresh });
         if (!catalog) {
-          throw new ImstudiumError("Could not load the route catalog", "NO_ROUTES", undefined, "Check your connection");
+          throw new ImstudiumError("Could not load the route catalog", "ROUTE_NOT_FOUND", undefined, "Check your connection");
         }
         const routes = searchRoutes(catalog, query, opts.allMethods ? undefined : opts.method);
         const groups = groupRoutes(routes);
@@ -104,7 +104,7 @@ export function registerApi(program: Command): void {
             const near = searchRoutes(catalog, path.split("/").filter(Boolean)[0]).slice(0, 8);
             throw new ImstudiumError(
               `No ${method} route matches ${path}`,
-              "NO_ROUTE",
+              "ROUTE_NOT_FOUND",
               404,
               near.length ? `Close: ${near.map((r) => r.pattern).join("  ")}` : "Run imstudium routes",
             );

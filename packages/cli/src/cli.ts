@@ -37,7 +37,7 @@ import {
 import { fileURLToPath } from "node:url";
 import type { KlausurenOutput, SyncOutput } from "@imstudium/contract";
 
-import { act, fail, getSdk, globalOpts, note, output, type GlobalOpts } from "./runtime.js";
+import { act, commanderExit, commanderOutput, fail, getSdk, globalOpts, note, output, type GlobalOpts } from "./runtime.js";
 import { runSync, writeEchoSnapshot } from "./pipeline.js";
 import { registerCommands } from "./commands/index.js";
 import { resolveCourse } from "./course-arg.js";
@@ -193,6 +193,8 @@ program
   .option("--json", "JSON output for agents")
   .option("--quiet", "Minimal output")
   .option("--instance <url>", "Stud.IP instance origin (default: digicampus.uni-augsburg.de)")
+  .exitOverride(commanderExit)
+  .configureOutput(commanderOutput)
   .hook("preAction", (thisCommand) => {
     Object.assign(globalOpts, thisCommand.opts() as GlobalOpts);
   });
@@ -271,7 +273,7 @@ program
       if (!session || opts.relogin) {
         if (opts.yes && !session) {
           fail(
-            new ImstudiumError("Not logged in.", "NO_SESSION", undefined, "Run: imstudium login"),
+            new ImstudiumError("Not logged in.", "AUTH_REQUIRED", undefined, "Run: imstudium login"),
           );
         }
         await runLogin(sdk, { chromeProfile: opts.chromeProfile });
@@ -448,7 +450,7 @@ program
       const dir = expandPath(opts.output || sdk.workspacePath);
       if (globalOpts.json) {
         const ws = await sdk.studium.loadWorkspace(dir);
-        if (!ws) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
+        if (!ws) fail(new ImstudiumError("No workspace. Run imstudium init", "WORKSPACE_MISSING"));
         output(ws);
       } else {
         const md = await readFile(join(dir, "STUDIUM.md"), "utf-8");
@@ -469,7 +471,7 @@ program
       const dir = expandPath(opts.output || sdk.workspacePath);
       if (globalOpts.json) {
         const ws = await sdk.studium.loadWorkspace(dir);
-        if (!ws) fail(new ImstudiumError("No workspace", "NO_WORKSPACE"));
+        if (!ws) fail(new ImstudiumError("No workspace", "WORKSPACE_MISSING"));
         const exams: StudiumExamDate[] = ws.courses.flatMap((c) => c.examDates);
         const payload: KlausurenOutput = { exams, nextDeadlines: ws.nextDeadlines };
         output(payload);
@@ -491,7 +493,7 @@ program
       const sdk = await getSdk();
       const dir = expandPath(opts.output || sdk.workspacePath);
       const ws = await sdk.studium.loadWorkspace(dir);
-      if (!ws) fail(new ImstudiumError("No workspace", "NO_WORKSPACE"));
+      if (!ws) fail(new ImstudiumError("No workspace", "WORKSPACE_MISSING"));
       const snapshot = await writeEchoSnapshot(dir, ws);
       const metrics = JSON.parse(await readFile(snapshot, "utf-8")).metrics as {
         courses: number;
@@ -730,7 +732,7 @@ program
 
       const ws = expandPath(opts.output || sdk.workspacePath);
       const workspace = await sdk.studium.loadWorkspace(ws);
-      if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
+      if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "WORKSPACE_MISSING"));
 
       const courses = opts.course
         ? [pickCourse(workspace, opts.course, sdk.config.courseAliases)].filter(Boolean)
@@ -780,7 +782,7 @@ program
       const sdk = await getSdk();
       const ws = expandPath(opts.output || sdk.workspacePath);
       const workspace = await sdk.studium.loadWorkspace(ws);
-      if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
+      if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "WORKSPACE_MISSING"));
 
       if (opts.course) {
         const course = pickCourse(workspace, opts.course, sdk.config.courseAliases);
@@ -817,12 +819,12 @@ program
 
       if (!outDir) {
         if (!opts.course || !opts.file) {
-          fail(new ImstudiumError("Provide --dir OR both --course and --file", "MISSING_ARG"));
+          fail(new ImstudiumError("Provide --dir OR both --course and --file", "BAD_ARGS"));
         }
         const sdk = await getSdk();
         const ws = expandPath(opts.output || sdk.workspacePath);
         const workspace = await sdk.studium.loadWorkspace(ws);
-        if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "NO_WORKSPACE"));
+        if (!workspace) fail(new ImstudiumError("No workspace. Run imstudium init", "WORKSPACE_MISSING"));
         const course = pickCourse(workspace, opts.course!, sdk.config.courseAliases);
         if (!course) fail(new ImstudiumError("Course not found", "NOT_FOUND"));
         const courseDir = resolveCourseDir(ws, course, workspace);
@@ -937,7 +939,7 @@ program
       } catch (e) {
         const err = e as { code?: string; message?: string };
         console.error(`[watch] ${err.code ?? "ERROR"}: ${err.message ?? String(e)}`);
-        if (err.code === "SESSION_EXPIRED" || err.code === "HTTP_ERROR") console.error("[watch] sign in again with: imstudium login");
+        if (err.code === "AUTH_REQUIRED") console.error("[watch] sign in again with: imstudium login");
       }
       await sleep(ms);
     }
@@ -1018,7 +1020,7 @@ sessionCmd
         const content = await readFile(opts.file, "utf-8");
         await sdk.auth.importFromNetscapeCookieFile(content);
       } else {
-        fail(new ImstudiumError("Provide --cookie or --file", "MISSING_ARG"));
+        fail(new ImstudiumError("Provide --cookie or --file", "BAD_ARGS"));
       }
       output({ ok: true }, "Session imported");
     } catch (e) {
@@ -1049,7 +1051,7 @@ configCmd
       } else if (key === "workspace") {
         await sdk.saveConfig({ workspacePath: value });
       } else {
-        fail(new ImstudiumError(`Unknown key: ${key}`, "INVALID_KEY"));
+        fail(new ImstudiumError(`Unknown key: ${key}`, "BAD_ARGS"));
       }
       output({ ok: true }, `Set ${key}`);
     } catch (e) {

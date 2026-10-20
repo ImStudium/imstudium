@@ -1,4 +1,5 @@
-import { createSdk, ImstudiumError } from "@imstudium/sdk";
+import type { CommanderError } from "commander";
+import { createSdk, EXIT_CODES, ImstudiumError, toImstudiumError } from "@imstudium/sdk";
 
 export interface GlobalOpts {
   json?: boolean;
@@ -26,18 +27,56 @@ export function note(text: string) {
   if (!globalOpts.json && !globalOpts.quiet) console.error(text);
 }
 
+/**
+ * Report an error and exit with its table exit code (docs/ERRORS.md):
+ * 1 internal · 2 usage · 3 gated · 4 auth · 5 not found · 6 offline ·
+ * 7 upstream · 8 workspace. Under --json the body goes to stderr as one
+ * JSON document; stdout stays empty.
+ */
 export function fail(err: unknown): never {
-  const error =
-    err instanceof ImstudiumError
-      ? err
-      : new ImstudiumError(err instanceof Error ? err.message : String(err), "UNKNOWN");
-  if (globalOpts.json) {
+  const error = toImstudiumError(err);
+  if (globalOpts.json || jsonRequested()) {
     console.error(JSON.stringify(error.toJSON(), null, 2));
   } else {
     console.error(`Error: ${error.message}`);
     if (error.hint) console.error(`Hint: ${error.hint}`);
   }
-  process.exit(1);
+  process.exit(error.exitCode);
+}
+
+/**
+ * Commander's exit hook: help and --version exit as usual; usage errors
+ * (unknown command, missing argument, bad option) exit 2 and, under --json,
+ * print the same error document as every other failure.
+ */
+export function commanderExit(err: CommanderError): never {
+  if (err.exitCode === 0 || err.code === "commander.helpDisplayed" || err.code === "commander.version" || err.code === "commander.help") {
+    process.exit(err.exitCode);
+  }
+  if (jsonRequested()) {
+    fail(
+      new ImstudiumError(
+        err.message.replace(/^error:\s*/i, ""),
+        "BAD_ARGS",
+        undefined,
+        "imstudium --help lists the commands; imstudium <command> --help their flags",
+        { commander: err.code },
+      ),
+    );
+  }
+  process.exit(EXIT_CODES.usage);
+}
+
+/** Commander prints its own usage error in human mode; under --json only our JSON goes out. */
+export const commanderOutput = {
+  outputError: (str: string, write: (s: string) => void) => {
+    if (!jsonRequested()) write(str);
+  },
+};
+
+/** --json before the preAction hook ran (Commander usage errors). */
+export function jsonRequested(argv: string[] = process.argv): boolean {
+  return argv.includes("--json");
 }
 
 export async function getSdk(): Promise<Sdk> {

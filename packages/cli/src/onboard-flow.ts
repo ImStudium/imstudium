@@ -65,7 +65,7 @@ export async function runOnboardFlow(opts: OnboardFlowOpts): Promise<OnboardFlow
         if (opts.yes) {
           throw new ImstudiumError(
             "Not logged in.",
-            "NO_SESSION",
+            "AUTH_REQUIRED",
             undefined,
             "Run: imstudium login",
           );

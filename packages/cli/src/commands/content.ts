@@ -38,7 +38,7 @@ function courseDirFor(sdk: Sdk, course: CourseRef, override?: string): string {
   if (course.dir) return course.dir;
   throw new ImstudiumError(
     `${course.title} is not in your workspace yet`,
-    "NO_COURSE_DIR",
+    "WORKSPACE_MISSING",
     undefined,
     `Run imstudium sync first, or pass -o <course folder> (workspace: ${sdk.workspacePath})`,
   );
