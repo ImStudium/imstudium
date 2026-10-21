@@ -41,13 +41,13 @@
     "@imstudium/cli": "^0.2.0",
     "@imstudium/contract": "^0.2.0",
     "@imstudium/sdk": "^0.2.0",
-    "@modelcontextprotocol/sdk": "^1.12.1"
+    "@modelcontextprotocol/sdk": "^1.32.1"
   },
   "devDependencies": {
-    "@types/node": "^22.15.21",
+    "@types/node": "^24",
     "tsup": "^8.5.0",
     "typescript": "^6.0.2",
-    "@typescript/native": "npm:typescript@^7.0.2"
+    "@typescript/native": "npm:typescript@7.0.2"
   },
   "engines": {
     "node": ">=20"
