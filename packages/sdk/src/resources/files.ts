@@ -99,8 +99,10 @@ function parentOf(r: JsonApiResource): string | null {
   return rel && !Array.isArray(rel) ? rel.id : null;
 }
 
+/** One local path segment from a Stud.IP name; "." and ".." (or only dots) never climb. */
 function segment(name: string): string {
-  return name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim() || "_";
+  const cleaned = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim();
+  return !cleaned || /^\.+$/.test(cleaned) ? "_" : cleaned;
 }
 
 function isRootFolder(f: FolderResource, byId: Map<string, FolderResource>): boolean {

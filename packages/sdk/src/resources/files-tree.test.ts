@@ -46,3 +46,23 @@ describe("file tree", () => {
     assert.match(lines[5]!, /^└── syllabus\.pdf\s+1000 B\s+2026-10-04$/);
   });
 });
+
+describe("folder names from Stud.IP", () => {
+  it("never climbs out of files/: a folder called . or .. becomes _", () => {
+    const up1 = hid("up1");
+    const up2 = hid("up2");
+    const ssh = hid("ssh");
+    const dot = hid("dot");
+    const paths = folderPaths([
+      folder(ROOT, "", null, "RootFolder"),
+      folder(up1, "..", ROOT),
+      folder(up2, " .. ", up1),
+      folder(ssh, ".ssh", up2),
+      folder(dot, ".", ROOT),
+    ] as FolderResource[]);
+    assert.equal(paths.get(up2), "_/_");
+    assert.equal(paths.get(ssh), "_/_/.ssh");
+    assert.equal(paths.get(dot), "_");
+    for (const p of paths.values()) assert.ok(!p.split("/").some((s) => s === "." || s === ".."), p);
+  });
+});
