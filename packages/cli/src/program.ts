@@ -13,6 +13,7 @@ export const HELP_GROUPS: ReadonlyArray<{ title: string; commands: readonly stri
   { title: "Today and deadlines", commands: ["today", "week", "stundenplan", "holidays", "tasks", "klausuren"] },
   { title: "What's new", commands: ["changes", "news", "inbox", "outbox", "message", "forum", "blubber", "feed"] },
   { title: "Material and courses", commands: ["search", "courseware", "wiki", "files", "courses", "studium", "people", "sprechstunden", "catalog"] },
+  { title: "Writing and citing", commands: ["arbeit", "quellen", "zitieren", "literatur", "stile"] },
   { title: "Workspace and sync", commands: ["semester", "sync", "extract", "index", "view", "watch", "export"] },
   { title: "Stud.IP API and contracts", commands: ["routes", "api", "schema"] },
   { title: "Setup and health", commands: ["setup", "config", "session", "doctor", "update"] },

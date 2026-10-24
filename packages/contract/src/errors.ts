@@ -54,6 +54,8 @@ export const ERROR_CODES = {
     aliases: ["MISSING_ARG", "INVALID_KEY"],
   }),
   NO_CLIENT_ID: spec("usage", "OAuth sign-in was requested without a client id", "Set IMSTUDIUM_OAUTH_CLIENT_ID or oauth.clientId (docs/OAUTH.md), or run imstudium login without --oauth"),
+  IDENTIFIER_UNRECOGNIZED: spec("usage", "The input is not a DOI, ISBN, arXiv id or web address", "e.g. imstudium quellen add 10.1000/xyz123, an ISBN, arXiv:2101.01234 or a URL; without one use --manual"),
+  IMPORT_FAILED: spec("usage", "The file could not be read as BibTeX/BibLaTeX, RIS or CSL-JSON", "Export from Zotero, Citavi, Mendeley or JabRef as BibTeX (.bib), RIS (.ris) or CSL JSON (.json)"),
   // ── 3 gated ────────────────────────────────────────────────────────────────
   WRITE_NOT_ALLOWED: spec("gated", "The call would change something in Stud.IP and was not explicitly allowed", "Read-only by default: add --write in a terminal if you really mean it (never over MCP)"),
   // ── 4 auth ─────────────────────────────────────────────────────────────────
@@ -83,8 +85,15 @@ export const ERROR_CODES = {
   ROUTE_NOT_FOUND: spec("not_found", "No JSON:API route matches the path", "imstudium routes lists the routes of your Stud.IP", {
     aliases: ["NO_ROUTE", "NO_ROUTES"],
   }),
+  ARBEIT_AMBIGUOUS: spec("not_found", "Several Arbeiten (written works) exist and none is selected, or several match", "Pass --arbeit <slug>, or run: imstudium arbeit use <slug> (see details.candidates)"),
+  SOURCE_NOT_FOUND: spec("not_found", "No source in the Arbeit's registry has this citekey", "imstudium quellen lists the keys"),
+  STYLE_NOT_FOUND: spec("not_found", "No citation style (CSL) matches the id or file", "imstudium stile lists the styles here; imstudium stile find <words> searches the CSL repository"),
+  METADATA_NOT_FOUND: spec("not_found", "doi.org, Crossref, the DNB or Open Library know no record for this identifier", "Check the identifier for typos: a DOI doi.org does not know usually does not exist. Add a source without one with: imstudium quellen add --manual"),
   // ── 6 offline ──────────────────────────────────────────────────────────────
   NETWORK: spec("offline", "Stud.IP could not be reached (offline, DNS, timeout)", "Check the connection; local commands (context, search, changes, today --offline) still work", {
+    retryable: true,
+  }),
+  METADATA_UNAVAILABLE: spec("offline", "A metadata service (doi.org, Crossref, DNB, Open Library, the CSL repository) could not be reached", "Check the connection; imstudium quellen add --manual and every formatting command work offline", {
     retryable: true,
   }),
   // ── 7 upstream ─────────────────────────────────────────────────────────────
@@ -97,6 +106,7 @@ export const ERROR_CODES = {
   }),
   NO_CORPUS: spec("workspace", "Nothing is extracted or indexed yet", "Run: imstudium sync --extract (or imstudium extract)"),
   NO_ICS: spec("workspace", "No calendar.ics in the workspace for --offline", "Run: imstudium sync (writes calendar.ics), or pass --ics <file>"),
+  ARBEIT_MISSING: spec("workspace", "No Arbeit (written work) here: none matches, none in this folder, none in the workspace", 'Run: imstudium arbeit new "<Titel>" --typ hausarbeit'),
 } as const satisfies Record<string, ErrorSpec>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

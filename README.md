@@ -59,6 +59,24 @@ imstudium context          # what matters now
 
 `imstudium watch --interval 1h` keeps syncing while a terminal stays open.
 
+## Hausarbeit, Seminararbeit, Bachelorarbeit
+
+Each piece of written work gets its own folder with a citation registry that checks every source before you cite it. ImStudium formats citations in your Lehrstuhl's style and holds your manuscript against the Formvorgaben before the Abgabe. It never writes the text for you.
+
+```bash
+imstudium arbeit new "Digitale Lehre im Vergleich" --typ seminararbeit --course statistik --abgabe 15.03.2027 --umfang 12s
+imstudium arbeit leitfaden --course statistik       # finds the Leitfaden with the Formvorgaben in your course files
+imstudium quellen add 10.1000/xyz123 "ISBN 978-3-16-148410-0"   # metadata from doi.org and the DNB, checked
+imstudium quellen import ~/Downloads/zotero.bib     # or a Citavi/Mendeley export (RIS, CSL JSON)
+imstudium quellen check --save                      # exists? matches? retracted?
+imstudium zitieren mueller2021digitale@12           # (Müller, 2021, S. 12), or the footnote in note styles
+imstudium literatur --format rtf --save literatur.rtf
+imstudium arbeit vorlage --format docx              # Word template with margins, fonts, numbering and Deckblatt
+imstudium arbeit check arbeit.docx                  # unknown or uncited sources, missing pages, length, parts
+```
+
+Twelve CSL styles ship with it: APA, DGPs, Chicago (notes and author-date), Harvard, MLA, IEEE, ISO 690, DIN 1505-2, Vancouver and the juristische Zitierweise. Any other style from the CSL repository, including many Lehrstuhl styles, comes in with `imstudium stile add`. LaTeX, Typst and Pandoc read the generated `quellen.bib`. [docs/ARBEITEN.md](docs/ARBEITEN.md) has the whole workflow.
+
 ## Commands
 
 Every command takes `--json` (stable keys for scripts and agents), `--quiet` and `--instance <url>`. A course argument can be a title fragment, shortcut, slug, number or id, as in `imstudium news statistik` or `--course statistik`. `imstudium <command> --help` lists every option; [docs/COMMANDS.md](docs/COMMANDS.md) is the full reference, `imstudium schema <command>` prints the JSON Schema of a command's `--json` output, and [docs/ERRORS.md](docs/ERRORS.md) lists every error code and exit code.
@@ -84,6 +102,9 @@ Every command takes `--json` (stable keys for scripts and agents), `--quiet` and
 | | `catalog search · areas · modules · studies` | Vorlesungsverzeichnis, study areas, modules and Studiengänge for planning next semester |
 | **Exams & Abgaben** | `klausuren` | Exam dates with days remaining (confirmed and unconfirmed) |
 | | `tasks [--open]` | Courseware tasks with deadlines, soonest first |
+| **Writing** | `arbeit new · show · set · check · vorlage · leitfaden` | A Hausarbeit or thesis with deadline, length, style and Formvorgaben; templates; the manuscript check |
+| | `quellen add · import · check · find · kurs` | The citation registry: by DOI, ISBN, arXiv or URL, from Zotero or Citavi, checked against doi.org, Crossref and the DNB |
+| | `zitieren <key>@<Seite>` · `literatur` · `stile` | Citations and the Literaturverzeichnis in the Lehrstuhl's CSL style |
 | **Sync** | `sync [--extract]` | Current semester: files in the Stud.IP folder tree, news, forum, courseware, wiki, calendar, tasks |
 | | `sync --all-semesters` | Every enrolled semester, with the current one at the root and the rest under `archive/` |
 | | `semester start` · `watch` | Roll over to a new term · keep syncing |
@@ -116,6 +137,8 @@ Every command takes `--json` (stable keys for scripts and agents), `--quiet` and
 │       └── wiki/
 ├── archive/
 │   └── SS2026/              # earlier semesters, same layout, plus semester.json
+├── arbeiten/
+│   └── digitale-lehre/      # one written work: ARBEIT.md, quellen.json → quellen.bib, stil/, vorlage/
 ├── .imstudium/              # changes.jsonl (sync log), tasks.json
 └── snapshots/studium.json   # counts and dates only, for personal dashboards
 ```
@@ -148,6 +171,7 @@ ImStudium is CLI-first. Any agent that can run a shell gets everything through `
 | `imstudium-cli` | The full command map |
 | `imstudium-datenschutz` | DSGVO and copyright rules for sessions, messages and materials |
 | `imstudium-studium` · `imstudium-klausuren` · `imstudium-sync` · `imstudium-visual` · `imstudium-mcp` | Overview, exams, refresh, reading slides, MCP tools |
+| `imstudium-arbeiten` | Written work: the citation registry, verified sources, styles, Formvorgaben, the check before the Abgabe |
 | `klausur-prep` · `semester-refresh` | Workflows for exam prep and a daily briefing |
 
 **MCP** is opt-in:

@@ -19,6 +19,7 @@ Shared flags mean the same everywhere: `-o, --output <dir>` is the Studium works
 - **Today and deadlines:** [`today`](#imstudium-today) · [`week`](#imstudium-week) · [`stundenplan`](#imstudium-stundenplan) · [`holidays`](#imstudium-holidays) · [`tasks`](#imstudium-tasks) · [`klausuren`](#imstudium-klausuren)
 - **What's new:** [`changes`](#imstudium-changes) · [`news`](#imstudium-news) · [`inbox`](#imstudium-inbox) · [`outbox`](#imstudium-outbox) · [`message`](#imstudium-message) · [`forum`](#imstudium-forum) · [`blubber`](#imstudium-blubber) · [`feed`](#imstudium-feed)
 - **Material and courses:** [`search`](#imstudium-search) · [`courseware`](#imstudium-courseware) · [`wiki`](#imstudium-wiki) · [`files`](#imstudium-files) · [`courses`](#imstudium-courses) · [`studium`](#imstudium-studium) · [`people`](#imstudium-people) · [`sprechstunden`](#imstudium-sprechstunden) · [`catalog`](#imstudium-catalog)
+- **Writing and citing:** [`arbeit`](#imstudium-arbeit) · [`quellen`](#imstudium-quellen) · [`zitieren`](#imstudium-zitieren) · [`literatur`](#imstudium-literatur) · [`stile`](#imstudium-stile)
 - **Workspace and sync:** [`semester`](#imstudium-semester) · [`sync`](#imstudium-sync) · [`extract`](#imstudium-extract) · [`index`](#imstudium-index) · [`view`](#imstudium-view) · [`watch`](#imstudium-watch) · [`export`](#imstudium-export)
 - **Stud.IP API and contracts:** [`routes`](#imstudium-routes) · [`api`](#imstudium-api) · [`schema`](#imstudium-schema)
 - **Setup and health:** [`setup`](#imstudium-setup) · [`config`](#imstudium-config) · [`session`](#imstudium-session) · [`doctor`](#imstudium-doctor) · [`update`](#imstudium-update)
@@ -782,6 +783,728 @@ imstudium catalog studies [query...] [options]
 | Option | |
 |---|---|
 | `-n, --limit <n>` | Max results (default 30) |
+
+## Writing and citing
+
+### `imstudium arbeit`
+
+Written work (Hausarbeit, Seminar-, Bachelor-, Masterarbeit): registry, style, Formvorgaben, checks
+
+```
+imstudium arbeit <command> [options]
+```
+
+| Option | |
+|---|---|
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema arbeit`
+
+| Key | Type | |
+|---|---|---|
+| `workspace` | string |  |
+| `current` | string \| null | Folder of the Arbeit commands use by default |
+| `count` | integer |  |
+| `arbeiten` | object[] |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium arbeit list`
+
+Every Arbeit, in the workspace and in folders elsewhere
+
+```
+imstudium arbeit list [options]
+```
+
+| Option | |
+|---|---|
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema arbeit list`
+
+| Key | Type | |
+|---|---|---|
+| `workspace` | string |  |
+| `current` | string \| null | Folder of the Arbeit commands use by default |
+| `count` | integer |  |
+| `arbeiten` | object[] |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium arbeit new`
+
+Start an Arbeit: its folder, an empty citation registry, quellen.bib and ARBEIT.md
+
+```
+imstudium arbeit new <title...> [options]
+```
+
+Alias: `neu`
+
+| Argument | |
+|---|---|
+| `<title...>` | Working title |
+
+| Option | |
+|---|---|
+| `--typ <typ>` | hausarbeit, seminararbeit, bachelorarbeit, masterarbeit, projektarbeit, essay, protokoll, referat, dissertation, sonstige (default hausarbeit) |
+| `--stil <id>` | Citation style: a bundled id (imstudium stile), a .csl file, or one you add later with stile add (default from --preset) |
+| `--preset <name>` | Formvorgaben to start from: standard, apa7, geisteswissenschaft, juristisch, technik (default standard) |
+| `--course <name>` | The course it is written for (title fragment, shortcut or slug) |
+| `--abgabe <date>` | Deadline, 2027-03-15 or 15.03.2027 |
+| `--umfang <length>` | Required length: 15s (Seiten), 6000w (Wörter) or 40000z (Zeichen) |
+| `--toleranz <percent>` | Allowed deviation from --umfang in percent (default 10) |
+| `--sprache <lang>` | Language of the work, e.g. de-DE or en-US (default: the style's, else de-DE) |
+| `--betreuung <name>` | Supervisor (stays in your workspace) |
+| `--slug <slug>` | Folder name under arbeiten/ (default from the title) |
+| `--dir <folder>` | Create the Arbeit in this folder instead (e.g. your LaTeX or Typst project) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema arbeit new`
+
+| Key | Type | |
+|---|---|---|
+| `dir` | string |  |
+| `arbeit` | object |  |
+| `daysLeft` | integer \| null |  |
+| `quellen` | object |  |
+| `files` | object | Absolute paths of quellen.json, quellen.bib and ARBEIT.md |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium arbeit show`
+
+One Arbeit: deadline, length, style, Formvorgaben, aids and the registry's state
+
+```
+imstudium arbeit show [arbeit] [options]
+```
+
+| Argument | |
+|---|---|
+| `[arbeit]` | Slug, title fragment or folder (same as --arbeit) |
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema arbeit show`
+
+| Key | Type | |
+|---|---|---|
+| `dir` | string |  |
+| `arbeit` | object |  |
+| `daysLeft` | integer \| null |  |
+| `quellen` | object |  |
+| `files` | object | Absolute paths of quellen.json, quellen.bib and ARBEIT.md |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium arbeit use`
+
+Pick the Arbeit commands use when you are not inside its folder
+
+```
+imstudium arbeit use <arbeit> [options]
+```
+
+| Argument | |
+|---|---|
+| `<arbeit>` | Slug, title fragment or folder |
+
+| Option | |
+|---|---|
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium arbeit set`
+
+Change title, typ, abgabe, umfang, stil, sprache, betreuung, course or manuskript (key=value)
+
+```
+imstudium arbeit set <assignments...> [options]
+```
+
+| Argument | |
+|---|---|
+| `<assignments...>` | e.g. abgabe=2027-03-15 umfang=6000w manuskript=~/thesis/main.tex stil=ieee |
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium arbeit check`
+
+Check the manuscript (.docx, .md, .tex, .typ) against the registry and the Formvorgaben
+
+```
+imstudium arbeit check [manuskript] [options]
+```
+
+Alias: `pruefen`
+
+| Argument | |
+|---|---|
+| `[manuskript]` | The manuscript file (default: manuskript set with arbeit set) |
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema arbeit check`
+
+| Key | Type | |
+|---|---|---|
+| `ok` | boolean | No check failed |
+| `dir` | string |  |
+| `manuscript` | object \| null |  |
+| `citations` | object \| null |  |
+| `summary` | object |  |
+| `checks` | object[] |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium arbeit formvorgaben`
+
+The Formvorgaben: margins, type, spacing, numbering, Deckblatt, parts, declaration
+
+```
+imstudium arbeit formvorgaben <command> [options]
+```
+
+Alias: `form`
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+##### `imstudium arbeit formvorgaben set`
+
+Change fields (key=value; lists with ; and += to append). Fields: rand.oben, rand.unten, rand.links, rand.rechts, schrift.familie, schrift.groesse, schrift.fussnoten, zeilenabstand, ausrichtung, silbentrennung, absatz.einzug, absatz.abstand, nummerierung, seitenzahlen.position, seitenzahlen.vorspann, blockzitat.abWoertern, blockzitat.einzug, blockzitat.zeilenabstand, deckblatt, gliederung, pflichtabschnitte, erklaerung.erforderlich, erklaerung.kiAngabe, hinweise, quelle
+
+```
+imstudium arbeit formvorgaben set <assignments...> [options]
+```
+
+| Argument | |
+|---|---|
+| `<assignments...>` | e.g. rand.links=4 zeilenabstand=1,5 "pflichtabschnitte=Einleitung;Fazit" quelle=Leitfaden.pdf |
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+##### `imstudium arbeit formvorgaben preset`
+
+Start over from a preset: standard (Standard (Geistes-, Sozial- und Wirtschaftswissenschaften)); apa7 (APA 7 (Psychologie, Bildungs- und Sozialwissenschaften)); geisteswissenschaft (Geisteswissenschaft mit Fußnoten (deutsche Zitierweise)); juristisch (Juristische Hausarbeit); technik (MINT / Technik (numerisch))
+
+```
+imstudium arbeit formvorgaben preset <name> [options]
+```
+
+| Argument | |
+|---|---|
+| `<name>` | standard \| apa7 \| geisteswissenschaft \| juristisch \| technik |
+
+| Option | |
+|---|---|
+| `--with-stil` | Also switch to the preset's citation style |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium arbeit vorlage`
+
+Write templates that follow the Formvorgaben: Word (.docx), LaTeX, Typst, Pandoc
+
+```
+imstudium arbeit vorlage [options]
+```
+
+| Option | |
+|---|---|
+| `--format <formats>` | Comma-separated: docx,latex,typst,pandoc or all (default docx) |
+| `--force` | Overwrite templates that exist |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium arbeit leitfaden`
+
+Find the Leitfaden or Formvorgaben in your course files (offline search)
+
+```
+imstudium arbeit leitfaden [options]
+```
+
+| Option | |
+|---|---|
+| `--course <name>` | Only this course |
+| `-n, --limit <n>` | Files (default 8) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium arbeit hilfsmittel`
+
+Aids you used (AI tools and others), for the declaration many Prüfungsordnungen require
+
+```
+imstudium arbeit hilfsmittel <command> [options]
+```
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+##### `imstudium arbeit hilfsmittel add`
+
+Record one aid: product and version, what for, which parts
+
+```
+imstudium arbeit hilfsmittel add <werkzeug...> [options]
+```
+
+| Argument | |
+|---|---|
+| `<werkzeug...>` | Product and version, e.g. "ChatGPT (GPT-5)" |
+
+| Option | |
+|---|---|
+| `--zweck <text>` | What it was used for, e.g. Gliederung besprochen, Rechtschreibung |
+| `--teile <text>` | Which parts of the work, e.g. Kapitel 2 |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+##### `imstudium arbeit hilfsmittel rm`
+
+Remove an aid by its number
+
+```
+imstudium arbeit hilfsmittel rm <number> [options]
+```
+
+| Argument | |
+|---|---|
+| `<number>` | As listed by imstudium arbeit hilfsmittel |
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+### `imstudium quellen`
+
+The Arbeit's citation registry: add by DOI/ISBN/URL, import from Zotero or Citavi, check, export
+
+```
+imstudium quellen <command> [options]
+```
+
+| Option | |
+|---|---|
+| `--status <status>` | Only verified, mismatch, not-found, retracted or unverified |
+| `--tag <tag>` | Only sources with this tag |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema quellen`
+
+| Key | Type | |
+|---|---|---|
+| `arbeit` | string | Slug |
+| `count` | integer |  |
+| `quellen` | object[] |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium quellen list`
+
+Every source of the Arbeit with key, type, author, year and check status
+
+```
+imstudium quellen list [options]
+```
+
+| Option | |
+|---|---|
+| `--status <status>` | Only verified, mismatch, not-found, retracted or unverified |
+| `--tag <tag>` | Only sources with this tag |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema quellen list`
+
+| Key | Type | |
+|---|---|---|
+| `arbeit` | string | Slug |
+| `count` | integer |  |
+| `quellen` | object[] |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium quellen add`
+
+Add sources by DOI, ISBN, arXiv id or URL (resolved and checked), or by hand with --manual
+
+```
+imstudium quellen add [ids...] [options]
+```
+
+| Argument | |
+|---|---|
+| `[ids...]` | 10.1000/xyz123 · ISBN 978-3-… · arXiv:2101.01234 · https://… |
+
+| Option | |
+|---|---|
+| `--manual` | Enter the source by hand (books without ISBN, grey literature, laws, interviews) |
+| `--type <type>` | CSL type for --manual: book, chapter, article-journal, thesis, report, webpage, legislation, legal_case, … |
+| `--title <title>` |  |
+| `--author <names>` | Authors, "Müller, Anna; Schmidt, Bert" |
+| `--editor <names>` | Editors, same form |
+| `--year <date>` | Year or date (2021, 2021-03-15) |
+| `--container <title>` | Journal, edited volume or website |
+| `--publisher <name>` | Publisher, or the university for a thesis |
+| `--place <place>` | Place of publication |
+| `--pages <range>` | Pages, e.g. 45-67 |
+| `--volume <n>` |  |
+| `--issue <n>` |  |
+| `--edition <n>` |  |
+| `--url <url>` |  |
+| `--accessed <date>` | Access date for web sources (default today when --url is given) |
+| `--doi <doi>` |  |
+| `--isbn <isbn>` |  |
+| `--genre <text>` | Kind of thesis or report, e.g. Masterarbeit |
+| `--key <citekey>` | Your own citekey (default: mueller2021digitale style) |
+| `--file <path>` | The full text on your disk (PDF), kept with the source |
+| `--tag <tag...>` | Tags for your own order |
+| `--note <text>` | A note of your own |
+| `--dry-run` | Resolve and show, write nothing |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema quellen add`
+
+| Key | Type | |
+|---|---|---|
+| `arbeit` | string |  |
+| `added` | object[] |  |
+| `duplicates` | object[] | Already in the registry; nothing changed |
+| `failed` | object[] |  |
+| `dryRun` | boolean |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium quellen show`
+
+One source: every field, origin, check, the reference in the Arbeit's style and as BibLaTeX
+
+```
+imstudium quellen show <key> [options]
+```
+
+| Argument | |
+|---|---|
+| `<key>` | Citekey |
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium quellen edit`
+
+Correct fields (key=value; names as "Müller, Anna; Schmidt, Bert"; an empty value removes the field)
+
+```
+imstudium quellen edit <key> [assignments...] [options]
+```
+
+| Argument | |
+|---|---|
+| `<key>` | Citekey |
+| `[assignments...]` | e.g. ort=Augsburg seiten=45-67 "author=Müller, Anna" DOI=10.1000/xyz123 |
+
+| Option | |
+|---|---|
+| `--key <citekey>` | Rename the citekey (change it in the manuscript too) |
+| `--file <path>` | Attach the full text on your disk |
+| `--tag <tag...>` | Replace the tags |
+| `--note <text>` | Replace your note |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium quellen rm`
+
+Remove sources from the registry
+
+```
+imstudium quellen rm <keys...> [options]
+```
+
+| Argument | |
+|---|---|
+| `<keys...>` | Citekeys |
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium quellen check`
+
+Check sources against doi.org, Crossref (retractions too) and the DNB; completeness and duplicates offline
+
+```
+imstudium quellen check [keys...] [options]
+```
+
+Alias: `pruefen`
+
+| Argument | |
+|---|---|
+| `[keys...]` | Only these citekeys (default all) |
+
+| Option | |
+|---|---|
+| `--offline` | Only completeness and duplicates, nothing leaves the machine |
+| `--save` | Store the results in the registry |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema quellen check`
+
+| Key | Type | |
+|---|---|---|
+| `arbeit` | string |  |
+| `offline` | boolean |  |
+| `saved` | boolean |  |
+| `ok` | boolean | No mismatch, not-found or retracted source |
+| `results` | object[] |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium quellen find`
+
+Find the real work behind a half-remembered or AI-suggested reference (Crossref search)
+
+```
+imstudium quellen find <words...> [options]
+```
+
+Alias: `suchen`
+
+| Argument | |
+|---|---|
+| `<words...>` | Author, title words, year: "Schmidt Lernen im Netz 2020" |
+
+| Option | |
+|---|---|
+| `-n, --limit <n>` | Candidates (default 5) |
+
+#### `imstudium quellen kurs`
+
+Literature your course material names (DOIs and ISBNs in the extracted files), ready to add
+
+```
+imstudium quellen kurs <course> [options]
+```
+
+| Argument | |
+|---|---|
+| `<course>` | Title fragment, shortcut or slug |
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium quellen import`
+
+Import a library export: BibTeX/BibLaTeX (Zotero, Better BibTeX, JabRef), RIS (Citavi, EndNote, Mendeley), CSL-JSON
+
+```
+imstudium quellen import <files...> [options]
+```
+
+| Argument | |
+|---|---|
+| `<files...>` | .bib, .ris or .json files |
+
+| Option | |
+|---|---|
+| `--dry-run` | Show what would come in, write nothing |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema quellen import`
+
+| Key | Type | |
+|---|---|---|
+| `arbeit` | string |  |
+| `added` | object[] |  |
+| `duplicates` | object[] | Already in the registry; nothing changed |
+| `failed` | object[] |  |
+| `dryRun` | boolean |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium quellen export`
+
+Export the registry: biblatex (default), bibtex, ris (Citavi, EndNote) or csl-json (Zotero, Pandoc)
+
+```
+imstudium quellen export [options]
+```
+
+| Option | |
+|---|---|
+| `--format <format>` | biblatex · bibtex · ris · csl-json |
+| `--save <file>` | Write to a file instead of stdout |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+### `imstudium zitieren`
+
+A citation in the Arbeit's style: in the text, or the footnote for note styles
+
+```
+imstudium zitieren <cites...> [options]
+```
+
+| Argument | |
+|---|---|
+| `<cites...>` | key, key@12, key@S. 12-14, key@Kap. 3 (several keys make one citation) |
+
+| Option | |
+|---|---|
+| `--seite <locator>` | Page or locator for a single key (same as key@…) |
+| `--position <pos>` | erst (first mention, default), folge (later, short form) or ebd (right after the same source) |
+| `--vgl` | Indirect quote: prefix „Vgl.“ (German convention) |
+| `--stil <id>` | Another style for this once (id or .csl file) |
+| `--format <format>` | text (default), md, html or rtf |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema zitieren`
+
+| Key | Type | |
+|---|---|---|
+| `style` | object |  |
+| `position` | "first" \| "subsequent" \| "ibid" |  |
+| `format` | "text" \| "html" \| "rtf" \| "markdown" |  |
+| `citation` | string | The cite as it goes into the text, or the footnote's text for note styles |
+| `keys` | string[] |  |
+| `schemaVersion` | "1" |  |
+
+### `imstudium literatur`
+
+The bibliography (Literaturverzeichnis) in the Arbeit's style
+
+```
+imstudium literatur [options]
+```
+
+| Option | |
+|---|---|
+| `--nur-zitiert <manuskript>` | Only what this manuscript cites (.docx, .md, .tex, .typ) |
+| `--stil <id>` | Another style for this once |
+| `--format <format>` | md (default), text, html or rtf (opens in Word with italics and hanging indent) |
+| `--save <file>` | Write to a file instead of stdout |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema literatur`
+
+| Key | Type | |
+|---|---|---|
+| `style` | object |  |
+| `format` | "text" \| "html" \| "rtf" \| "markdown" |  |
+| `count` | integer |  |
+| `entries` | object[] |  |
+| `text` | string |  |
+| `hangingIndent` | boolean |  |
+| `schemaVersion` | "1" |  |
+
+### `imstudium stile`
+
+Citation styles (CSL): the bundled set, yours, and any of the ~10,000 in the CSL repository
+
+```
+imstudium stile <command> [options]
+```
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema stile`
+
+| Key | Type | |
+|---|---|---|
+| `current` | string \| null | The style of the selected Arbeit, if any |
+| `count` | integer |  |
+| `styles` | object[] |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium stile list`
+
+Bundled styles and the ones added to the Arbeit
+
+```
+imstudium stile list [options]
+```
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium stile show`
+
+What a style looks like: a citation, a later one and two references (synthetic examples)
+
+```
+imstudium stile show <id> [options]
+```
+
+| Argument | |
+|---|---|
+| `<id>` | Style id or .csl file |
+
+| Option | |
+|---|---|
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium stile find`
+
+Search the CSL repository by words (university, institute, journal, Lehrstuhl)
+
+```
+imstudium stile find <words...> [options]
+```
+
+Alias: `suchen`
+
+| Argument | |
+|---|---|
+| `<words...>` | e.g. "TU Dresden" Linguistik |
+
+| Option | |
+|---|---|
+| `-n, --limit <n>` | Styles (default 20) |
+
+#### `imstudium stile add`
+
+Add a style to the Arbeit (from the CSL repository, a URL or a .csl file) and use it
+
+```
+imstudium stile add <style> [options]
+```
+
+| Argument | |
+|---|---|
+| `<style>` | Style id (stile find), a zotero.org/styles URL, or a .csl file |
+
+| Option | |
+|---|---|
+| `--no-use` | Only add it, keep the current style |
+| `--arbeit <name>` | Which Arbeit: slug, title fragment or folder (default: the folder you are in, then the one picked with arbeit use) |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
 
 ## Workspace and sync
 

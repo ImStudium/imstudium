@@ -64,6 +64,18 @@ Commands:
                                                  lecturers — read-only, booking stays in Stud.IP
   catalog                                        Course catalog for semester planning
                                                  (Vorlesungsverzeichnis)
+  arbeit [options]                               Written work (Hausarbeit, Seminar-, Bachelor-,
+                                                 Masterarbeit): registry, style, Formvorgaben,
+                                                 checks
+  quellen [options]                              The Arbeit's citation registry: add by
+                                                 DOI/ISBN/URL, import from Zotero or Citavi, check,
+                                                 export
+  zitieren [options] <cites...>                  A citation in the Arbeit's style: in the text, or
+                                                 the footnote for note styles
+  literatur [options]                            The bibliography (Literaturverzeichnis) in the
+                                                 Arbeit's style
+  stile [options]                                Citation styles (CSL): the bundled set, yours, and
+                                                 any of the ~10,000 in the CSL repository
   semester [options]                             Where you are in the semester; start a new one
                                                  (archive the last, sync the new)
   sync [options]                                 Sync files and rebuild the Studium workspace
@@ -559,6 +571,575 @@ Arguments:
 Options:
   -n, --limit <n>  Max results (default 30)
   -h, --help       display help for command
+
+### imstudium arbeit
+Usage: imstudium arbeit [options] [command]
+
+Written work (Hausarbeit, Seminar-, Bachelor-, Masterarbeit): registry, style, Formvorgaben, checks
+
+Options:
+  -o, --output <dir>                    Workspace directory (default: ~/Studium or
+                                        IMSTUDIUM_WORKSPACE)
+  -h, --help                            display help for command
+
+Commands:
+  list [options]                        Every Arbeit, in the workspace and in folders elsewhere
+  new|neu [options] <title...>          Start an Arbeit: its folder, an empty citation registry,
+                                        quellen.bib and ARBEIT.md
+  show [options] [arbeit]               One Arbeit: deadline, length, style, Formvorgaben, aids and
+                                        the registry's state
+  use [options] <arbeit>                Pick the Arbeit commands use when you are not inside its
+                                        folder
+  set [options] <assignments...>        Change title, typ, abgabe, umfang, stil, sprache, betreuung,
+                                        course or manuskript (key=value)
+  check|pruefen [options] [manuskript]  Check the manuscript (.docx, .md, .tex, .typ) against the
+                                        registry and the Formvorgaben
+  formvorgaben|form [options]           The Formvorgaben: margins, type, spacing, numbering,
+                                        Deckblatt, parts, declaration
+  vorlage [options]                     Write templates that follow the Formvorgaben: Word (.docx),
+                                        LaTeX, Typst, Pandoc
+  leitfaden [options]                   Find the Leitfaden or Formvorgaben in your course files
+                                        (offline search)
+  hilfsmittel [options]                 Aids you used (AI tools and others), for the declaration
+                                        many Prüfungsordnungen require
+
+### imstudium arbeit list
+Usage: imstudium arbeit list [options]
+
+Every Arbeit, in the workspace and in folders elsewhere
+
+Options:
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit new
+Usage: imstudium arbeit new|neu [options] <title...>
+
+Start an Arbeit: its folder, an empty citation registry, quellen.bib and ARBEIT.md
+
+Arguments:
+  title                 Working title
+
+Options:
+  --typ <typ>           hausarbeit, seminararbeit, bachelorarbeit, masterarbeit, projektarbeit,
+                        essay, protokoll, referat, dissertation, sonstige (default hausarbeit)
+  --stil <id>           Citation style: a bundled id (imstudium stile), a .csl file, or one you add
+                        later with stile add (default from --preset)
+  --preset <name>       Formvorgaben to start from: standard, apa7, geisteswissenschaft, juristisch,
+                        technik (default standard)
+  --course <name>       The course it is written for (title fragment, shortcut or slug)
+  --abgabe <date>       Deadline, 2027-03-15 or 15.03.2027
+  --umfang <length>     Required length: 15s (Seiten), 6000w (Wörter) or 40000z (Zeichen)
+  --toleranz <percent>  Allowed deviation from --umfang in percent (default 10)
+  --sprache <lang>      Language of the work, e.g. de-DE or en-US (default: the style's, else de-DE)
+  --betreuung <name>    Supervisor (stays in your workspace)
+  --slug <slug>         Folder name under arbeiten/ (default from the title)
+  --dir <folder>        Create the Arbeit in this folder instead (e.g. your LaTeX or Typst project)
+  -o, --output <dir>    Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help            display help for command
+
+### imstudium arbeit show
+Usage: imstudium arbeit show [options] [arbeit]
+
+One Arbeit: deadline, length, style, Formvorgaben, aids and the registry's state
+
+Arguments:
+  arbeit              Slug, title fragment or folder (same as --arbeit)
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit use
+Usage: imstudium arbeit use [options] <arbeit>
+
+Pick the Arbeit commands use when you are not inside its folder
+
+Arguments:
+  arbeit              Slug, title fragment or folder
+
+Options:
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit set
+Usage: imstudium arbeit set [options] <assignments...>
+
+Change title, typ, abgabe, umfang, stil, sprache, betreuung, course or manuskript (key=value)
+
+Arguments:
+  assignments         e.g. abgabe=2027-03-15 umfang=6000w manuskript=~/thesis/main.tex stil=ieee
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit check
+Usage: imstudium arbeit check|pruefen [options] [manuskript]
+
+Check the manuscript (.docx, .md, .tex, .typ) against the registry and the Formvorgaben
+
+Arguments:
+  manuskript          The manuscript file (default: manuskript set with arbeit set)
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit formvorgaben
+Usage: imstudium arbeit formvorgaben|form [options] [command]
+
+The Formvorgaben: margins, type, spacing, numbering, Deckblatt, parts, declaration
+
+Options:
+  --arbeit <name>                 Which Arbeit: slug, title fragment or folder (default: the folder
+                                  you are in, then the one picked with arbeit use)
+  -o, --output <dir>              Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help                      display help for command
+
+Commands:
+  set [options] <assignments...>  Change fields (key=value; lists with ; and += to append). Fields:
+                                  rand.oben, rand.unten, rand.links, rand.rechts, schrift.familie,
+                                  schrift.groesse, schrift.fussnoten, zeilenabstand, ausrichtung,
+                                  silbentrennung, absatz.einzug, absatz.abstand, nummerierung,
+                                  seitenzahlen.position, seitenzahlen.vorspann,
+                                  blockzitat.abWoertern, blockzitat.einzug,
+                                  blockzitat.zeilenabstand, deckblatt, gliederung,
+                                  pflichtabschnitte, erklaerung.erforderlich, erklaerung.kiAngabe,
+                                  hinweise, quelle
+  preset [options] <name>         Start over from a preset: standard (Standard (Geistes-, Sozial-
+                                  und Wirtschaftswissenschaften)); apa7 (APA 7 (Psychologie,
+                                  Bildungs- und Sozialwissenschaften)); geisteswissenschaft
+                                  (Geisteswissenschaft mit Fußnoten (deutsche Zitierweise));
+                                  juristisch (Juristische Hausarbeit); technik (MINT / Technik
+                                  (numerisch))
+
+### imstudium arbeit formvorgaben set
+Usage: imstudium arbeit formvorgaben set [options] <assignments...>
+
+Change fields (key=value; lists with ; and += to append). Fields: rand.oben, rand.unten, rand.links,
+rand.rechts, schrift.familie, schrift.groesse, schrift.fussnoten, zeilenabstand, ausrichtung,
+silbentrennung, absatz.einzug, absatz.abstand, nummerierung, seitenzahlen.position,
+seitenzahlen.vorspann, blockzitat.abWoertern, blockzitat.einzug, blockzitat.zeilenabstand,
+deckblatt, gliederung, pflichtabschnitte, erklaerung.erforderlich, erklaerung.kiAngabe, hinweise,
+quelle
+
+Arguments:
+  assignments         e.g. rand.links=4 zeilenabstand=1,5 "pflichtabschnitte=Einleitung;Fazit"
+                      quelle=Leitfaden.pdf
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit formvorgaben preset
+Usage: imstudium arbeit formvorgaben preset [options] <name>
+
+Start over from a preset: standard (Standard (Geistes-, Sozial- und Wirtschaftswissenschaften));
+apa7 (APA 7 (Psychologie, Bildungs- und Sozialwissenschaften)); geisteswissenschaft
+(Geisteswissenschaft mit Fußnoten (deutsche Zitierweise)); juristisch (Juristische Hausarbeit);
+technik (MINT / Technik (numerisch))
+
+Arguments:
+  name                standard | apa7 | geisteswissenschaft | juristisch | technik
+
+Options:
+  --with-stil         Also switch to the preset's citation style
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit vorlage
+Usage: imstudium arbeit vorlage [options]
+
+Write templates that follow the Formvorgaben: Word (.docx), LaTeX, Typst, Pandoc
+
+Options:
+  --format <formats>  Comma-separated: docx,latex,typst,pandoc or all (default docx)
+  --force             Overwrite templates that exist
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit leitfaden
+Usage: imstudium arbeit leitfaden [options]
+
+Find the Leitfaden or Formvorgaben in your course files (offline search)
+
+Options:
+  --course <name>     Only this course
+  -n, --limit <n>     Files (default 8)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit hilfsmittel
+Usage: imstudium arbeit hilfsmittel [options] [command]
+
+Aids you used (AI tools and others), for the declaration many Prüfungsordnungen require
+
+Options:
+  --arbeit <name>              Which Arbeit: slug, title fragment or folder (default: the folder you
+                               are in, then the one picked with arbeit use)
+  -o, --output <dir>           Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help                   display help for command
+
+Commands:
+  add [options] <werkzeug...>  Record one aid: product and version, what for, which parts
+  rm [options] <number>        Remove an aid by its number
+
+### imstudium arbeit hilfsmittel add
+Usage: imstudium arbeit hilfsmittel add [options] <werkzeug...>
+
+Record one aid: product and version, what for, which parts
+
+Arguments:
+  werkzeug            Product and version, e.g. "ChatGPT (GPT-5)"
+
+Options:
+  --zweck <text>      What it was used for, e.g. Gliederung besprochen, Rechtschreibung
+  --teile <text>      Which parts of the work, e.g. Kapitel 2
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium arbeit hilfsmittel rm
+Usage: imstudium arbeit hilfsmittel rm [options] <number>
+
+Remove an aid by its number
+
+Arguments:
+  number              As listed by imstudium arbeit hilfsmittel
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium quellen
+Usage: imstudium quellen [options] [command]
+
+The Arbeit's citation registry: add by DOI/ISBN/URL, import from Zotero or Citavi, check, export
+
+Options:
+  --status <status>                      Only verified, mismatch, not-found, retracted or unverified
+  --tag <tag>                            Only sources with this tag
+  --arbeit <name>                        Which Arbeit: slug, title fragment or folder (default: the
+                                         folder you are in, then the one picked with arbeit use)
+  -o, --output <dir>                     Workspace directory (default: ~/Studium or
+                                         IMSTUDIUM_WORKSPACE)
+  -h, --help                             display help for command
+
+Commands:
+  list [options]                         Every source of the Arbeit with key, type, author, year and
+                                         check status
+  add [options] [ids...]                 Add sources by DOI, ISBN, arXiv id or URL (resolved and
+                                         checked), or by hand with --manual
+  show [options] <key>                   One source: every field, origin, check, the reference in
+                                         the Arbeit's style and as BibLaTeX
+  edit [options] <key> [assignments...]  Correct fields (key=value; names as "Müller, Anna; Schmidt,
+                                         Bert"; an empty value removes the field)
+  rm [options] <keys...>                 Remove sources from the registry
+  check|pruefen [options] [keys...]      Check sources against doi.org, Crossref (retractions too)
+                                         and the DNB; completeness and duplicates offline
+  find|suchen [options] <words...>       Find the real work behind a half-remembered or AI-suggested
+                                         reference (Crossref search)
+  kurs [options] <course>                Literature your course material names (DOIs and ISBNs in
+                                         the extracted files), ready to add
+  import [options] <files...>            Import a library export: BibTeX/BibLaTeX (Zotero, Better
+                                         BibTeX, JabRef), RIS (Citavi, EndNote, Mendeley), CSL-JSON
+  export [options]                       Export the registry: biblatex (default), bibtex, ris
+                                         (Citavi, EndNote) or csl-json (Zotero, Pandoc)
+
+### imstudium quellen list
+Usage: imstudium quellen list [options]
+
+Every source of the Arbeit with key, type, author, year and check status
+
+Options:
+  --status <status>   Only verified, mismatch, not-found, retracted or unverified
+  --tag <tag>         Only sources with this tag
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium quellen add
+Usage: imstudium quellen add [options] [ids...]
+
+Add sources by DOI, ISBN, arXiv id or URL (resolved and checked), or by hand with --manual
+
+Arguments:
+  ids                  10.1000/xyz123 · ISBN 978-3-… · arXiv:2101.01234 · https://…
+
+Options:
+  --manual             Enter the source by hand (books without ISBN, grey literature, laws,
+                       interviews)
+  --type <type>        CSL type for --manual: book, chapter, article-journal, thesis, report,
+                       webpage, legislation, legal_case, …
+  --title <title>
+  --author <names>     Authors, "Müller, Anna; Schmidt, Bert"
+  --editor <names>     Editors, same form
+  --year <date>        Year or date (2021, 2021-03-15)
+  --container <title>  Journal, edited volume or website
+  --publisher <name>   Publisher, or the university for a thesis
+  --place <place>      Place of publication
+  --pages <range>      Pages, e.g. 45-67
+  --volume <n>
+  --issue <n>
+  --edition <n>
+  --url <url>
+  --accessed <date>    Access date for web sources (default today when --url is given)
+  --doi <doi>
+  --isbn <isbn>
+  --genre <text>       Kind of thesis or report, e.g. Masterarbeit
+  --key <citekey>      Your own citekey (default: mueller2021digitale style)
+  --file <path>        The full text on your disk (PDF), kept with the source
+  --tag <tag...>       Tags for your own order
+  --note <text>        A note of your own
+  --dry-run            Resolve and show, write nothing
+  --arbeit <name>      Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                       then the one picked with arbeit use)
+  -o, --output <dir>   Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help           display help for command
+
+### imstudium quellen show
+Usage: imstudium quellen show [options] <key>
+
+One source: every field, origin, check, the reference in the Arbeit's style and as BibLaTeX
+
+Arguments:
+  key                 Citekey
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium quellen edit
+Usage: imstudium quellen edit [options] <key> [assignments...]
+
+Correct fields (key=value; names as "Müller, Anna; Schmidt, Bert"; an empty value removes the field)
+
+Arguments:
+  key                 Citekey
+  assignments         e.g. ort=Augsburg seiten=45-67 "author=Müller, Anna" DOI=10.1000/xyz123
+
+Options:
+  --key <citekey>     Rename the citekey (change it in the manuscript too)
+  --file <path>       Attach the full text on your disk
+  --tag <tag...>      Replace the tags
+  --note <text>       Replace your note
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium quellen rm
+Usage: imstudium quellen rm [options] <keys...>
+
+Remove sources from the registry
+
+Arguments:
+  keys                Citekeys
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium quellen check
+Usage: imstudium quellen check|pruefen [options] [keys...]
+
+Check sources against doi.org, Crossref (retractions too) and the DNB; completeness and duplicates
+offline
+
+Arguments:
+  keys                Only these citekeys (default all)
+
+Options:
+  --offline           Only completeness and duplicates, nothing leaves the machine
+  --save              Store the results in the registry
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium quellen find
+Usage: imstudium quellen find|suchen [options] <words...>
+
+Find the real work behind a half-remembered or AI-suggested reference (Crossref search)
+
+Arguments:
+  words            Author, title words, year: "Schmidt Lernen im Netz 2020"
+
+Options:
+  -n, --limit <n>  Candidates (default 5)
+  -h, --help       display help for command
+
+### imstudium quellen kurs
+Usage: imstudium quellen kurs [options] <course>
+
+Literature your course material names (DOIs and ISBNs in the extracted files), ready to add
+
+Arguments:
+  course              Title fragment, shortcut or slug
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium quellen import
+Usage: imstudium quellen import [options] <files...>
+
+Import a library export: BibTeX/BibLaTeX (Zotero, Better BibTeX, JabRef), RIS (Citavi, EndNote,
+Mendeley), CSL-JSON
+
+Arguments:
+  files               .bib, .ris or .json files
+
+Options:
+  --dry-run           Show what would come in, write nothing
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium quellen export
+Usage: imstudium quellen export [options]
+
+Export the registry: biblatex (default), bibtex, ris (Citavi, EndNote) or csl-json (Zotero, Pandoc)
+
+Options:
+  --format <format>   biblatex · bibtex · ris · csl-json
+  --save <file>       Write to a file instead of stdout
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium zitieren
+Usage: imstudium zitieren [options] <cites...>
+
+A citation in the Arbeit's style: in the text, or the footnote for note styles
+
+Arguments:
+  cites               key, key@12, key@S. 12-14, key@Kap. 3 (several keys make one citation)
+
+Options:
+  --seite <locator>   Page or locator for a single key (same as key@…)
+  --position <pos>    erst (first mention, default), folge (later, short form) or ebd (right after
+                      the same source)
+  --vgl               Indirect quote: prefix „Vgl.“ (German convention)
+  --stil <id>         Another style for this once (id or .csl file)
+  --format <format>   text (default), md, html or rtf
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium literatur
+Usage: imstudium literatur [options]
+
+The bibliography (Literaturverzeichnis) in the Arbeit's style
+
+Options:
+  --nur-zitiert <manuskript>  Only what this manuscript cites (.docx, .md, .tex, .typ)
+  --stil <id>                 Another style for this once
+  --format <format>           md (default), text, html or rtf (opens in Word with italics and
+                              hanging indent)
+  --save <file>               Write to a file instead of stdout
+  --arbeit <name>             Which Arbeit: slug, title fragment or folder (default: the folder you
+                              are in, then the one picked with arbeit use)
+  -o, --output <dir>          Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help                  display help for command
+
+### imstudium stile
+Usage: imstudium stile [options] [command]
+
+Citation styles (CSL): the bundled set, yours, and any of the ~10,000 in the CSL repository
+
+Options:
+  --arbeit <name>                   Which Arbeit: slug, title fragment or folder (default: the
+                                    folder you are in, then the one picked with arbeit use)
+  -o, --output <dir>                Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help                        display help for command
+
+Commands:
+  list [options]                    Bundled styles and the ones added to the Arbeit
+  show [options] <id>               What a style looks like: a citation, a later one and two
+                                    references (synthetic examples)
+  find|suchen [options] <words...>  Search the CSL repository by words (university, institute,
+                                    journal, Lehrstuhl)
+  add [options] <style>             Add a style to the Arbeit (from the CSL repository, a URL or a
+                                    .csl file) and use it
+
+### imstudium stile list
+Usage: imstudium stile list [options]
+
+Bundled styles and the ones added to the Arbeit
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium stile show
+Usage: imstudium stile show [options] <id>
+
+What a style looks like: a citation, a later one and two references (synthetic examples)
+
+Arguments:
+  id                  Style id or .csl file
+
+Options:
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium stile find
+Usage: imstudium stile find|suchen [options] <words...>
+
+Search the CSL repository by words (university, institute, journal, Lehrstuhl)
+
+Arguments:
+  words            e.g. "TU Dresden" Linguistik
+
+Options:
+  -n, --limit <n>  Styles (default 20)
+  -h, --help       display help for command
+
+### imstudium stile add
+Usage: imstudium stile add [options] <style>
+
+Add a style to the Arbeit (from the CSL repository, a URL or a .csl file) and use it
+
+Arguments:
+  style               Style id (stile find), a zotero.org/styles URL, or a .csl file
+
+Options:
+  --no-use            Only add it, keep the current style
+  --arbeit <name>     Which Arbeit: slug, title fragment or folder (default: the folder you are in,
+                      then the one picked with arbeit use)
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
 
 ### imstudium semester
 Usage: imstudium semester [options] [command]
