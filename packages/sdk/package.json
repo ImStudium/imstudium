@@ -29,7 +29,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "csl"
   ],
   "scripts": {
     "build": "tsup",
@@ -48,6 +49,7 @@
     "@firecrawl/anydoc": "^0.1.9",
     "@firecrawl/pdf-inspector": "^1.14.2",
     "@imstudium/contract": "^0.2.0",
+    "citeproc": "^2.4.63",
     "keytar": "^7.9.0",
     "playwright": "^1.52.0"
   },

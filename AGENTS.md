@@ -30,6 +30,9 @@ That one call returns the semester and its week, today's dates, open Abgaben, Kl
 | Who teaches, office hours | `imstudium people <course>` · `imstudium sprechstunden <course>` |
 | Messages | `imstudium inbox --unread` · `imstudium message <id>`. Read only what the student asks for |
 | Plan next semester | `imstudium catalog search <topic> --semester "SS 2027"` · `catalog modules` · `catalog areas` |
+| A Hausarbeit or thesis | `imstudium arbeit show` (or read `arbeiten/<slug>/ARBEIT.md`) · `imstudium quellen` · `imstudium arbeit check <manuskript>` |
+| Is this reference real? | `imstudium quellen find "<Autor Titel Jahr>"` · `imstudium quellen check` |
+| Cite, Literaturverzeichnis | `imstudium zitieren <key>@<Seite>` · `imstudium literatur` (the Arbeit's CSL style) |
 | Anything else in Stud.IP | `imstudium routes <topic>`, then `imstudium api <path> --flat` |
 
 A course argument can be a title fragment, slug, number or id (`imstudium news statistik`).
@@ -71,6 +74,7 @@ The workspace tools are still there: `studium_overview`, `studium_klausuren`, `s
 - Handle the university password, print the session, or copy anything from `~/.config/imstudium`.
 - Paste messages, grades, Matrikelnummer or classmates' names anywhere outside the session. Don't upload `~/Studium` content anywhere. Course material is licensed for the student's own studies (UrhG §60a). See the `imstudium-datenschutz` skill.
 - Hand in solutions to current Übungsblätter as the student's own work. Explain, quiz, and give hints and worked examples of *similar* problems instead.
+- Write text for a Hausarbeit or thesis, invent a source, or cite one that is not in the Arbeit's registry. Find, check and format sources; discuss structure; the text is the student's (`imstudium-arbeiten` skill).
 
 ### Setup per harness
 
@@ -92,6 +96,7 @@ The installed skills:
 - `imstudium-cli`: command map
 - `imstudium-datenschutz`
 - `imstudium-studium`, `imstudium-klausuren`, `imstudium-sync`, `imstudium-visual`, `imstudium-mcp`
+- `imstudium-arbeiten`: written work, the citation registry and the check before the Abgabe
 - workflows `klausur-prep` and `semester-refresh`
 
 Paths:
@@ -125,6 +130,7 @@ Bun workspaces, four packages:
 - `timetable.ts`, `ics.ts`, `berlin.ts`: dates in Europe/Berlin, the weekly plan, `stundenplan.md`.
 - `extract.ts` + `ingest/local-docs.ts`: one ingest pipeline (pdf-inspector for PDF, AnyDoc for the rest, both lazy-loaded).
 - `search-corpus.ts`: `corpus.jsonl` and `materials.json`. `search.ts`: offline BM25 over the corpus and the content markdown.
+- `arbeit/`: written work and its citation registry. `store.ts` (Arbeit folders, `quellen.json`, regenerated `quellen.bib` and `ARBEIT.md`), `identifiers.ts` and `citekey.ts`, `resolve.ts` (doi.org, Crossref incl. retractions, DNB SRU, Open Library, web meta tags; `fetch` injectable), `bibtex.ts` and `interchange.ts` (BibTeX/BibLaTeX, RIS, CSL-JSON), `styles.ts` and `format.ts` (CSL through citeproc-js, loaded lazily; bundled styles and locales in `packages/sdk/csl/`), `formvorgaben.ts`, `manuscript.ts` (md, tex, typ, docx), `check.ts`, `vorlage.ts` (docx, LaTeX, Typst, Pandoc), `course.ts` (literature and the Leitfaden in course files). Tests use synthetic sources (DOI prefix 10.5555) and a fake fetch.
 
 **CLI** (`packages/cli/src`)
 
@@ -145,6 +151,7 @@ Bun workspaces, four packages:
   - `context.ts`
   - `planning.ts`: today, week, stundenplan, holidays
   - `catalog.ts`, `people.ts`, `sprechstunden.ts`
+  - `arbeit.ts`, `quellen.ts`, `zitieren.ts` (zitieren, literatur, stile), with `arbeit-arg.ts` for which Arbeit a command means
 - `pipeline.ts`: `runSync`, **the one sync pipeline** for `sync`, `semester start`, `init` and `onboard`. It runs files → studium overview → news/forum → courseware/wiki/tasks → `stundenplan.md` → extraction and search index → `.imstudium/changes.jsonl`, `NEW.md`, `abgaben.md`, `.imstudium/tasks.json` → `snapshots/studium.json`.
 - `kit/args.ts`: the shared flags (`-o, --output` = workspace, `-n, --limit`, `--since`, `--course`), strict `parseLimit`, one duration grammar (`parseDuration`/`parseSince`), `workspaceDir()`. `kit/format.ts`: the one human-output formatter — dates always in Europe/Berlin (`berlinDate`, `berlinDateTime`, `berlinWeekday`, …), `cell`/`table`/`courseLabel`. Don't call `toLocale*String` in commands.
 - `runtime.ts` (`getSdk`, `output`, `act`, `fail`), `course-arg.ts` (course resolution: `resolveCourse`, `workspaceCourse`, `currentCourses`, `perCourse`, `courseDir`), `setup.ts` and `agents.ts` (harness wiring), `skills/` (bundled skills).

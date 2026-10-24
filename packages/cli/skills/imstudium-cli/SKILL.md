@@ -54,6 +54,10 @@ imstudium files tree <course>
 imstudium people <course> | sprechstunden <course> | catalog search <q> --semester "SS 2027"
 # exams
 imstudium klausuren
+# written work (Hausarbeit, thesis): see imstudium-arbeiten
+imstudium arbeit new "<Titel>" --typ hausarbeit --course x --abgabe 15.03.2027 | arbeit show | arbeit check <manuskript>
+imstudium quellen add <DOI|ISBN|arXiv|URL> | quellen import <export.bib> | quellen check --save | quellen find "<ref>"
+imstudium zitieren <key>@<Seite> | literatur --format rtf | stile find <words> | stile add <id>
 # sync
 imstudium sync --extract            # files → markdown → search index (tree layout)
 imstudium sync --all-semesters      # past terms into archive/

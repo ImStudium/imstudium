@@ -188,6 +188,55 @@ export {
 } from "./timetable.js";
 export { parseIcs, expandIcs, type IcsEvent, type IcsOccurrence } from "./ics.js";
 
+// ── Written work: Arbeiten, the citation registry, styles and checks ────────
+export type * from "./arbeit/types.js";
+export { ARBEIT_TYPEN, ARBEIT_TYP_LABEL } from "./arbeit/types.js";
+export { parseIdentifier, normalizeIsbn, cleanDoi, findDois, findIsbns, type Identifier, type IdentifierKind } from "./arbeit/identifiers.js";
+export { assignCitekey, isValidCitekey } from "./arbeit/citekey.js";
+export { yearOf, parseCslDate, parseNameList, creatorsShort, shortReference } from "./arbeit/csl-util.js";
+export { parseBibtex, bibEntryToCsl, cslToBibEntry, writeBibtex, type BibEntry, type BibDialect } from "./arbeit/bibtex.js";
+export { detectImportFormat, parseLibrary, exportLibrary, type ImportFormat, type ExportFormat, type ParsedLibrary } from "./arbeit/interchange.js";
+export {
+  resolveIdentifier,
+  resolveDoi,
+  resolveIsbn,
+  crossrefWork,
+  searchCrossref,
+  type FetchLike,
+  type FetchResponseLike,
+  type MetadataOptions,
+  type Resolved,
+  type SearchCandidate,
+  type CrossrefWork,
+} from "./arbeit/resolve.js";
+export {
+  ARBEITEN_DIR,
+  listArbeiten,
+  readArbeit,
+  resolveArbeit,
+  createArbeit,
+  saveArbeit,
+  setCurrentArbeit,
+  loadQuellen,
+  addQuelle,
+  getQuelle,
+  removeQuelle,
+  renameQuelle,
+  parseUmfang,
+  parseAbgabe,
+  parseArbeitTyp,
+  daysUntil,
+  type CreateArbeitInput,
+  type AddResult,
+} from "./arbeit/store.js";
+export { FORMVORGABEN_PRESETS, FORMVORGABEN_FIELDS, formvorgabenPreset, applyFormvorgaben, formvorgabenLines } from "./arbeit/formvorgaben.js";
+export { bundledStyles, arbeitStyles, loadStyle, fetchStyle, searchStyles, BUNDLED_STYLE_NOTES, type StyleInfo, type LoadedStyle, type FetchedStyle, type StyleSearchHit } from "./arbeit/styles.js";
+export { CitationFormatter, type CiteFormat, type CiteRequest, type CitePosition, type Bibliography } from "./arbeit/format.js";
+export { scanManuscript, type ManuscriptScan, type ManuscriptCitation, type ManuscriptFormat } from "./arbeit/manuscript.js";
+export { missingFields, verifyQuelle, checkQuellen, checkArbeit, matchCitations, type ArbeitCheck, type QuelleCheckResult, type ManuscriptCitationReport } from "./arbeit/check.js";
+export { courseReferences, findLeitfaden, type CourseReference, type LeitfadenHit } from "./arbeit/course.js";
+export { writeVorlagen, VORLAGE_FORMATS, type VorlageFormat, type VorlageInput, type VorlageWritten } from "./arbeit/vorlage.js";
+
 // ── The SDK object ───────────────────────────────────────────────────────────
 
 export interface ImstudiumSdk {

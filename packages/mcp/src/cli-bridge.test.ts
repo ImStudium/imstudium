@@ -63,6 +63,17 @@ describe("MCP CLI door", () => {
     expect(checkArgs(["today", "--no-such-flag"])).toMatch(/Refused/);
   });
 
+  it("lets agents read the citation registry but never change it", () => {
+    for (const args of [["arbeit"], ["arbeit", "show"], ["arbeit", "check", "manuskript.md"], ["quellen"], ["quellen", "check"], ["quellen", "find", "Schmidt", "2020"], ["zitieren", "mueller2021@12"], ["literatur", "--format", "md"], ["stile", "show", "apa"]]) {
+      expect(checkArgs(args), args.join(" ")).toBeNull();
+    }
+    for (const args of [["arbeit", "new", "Titel"], ["arbeit", "set", "abgabe=2027-03-15"], ["arbeit", "formvorgaben", "set", "rand.links=3"], ["arbeit", "vorlage"], ["arbeit", "hilfsmittel", "add", "X", "--zweck", "y"], ["quellen", "add", "10.5555/x"], ["quellen", "rm", "k"], ["quellen", "import", "a.bib"], ["stile", "add", "apa"]]) {
+      expect(checkArgs(args), args.join(" ")).not.toBeNull();
+    }
+    expect(checkArgs(["quellen", "check", "--save"])).toMatch(/--save/);
+    expect(checkArgs(["literatur", "--save", "x.md"])).toMatch(/--save/);
+  });
+
   it("every allowed path exists in the CLI tree", () => {
     const paths = new Set<string>();
     const walk = (c: ReturnType<typeof buildProgram>, prefix: string[]) => {

@@ -4,6 +4,38 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+Written work: a citation registry per Hausarbeit, Seminararbeit or thesis that checks every source, formats in the Lehrstuhl's style and holds the manuscript against the Formvorgaben ([docs/ARBEITEN.md](docs/ARBEITEN.md)).
+
+### Added
+
+- **`imstudium arbeit`**: an Arbeit is a folder (`~/Studium/arbeiten/<slug>/`, or any LaTeX/Typst project with `--dir`) with type, deadline, length, course, style, Formvorgaben and an agent brief `ARBEIT.md`.
+  - `new`, `list`, `show`, `use`, `set`
+  - `formvorgaben [set|preset]`: margins, type, spacing, numbering (decimal, alphanumeric, juristisch), Deckblatt, parts, declaration. Presets: standard, apa7, geisteswissenschaft, juristisch, technik
+  - `leitfaden`: finds the Leitfaden in the synced course files
+  - `hilfsmittel [add|rm]`: the list of AI and other aids for the declaration
+  - `vorlage`: templates for Word (.docx), LaTeX (KOMA-Script + biblatex), Typst and Pandoc that follow the Formvorgaben
+  - `check`: the manuscript (.docx with Zotero/Mendeley fields, .md, .tex, .typ) against the registry and the Formvorgaben, exit 1 on failure
+- **`imstudium quellen`**: the registry, CSL-JSON with origin and check status per source. Every change regenerates `quellen.bib` for LaTeX, Typst and Pandoc.
+  - `add` by DOI (doi.org content negotiation), ISBN (DNB, then Open Library), arXiv id or URL, or `--manual`
+  - `import` from BibTeX/BibLaTeX (Zotero, Better BibTeX keys kept, JabRef), RIS (Citavi, EndNote, Mendeley) and CSL-JSON; `export` to all four formats
+  - `check` against doi.org, Crossref and the DNB. It flags DOIs that do not exist, details that do not match and retracted works (Crossref `updated-by`, Retraction Watch included). `--offline` checks completeness and duplicates only
+  - `find`: the real work behind a half-remembered or AI-suggested reference (Crossref search)
+  - `kurs`: DOIs and ISBNs named in a course's extracted material
+  - `show`, `edit`, `rm`, `list`
+- **`imstudium zitieren <key>@<Seite>`** and **`imstudium literatur`**: citations (in-text, or the footnote with first, later and ebd. forms) and the Literaturverzeichnis through citeproc-js, the processor Zotero uses. Output as text, markdown, HTML or RTF.
+- **`imstudium stile`**:
+  - Twelve CSL styles ship in `@imstudium/sdk`: APA, DGPs, Chicago notes and author-date, Harvard, MLA, IEEE, ISO 690, DIN 1505-2 (author-date and numeric), Vancouver and the juristische Zitierweise
+  - `stile find` searches the CSL repository's ~10,000 styles
+  - `stile add` copies one into the Arbeit (dependent styles bring their parent)
+  - `stile show` renders examples
+- Contract schemas for `arbeit`, `arbeit show`, `arbeit check`, `quellen`, `quellen add`, `quellen import`, `quellen check`, `zitieren`, `literatur` and `stile`; error codes `ARBEIT_MISSING`, `ARBEIT_AMBIGUOUS`, `SOURCE_NOT_FOUND`, `STYLE_NOT_FOUND`, `METADATA_NOT_FOUND`, `METADATA_UNAVAILABLE`, `IDENTIFIER_UNRECOGNIZED`, `IMPORT_FAILED`.
+- The MCP door opens the reading commands: `arbeit`, `arbeit show`, `arbeit check`, `quellen`, `quellen check`, `quellen find`, `quellen kurs`, `zitieren`, `literatur`, `stile`. Adding, importing, editing and templates stay in the terminal.
+- Skill `imstudium-arbeiten`: the workflow for agents, with the rules that the text stays the student's, only checked sources from the registry are cited, and AI use is declared. `llms.txt` points at `arbeiten/`.
+
+### Dependencies
+
+- `@imstudium/sdk` depends on `citeproc` (citeproc-js, CPAL-1.0 or AGPL-3.0, unmodified, loaded only when formatting) and ships `csl/` (styles and locales, CC BY-SA 3.0).
+
 ## [0.2.0] - 2026-10-26
 
 "Semester start": the whole Stud.IP within reach of one CLI, with a workspace that knows what's new, what's due and which semester it is.

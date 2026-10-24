@@ -28,6 +28,14 @@ Studium/
 │       ├── forum/
 │       ├── courseware/
 │       └── wiki/
+├── arbeiten/
+│   └── digitale-lehre/       # one written work (docs/ARBEITEN.md)
+│       ├── ARBEIT.md         # the brief, keeps "## Student notes"
+│       ├── arbeit.json       # type, deadline, length, style, Formvorgaben, aids
+│       ├── quellen.json      # the citation registry (CSL-JSON + origin + check)
+│       ├── quellen.bib       # BibLaTeX, regenerated on every change
+│       ├── stil/             # CSL styles of this Arbeit
+│       └── vorlage/          # templates (docx, tex, typ, pandoc)
 ├── archive/
 │   └── SS2026/               # earlier semesters
 │       ├── semester.json
@@ -136,10 +144,15 @@ A course without courseware, forum or wiki gets no such folder. `sync --include`
 
 `imstudium search --archive` includes the archive. `imstudium semester` lists it.
 
+## arbeiten/
+
+One folder per written work, made by `imstudium arbeit new`. `semester start` never moves it: an Arbeit often runs across the semester break. An Arbeit may also live in a folder of its own (a LaTeX or Typst project, `arbeit new --dir`); the workspace remembers it in `.imstudium/arbeiten.json`. [docs/ARBEITEN.md](ARBEITEN.md) describes the files and the commands.
+
 ## .imstudium/
 
 | File | Contents |
 |---|---|
+| `arbeiten.json` | `{"current", "extern"}`: the Arbeit commands use by default, and Arbeiten in folders outside the workspace |
 | `changes.jsonl` | Append-only log, one line per new or updated file per sync: `{"at", "kind": "file", "change": "new"\|"updated", "courseId", "courseTitle", "name", "path"}` (`path` is workspace-relative). It feeds `NEW.md`, `imstudium changes` and `context` |
 | `tasks.json` | `{"updatedAt", "tasks": [...]}`, courseware tasks sorted by deadline (`title`, `courseTitle`, `unitTitle`, `deadline`, `daysLeft`, `status`: `open`\|`overdue`\|`upcoming`\|`submitted`, `progress`, `url`, …). It feeds `abgaben.md` and `context` |
 

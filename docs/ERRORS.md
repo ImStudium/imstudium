@@ -37,6 +37,8 @@ Every ImStudium failure has one stable `code`. The CLI exits with the code's exi
 | `CLI_NOT_FOUND` | 1 | no | The MCP server could not find the imstudium CLI to run | npm i -g @imstudium/cli, or set IMSTUDIUM_CLI to its path |
 | `BAD_ARGS` | 2 | no | An argument or flag is missing, unknown or malformed | See: imstudium &lt;command&gt; --help |
 | `NO_CLIENT_ID` | 2 | no | OAuth sign-in was requested without a client id | Set IMSTUDIUM_OAUTH_CLIENT_ID or oauth.clientId (docs/OAUTH.md), or run imstudium login without --oauth |
+| `IDENTIFIER_UNRECOGNIZED` | 2 | no | The input is not a DOI, ISBN, arXiv id or web address | e.g. imstudium quellen add 10.1000/xyz123, an ISBN, arXiv:2101.01234 or a URL; without one use --manual |
+| `IMPORT_FAILED` | 2 | no | The file could not be read as BibTeX/BibLaTeX, RIS or CSL-JSON | Export from Zotero, Citavi, Mendeley or JabRef as BibTeX (.bib), RIS (.ris) or CSL JSON (.json) |
 | `WRITE_NOT_ALLOWED` | 3 | no | The call would change something in Stud.IP and was not explicitly allowed | Read-only by default: add --write in a terminal if you really mean it (never over MCP) |
 | `AUTH_REQUIRED` | 4 | no | No usable Stud.IP session (signed out, expired or rejected) | Run: imstudium login |
 | `SESSION_ORIGIN_MISMATCH` | 4 | no | The stored session belongs to another Stud.IP instance than the one requested | Run: imstudium login --instance &lt;url&gt; |
@@ -57,11 +59,17 @@ Every ImStudium failure has one stable `code`. The CLI exits with the code's exi
 | `UNIT_NOT_FOUND` | 5 | no | No Courseware unit matches | imstudium courseware &lt;course&gt; lists the units |
 | `PAGE_NOT_FOUND` | 5 | no | No wiki page matches | imstudium wiki &lt;course&gt; lists the pages |
 | `ROUTE_NOT_FOUND` | 5 | no | No JSON:API route matches the path | imstudium routes lists the routes of your Stud.IP |
+| `ARBEIT_AMBIGUOUS` | 5 | no | Several Arbeiten (written works) exist and none is selected, or several match | Pass --arbeit &lt;slug&gt;, or run: imstudium arbeit use &lt;slug&gt; (see details.candidates) |
+| `SOURCE_NOT_FOUND` | 5 | no | No source in the Arbeit's registry has this citekey | imstudium quellen lists the keys |
+| `STYLE_NOT_FOUND` | 5 | no | No citation style (CSL) matches the id or file | imstudium stile lists the styles here; imstudium stile find &lt;words&gt; searches the CSL repository |
+| `METADATA_NOT_FOUND` | 5 | no | doi.org, Crossref, the DNB or Open Library know no record for this identifier | Check the identifier for typos: a DOI doi.org does not know usually does not exist. Add a source without one with: imstudium quellen add --manual |
 | `NETWORK` | 6 | yes | Stud.IP could not be reached (offline, DNS, timeout) | Check the connection; local commands (context, search, changes, today --offline) still work |
+| `METADATA_UNAVAILABLE` | 6 | yes | A metadata service (doi.org, Crossref, DNB, Open Library, the CSL repository) could not be reached | Check the connection; imstudium quellen add --manual and every formatting command work offline |
 | `UPSTREAM_ERROR` | 7 | no | Stud.IP answered with an error (details.upstream holds its code) | Retry later; if it persists the route may be disabled on your instance (imstudium routes) |
 | `WORKSPACE_MISSING` | 8 | no | No Studium workspace here, or the course is not in it yet | Run: imstudium semester start (or imstudium sync) |
 | `NO_CORPUS` | 8 | no | Nothing is extracted or indexed yet | Run: imstudium sync --extract (or imstudium extract) |
 | `NO_ICS` | 8 | no | No calendar.ics in the workspace for --offline | Run: imstudium sync (writes calendar.ics), or pass --ics &lt;file&gt; |
+| `ARBEIT_MISSING` | 8 | no | No Arbeit (written work) here: none matches, none in this folder, none in the workspace | Run: imstudium arbeit new "&lt;Titel&gt;" --typ hausarbeit |
 
 ## Legacy aliases
 

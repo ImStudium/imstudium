@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { registerApi } from "./api.js";
+import { registerArbeit } from "./arbeit.js";
 import { registerAuth } from "./auth.js";
 import { registerCatalog } from "./catalog.js";
 import { registerCommunication } from "./communication.js";
@@ -11,6 +12,7 @@ import { registerDoctor } from "./doctor.js";
 import { registerLegacy } from "./legacy.js";
 import { registerPeople } from "./people.js";
 import { registerPlanning } from "./planning.js";
+import { registerQuellen } from "./quellen.js";
 import { registerSchema } from "./schema.js";
 import { registerSearch } from "./search.js";
 import { registerSemester } from "./semester.js";
@@ -18,6 +20,7 @@ import { registerSetup } from "./setup.js";
 import { registerSprechstunden } from "./sprechstunden.js";
 import { registerSync } from "./sync.js";
 import { registerWorkspace } from "./workspace.js";
+import { registerZitieren } from "./zitieren.js";
 
 /**
  * Every command module. Each file owns one area and registers its commands
@@ -36,6 +39,9 @@ export const COMMAND_MODULES: Array<(program: Command) => void> = [
   registerPeople,
   registerSprechstunden,
   registerCatalog,
+  registerArbeit,
+  registerQuellen,
+  registerZitieren,
   registerSemester,
   registerSync,
   registerApi,

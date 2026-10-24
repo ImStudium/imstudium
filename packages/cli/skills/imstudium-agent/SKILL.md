@@ -38,6 +38,7 @@ their credentials, never open login pages for them.
 | One course in depth | `imstudium courseware <course>` · `imstudium wiki <course>` · `imstudium forum <course>` · `imstudium files tree <course>` |
 | Who teaches, office hours | `imstudium people <course>` · `imstudium sprechstunden <course>` |
 | Messages | `imstudium inbox --unread` (read only what the student asks for) |
+| Hausarbeit, thesis, Zitieren, Quellen | `imstudium arbeit show` · `imstudium quellen` · `imstudium arbeit check <manuskript>`, and the `imstudium-arbeiten` skill. Never write the text, never invent a source |
 | Plan next semester | `imstudium catalog search <topic> --semester "SS 2027"` |
 | Anything else in Stud.IP | `imstudium routes <topic>` then `imstudium api <path> --flat` |
 
