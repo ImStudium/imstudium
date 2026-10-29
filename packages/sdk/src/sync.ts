@@ -1,5 +1,5 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { StudIpClient } from "./client.js";
 import { CoursesResource } from "./resources/courses.js";
 import { FilesResource } from "./resources/files.js";
@@ -148,6 +148,14 @@ export class SyncEngine {
         const chdate = fr.attributes?.chdate;
         const existing = state.entries[fr.id];
         const meta = { courseId: course.id, courseTitle: title, name };
+        // Names come from whoever may create folders in the course: a path
+        // outside the course folder is never written, whatever the name.
+        if (!isInside(courseDir, destPath)) {
+          report.failed++;
+          report.errors.push({ fileRefId: fr.id, message: `"${name}" would land outside the course folder; skipped` });
+          report.files.push({ fileRefId: fr.id, path: destPath, action: "fail", ...meta });
+          return;
+        }
         if (existing && existing.chdate === chdate && existing.localPath === destPath) {
           report.skipped++;
           report.files.push({ fileRefId: fr.id, path: destPath, action: "skip", ...meta });
@@ -202,8 +210,17 @@ export class SyncEngine {
   }
 }
 
+/** A local file name from a Stud.IP name; "." and ".." (or only dots) are never a path. */
 export function sanitizeFilename(name: string): string {
-  return name.replace(/[<>:"/\\|?*]/g, "_").trim() || "file";
+  const cleaned = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim();
+  if (!cleaned) return "file";
+  return /^\.+$/.test(cleaned) ? "_" : cleaned;
+}
+
+/** True when `path` lies inside `dir` (not `dir` itself, not beside it). */
+export function isInside(dir: string, path: string): boolean {
+  const rel = relative(resolve(dir), resolve(path));
+  return !!rel && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 async function runPool(tasks: Array<() => Promise<void>>, concurrency: number): Promise<void> {
