@@ -37,10 +37,9 @@ Tool: studium_find_materials { course: "Analysis II", query: "klausur" }
 ```
 Tool: imstudium_sync_dry_run
 → preview downloads
-
-Tool: imstudium_sync
-→ full sync + rebuild studium.json
 ```
+
+The sync itself is a terminal step (not available over MCP): `imstudium sync` — full sync + rebuild of studium.json.
 
 ## 5. Study block output
 

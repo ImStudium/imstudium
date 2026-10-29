@@ -22,7 +22,7 @@ ImStudium needs an OAuth2 PKCE client for non-interactive auth (`imstudium login
 | Redirect URI | `http://127.0.0.1:8745/callback` |
 | Grant type | Authorization Code + PKCE |
 | Scope | Stud.IP API access (same as web session) |
-| Homepage | https://github.com/paddy-shrp/imstudium |
+| Homepage | https://github.com/ImStudium/imstudium |
 
 ## After approval
 

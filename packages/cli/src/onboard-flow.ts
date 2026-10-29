@@ -1,3 +1,4 @@
+import { runSync } from "./pipeline.js";
 import {
   createSdk,
   ImstudiumError,
@@ -64,7 +65,7 @@ export async function runOnboardFlow(opts: OnboardFlowOpts): Promise<OnboardFlow
         if (opts.yes) {
           throw new ImstudiumError(
             "Not logged in.",
-            "NO_SESSION",
+            "AUTH_REQUIRED",
             undefined,
             "Run: imstudium login",
           );
@@ -80,25 +81,21 @@ export async function runOnboardFlow(opts: OnboardFlowOpts): Promise<OnboardFlow
       if (!opts.skipSync) {
         ui?.updateStep("sync", { status: "active" });
         ui?.setLiveMessage("Downloading course files from Stud.IP…");
-        const semOpts = {
+        const result = await runSync(sdk, {
+          out,
           semesterId: sdk.config.semesterId,
-        };
-        report = await sdk.sync.sync({
-          outputDir: out,
-          include: ["wiki", "news", "calendar"],
-          ...semOpts,
+          onProgress: (m) => ui?.setLiveMessage(m),
         });
+        report = result.report;
         ui?.updateStep("sync", {
           status: "done",
           detail: `${report.downloaded} downloaded · ${report.skipped} unchanged`,
         });
-
         ui?.updateStep("studium", { status: "active" });
-        ui?.setLiveMessage("Building studium.json and study overview…");
-        studium = await sdk.studium.build(out, sdk.config.instanceOrigin, semOpts);
+        studium = result.workspace;
         ui?.updateStep("studium", {
           status: "done",
-          detail: `${studium.courses.length} courses`,
+          detail: `${studium?.courses.length ?? 0} courses`,
         });
       } else {
         ui?.updateStep("sync", { status: "skipped", detail: "--skip-sync" });
@@ -107,7 +104,7 @@ export async function runOnboardFlow(opts: OnboardFlowOpts): Promise<OnboardFlow
     }
 
     ui?.updateStep("agents", { status: "active" });
-    ui?.setLiveMessage("Installing skills and MCP for detected AI tools…");
+    ui?.setLiveMessage("Installing agent skills for detected AI tools…");
     const setup = await runSetup("all", {
       yes: opts.yes,
       workspace: out,

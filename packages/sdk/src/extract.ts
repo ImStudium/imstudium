@@ -1,23 +1,16 @@
-import { execFile } from "node:child_process";
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, extname, join } from "node:path";
-import { promisify } from "node:util";
+import { cp, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, extname, join, relative } from "node:path";
 import { ensureDir, slugify } from "./config.js";
-import {
-  buildCourseSearchIndex,
-} from "./search-corpus.js";
-import type { ExtractManifest, ExtractResult, MaterialKind } from "./types.js";
-import type { StudiumCourse } from "./types.js";
-
-const exec = promisify(execFile);
-const MAX_BUFFER = 64 * 1024 * 1024;
+import { convertLocalDocument, probeLocalIngest } from "./ingest/local-docs.js";
+import { buildCourseSearchIndex } from "./search-corpus.js";
+import type { ExtractManifest, ExtractResult, MaterialKind, StudiumCourse } from "./types.js";
 
 const PDF_EXT = new Set([".pdf"]);
 const OFFICE_EXT = new Set([
   ".pptx", ".ppt", ".odp",
   ".docx", ".doc", ".odt", ".rtf",
   ".xlsx", ".xls", ".ods",
+  ".epub",
 ]);
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".tiff"]);
 const TEXT_EXT = new Set([
@@ -35,106 +28,20 @@ export function detectKind(filename: string): MaterialKind {
 }
 
 export interface ExtractTools {
-  pdftotext?: string;
-  pdftoppm?: string;
-  soffice?: string;
-  unzip?: string;
-  tesseract?: string;
-}
-
-const SOFFICE_CANDIDATES = [
-  "soffice",
-  "/Applications/LibreOffice.app/Contents/MacOS/soffice",
-  "/usr/bin/soffice",
-];
-
-async function which(bin: string): Promise<string | undefined> {
-  try {
-    if (bin.startsWith("/")) {
-      await stat(bin);
-      return bin;
-    }
-    const { stdout } = await exec("which", [bin]);
-    const p = stdout.trim();
-    return p || undefined;
-  } catch {
-    return undefined;
-  }
+  anydoc?: boolean;
+  pdfInspector?: boolean;
 }
 
 export async function detectTools(): Promise<ExtractTools> {
-  const [pdftotext, pdftoppm, unzip, tesseract] = await Promise.all([
-    which("pdftotext"),
-    which("pdftoppm"),
-    which("unzip"),
-    which("tesseract"),
-  ]);
-  let soffice: string | undefined;
-  for (const c of SOFFICE_CANDIDATES) {
-    soffice = await which(c);
-    if (soffice) break;
-  }
-  return { pdftotext, pdftoppm, soffice, unzip, tesseract };
+  const local = await probeLocalIngest();
+  return { anydoc: local.anydoc, pdfInspector: local.pdfInspector };
 }
 
 export function toolHints(tools: ExtractTools): string[] {
-  const hints: string[] = [];
-  if (!tools.pdftotext || !tools.pdftoppm) {
-    hints.push("Install poppler for PDF text + slide images: brew install poppler (macOS) / apt install poppler-utils (Linux)");
+  if (!tools.anydoc || !tools.pdfInspector) {
+    return ["Local ingest missing (@firecrawl/anydoc + @firecrawl/pdf-inspector) — reinstall @imstudium/sdk"];
   }
-  if (!tools.soffice) {
-    hints.push("Install LibreOffice for full Office rendering: brew install --cask libreoffice / apt install libreoffice");
-  }
-  if (!tools.tesseract) {
-    hints.push("Install Tesseract for OCR on scanned PDFs and photos: brew install tesseract tesseract-lang / apt install tesseract-ocr tesseract-ocr-deu");
-  }
-  return hints;
-}
-
-/** Indices (0-based) of pages whose extracted text is empty — OCR candidates. Exported for tests. */
-export function pickOcrPages(pageTexts: string[]): number[] {
-  const out: number[] = [];
-  pageTexts.forEach((t, i) => {
-    if (!t.trim()) out.push(i);
-  });
-  return out;
-}
-
-/** Strip PPTX/DOCX XML down to readable text. Exported for tests. */
-export function stripOfficeXml(xml: string, format: "pptx" | "docx"): string {
-  const runTag = format === "pptx" ? "a:t" : "w:t";
-  const re = new RegExp(`<${runTag}[^>]*>([\\s\\S]*?)</${runTag}>`, "g");
-  const parts: string[] = [];
-  // Paragraph boundaries become newlines so slide text stays structured.
-  const paraSplit = format === "pptx" ? /<\/a:p>/ : /<\/w:p>/;
-  for (const para of xml.split(paraSplit)) {
-    const runs: string[] = [];
-    let m: RegExpExecArray | null;
-    re.lastIndex = 0;
-    while ((m = re.exec(para)) !== null) runs.push(m[1]);
-    const line = decodeXmlEntities(runs.join("")).trim();
-    if (line) parts.push(line);
-  }
-  return parts.join("\n");
-}
-
-function decodeXmlEntities(s: string): string {
-  return s
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(parseInt(n, 10)))
-    .replace(/&amp;/g, "&");
-}
-
-/** Order slide entries numerically: slide2.xml before slide10.xml. Exported for tests. */
-export function sortSlideEntries(entries: string[]): string[] {
-  return [...entries].sort((a, b) => {
-    const na = parseInt(a.match(/slide(\d+)\.xml/)?.[1] ?? "0", 10);
-    const nb = parseInt(b.match(/slide(\d+)\.xml/)?.[1] ?? "0", 10);
-    return na - nb;
-  });
+  return [];
 }
 
 export class Extractor {
@@ -149,10 +56,6 @@ export class Extractor {
     return this.tools;
   }
 
-  /**
-   * Extract one file into outDir: content.md + pages/*.png + manifest.json.
-   * Incremental — skips when the source is unchanged unless force is set.
-   */
   async extractFile(
     src: string,
     outDir: string,
@@ -160,9 +63,6 @@ export class Extractor {
   ): Promise<ExtractResult> {
     const name = basename(src);
     const kind = detectKind(name);
-    const images = opts.images !== false;
-    const dpi = opts.dpi ?? 144;
-    const tools = await this.getTools();
 
     const srcStat = await stat(src);
     const manifestPath = join(outDir, "manifest.json");
@@ -180,24 +80,17 @@ export class Extractor {
     await ensureDir(outDir);
 
     let result: ExtractResult;
-    switch (kind) {
-      case "pdf":
-        result = await this.extractPdf(src, outDir, { images, dpi, tools });
-        break;
-      case "office":
-        result = await this.extractOffice(src, outDir, { images, dpi, tools });
-        break;
-      case "image":
-        result = await this.extractImage(src, outDir);
-        break;
-      case "text":
-        result = await this.extractText(src, outDir);
-        break;
-      default:
-        result = {
-          source: src, outDir, kind, pages: 0,
-          error: `Unsupported file type: ${extname(name)}`,
-        };
+    if (kind === "image") {
+      result = await this.extractImage(src, outDir);
+    } else if (kind === "text") {
+      result = await this.extractText(src, outDir);
+    } else if (kind === "unsupported") {
+      result = {
+        source: src, outDir, kind, pages: 0,
+        error: `Unsupported file type: ${extname(name)}`,
+      };
+    } else {
+      result = await this.extractDocument(src, outDir, kind);
     }
 
     const manifest: ExtractManifest = {
@@ -215,7 +108,6 @@ export class Extractor {
     return result;
   }
 
-  /** Extract every supported file under filesDir into outRoot/<file-slug>/. */
   async extractDir(
     filesDir: string,
     outRoot: string,
@@ -231,7 +123,8 @@ export class Extractor {
     const results: ExtractResult[] = [];
     for (const f of files) {
       if (detectKind(f) === "unsupported") continue;
-      const outDir = join(outRoot, extractSlug(basename(f)));
+      // Folder-qualified slug: Übungen/Blatt01.pdf and Lösungen/Blatt01.pdf stay apart.
+      const outDir = join(outRoot, extractSlug(relative(filesDir, f)));
       results.push(await this.extractFile(f, outDir, opts));
     }
 
@@ -243,130 +136,34 @@ export class Extractor {
     return results;
   }
 
-  private async extractPdf(
+  private async extractDocument(
     src: string,
     outDir: string,
-    opts: { images: boolean; dpi: number; tools: ExtractTools },
+    kind: "pdf" | "office",
   ): Promise<ExtractResult> {
-    const { tools } = opts;
-    if (!tools.pdftotext) {
+    const bytes = new Uint8Array(await readFile(src));
+    const converted = await convertLocalDocument(bytes, src);
+    if (!converted.ok) {
       return {
-        source: src, outDir, kind: "pdf", pages: 0,
-        error: "pdftotext not found", hint: toolHints(tools)[0],
+        source: src, outDir, kind, pages: 0,
+        error: converted.error.message,
+        hint: "Local AnyDoc / pdf-inspector pipeline failed",
       };
     }
 
-    const { stdout } = await exec(tools.pdftotext, ["-layout", src, "-"], { maxBuffer: MAX_BUFFER });
-    // pdftotext separates pages with form feeds.
-    const pageTexts = stdout.split("\f").map((p) => p.trimEnd());
-    while (pageTexts.length > 0 && !pageTexts[pageTexts.length - 1].trim()) pageTexts.pop();
-
-    let imagePages = 0;
-    let pageFiles: string[] = [];
-    if (opts.images && tools.pdftoppm) {
-      const pagesDir = join(outDir, "pages");
-      await ensureDir(pagesDir);
-      await exec(
-        tools.pdftoppm,
-        ["-png", "-r", String(opts.dpi), src, join(pagesDir, "page")],
-        { maxBuffer: MAX_BUFFER },
-      );
-      pageFiles = (await readdir(pagesDir)).filter((f) => f.endsWith(".png")).sort();
-      imagePages = pageFiles.length;
-    }
-
-    // Scanned PDFs have no text layer — OCR the rendered images for those pages.
-    let ocrUsed = false;
-    if (tools.tesseract && pageFiles.length > 0) {
-      while (pageTexts.length < pageFiles.length) pageTexts.push("");
-      for (const i of pickOcrPages(pageTexts)) {
-        if (!pageFiles[i]) continue;
-        const text = await runOcr(tools.tesseract, join(outDir, "pages", pageFiles[i]));
-        if (text) {
-          pageTexts[i] = `_(OCR)_\n${text}`;
-          ocrUsed = true;
-        }
-      }
-    }
-
-    const pages = Math.max(pageTexts.length, imagePages);
-    await writeFile(join(outDir, "content.md"), renderContentMd(basename(src), "pdf", pageTexts, imagePages > 0));
-    return {
-      source: src, outDir, kind: "pdf", pages, hasImages: imagePages > 0,
-      tool: ocrUsed ? "poppler+tesseract" : "poppler",
-    };
-  }
-
-  private async extractOffice(
-    src: string,
-    outDir: string,
-    opts: { images: boolean; dpi: number; tools: ExtractTools },
-  ): Promise<ExtractResult> {
-    const { tools } = opts;
-
-    // Preferred: LibreOffice → PDF → full poppler pipeline (text + slide images).
-    if (tools.soffice && tools.pdftotext) {
-      const tmp = join(tmpdir(), `imstudium-extract-${Date.now()}`);
-      await mkdir(tmp, { recursive: true });
-      try {
-        await exec(tools.soffice, ["--headless", "--convert-to", "pdf", "--outdir", tmp, src], {
-          maxBuffer: MAX_BUFFER,
-          timeout: 120_000,
-        });
-        const pdfName = (await readdir(tmp)).find((f) => f.endsWith(".pdf"));
-        if (pdfName) {
-          const result = await this.extractPdf(join(tmp, pdfName), outDir, opts);
-          return { ...result, source: src, kind: "office", tool: "libreoffice+poppler" };
-        }
-      } catch {
-        // fall through to native extraction
-      } finally {
-        await rm(tmp, { recursive: true, force: true });
-      }
-    }
-
-    // Fallback: native XML text extraction (PPTX/DOCX are zip archives) — no images.
     const ext = extname(src).toLowerCase();
-    if (tools.unzip && (ext === ".pptx" || ext === ".docx")) {
-      const text = await this.extractOfficeNative(tools.unzip, src, ext === ".pptx" ? "pptx" : "docx");
-      const pageTexts = ext === ".pptx" ? text.split("\u0000") : [text];
-      await writeFile(
-        join(outDir, "content.md"),
-        renderContentMd(basename(src), ext === ".pptx" ? "slides" : "document", pageTexts, false),
-      );
-      return {
-        source: src, outDir, kind: "office", pages: pageTexts.length,
-        hasImages: false, tool: "native-xml",
-        hint: tools.soffice ? undefined : toolHints(tools).find((h) => h.includes("LibreOffice")),
-      };
-    }
-
+    const label =
+      kind === "pdf" ? "pdf" : ext === ".pptx" || ext === ".ppt" || ext === ".odp" ? "slides" : "document";
+    const pageTexts = converted.pages.map((p) => p.markdown);
+    await writeFile(join(outDir, "content.md"), renderContentMd(basename(src), label, pageTexts, false));
     return {
-      source: src, outDir, kind: "office", pages: 0,
-      error: "No extraction tool for Office files", hint: toolHints(tools).join(" · "),
+      source: src,
+      outDir,
+      kind,
+      pages: converted.pageCount,
+      hasImages: false,
+      tool: converted.engine,
     };
-  }
-
-  /** PPTX slides / DOCX body → text. Slides joined with NUL so callers can split per slide. */
-  private async extractOfficeNative(
-    unzip: string,
-    src: string,
-    format: "pptx" | "docx",
-  ): Promise<string> {
-    if (format === "docx") {
-      const { stdout } = await exec(unzip, ["-p", src, "word/document.xml"], { maxBuffer: MAX_BUFFER });
-      return stripOfficeXml(stdout, "docx");
-    }
-    const { stdout: listing } = await exec(unzip, ["-Z1", src], { maxBuffer: MAX_BUFFER });
-    const slides = sortSlideEntries(
-      listing.split("\n").filter((l) => /^ppt\/slides\/slide\d+\.xml$/.test(l.trim())).map((l) => l.trim()),
-    );
-    const texts: string[] = [];
-    for (const slide of slides) {
-      const { stdout } = await exec(unzip, ["-p", src, slide], { maxBuffer: MAX_BUFFER });
-      texts.push(stripOfficeXml(stdout, "pptx"));
-    }
-    return texts.join("\u0000");
   }
 
   private async extractImage(src: string, outDir: string): Promise<ExtractResult> {
@@ -374,24 +171,11 @@ export class Extractor {
     await ensureDir(pagesDir);
     const dest = join(pagesDir, `page-1${extname(src).toLowerCase()}`);
     await cp(src, dest);
-
-    // OCR photos (Tafelbilder, scans) so their text is searchable; the image stays primary.
-    const tools = await this.getTools();
-    let body = `(image file — view ${dest} to comprehend it)`;
-    let tool = "copy";
-    if (tools.tesseract && /\.(png|jpe?g|tiff?|bmp|webp)$/i.test(src)) {
-      const text = await runOcr(tools.tesseract, src);
-      if (text) {
-        body = `_(OCR — verify against the image)_\n${text}`;
-        tool = "copy+tesseract";
-      }
-    }
-
     await writeFile(
       join(outDir, "content.md"),
-      renderContentMd(basename(src), "image", [body], true),
+      renderContentMd(basename(src), "image", [`(image — read ${dest})`], true),
     );
-    return { source: src, outDir, kind: "image", pages: 1, hasImages: true, tool };
+    return { source: src, outDir, kind: "image", pages: 1, hasImages: true, tool: "copy" };
   }
 
   private async extractText(src: string, outDir: string): Promise<ExtractResult> {
@@ -399,22 +183,6 @@ export class Extractor {
     await writeFile(join(outDir, "content.md"), renderContentMd(basename(src), "text", [raw], false));
     return { source: src, outDir, kind: "text", pages: 1, tool: "passthrough" };
   }
-}
-
-/** OCR one image. German course materials first, plain default as fallback. */
-async function runOcr(tesseract: string, imagePath: string): Promise<string> {
-  const langs = [process.env.IMSTUDIUM_OCR_LANG || "deu+eng", ""];
-  for (const lang of langs) {
-    try {
-      const args = [imagePath, "stdout", ...(lang ? ["-l", lang] : [])];
-      const { stdout } = await exec(tesseract, args, { maxBuffer: MAX_BUFFER, timeout: 60_000 });
-      const text = stdout.trim();
-      if (text) return text;
-    } catch {
-      // missing language pack or unreadable image — try next
-    }
-  }
-  return "";
 }
 
 export function extractSlug(filename: string): string {
@@ -430,13 +198,13 @@ function renderContentMd(
   const lines = [
     `# ${filename}`,
     "",
-    `> Extracted ${label} · ${pageTexts.length} page(s)${hasImages ? " · rendered images in pages/ — READ the PNGs to visually comprehend diagrams, formulas, and layout" : ""}`,
+    `> ${label} · ${pageTexts.length} page(s) · local AnyDoc / pdf-inspector${hasImages ? " · image in pages/" : ""}`,
     "",
   ];
   const unit = label === "slides" ? "Slide" : "Page";
   pageTexts.forEach((text, i) => {
     if (pageTexts.length > 1) lines.push(`## ${unit} ${i + 1}`, "");
-    lines.push(text.trim() || "_(no extractable text — check the page image)_", "");
+    lines.push(text.trim() || "_(image-only page — no text layer)_", "");
   });
   return lines.join("\n");
 }

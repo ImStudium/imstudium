@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import type { StudIpClient } from "./client.js";
 import type { JsonApiResource } from "./types.js";
 import { ensureDir } from "./config.js";
+import { cachedJson } from "./cache.js";
 
 export type SemesterResource = JsonApiResource<"semesters"> & {
   attributes?: {
@@ -134,8 +135,11 @@ export function resolveWorkspaceFolder(
 export class SemestersResource {
   constructor(private client: StudIpClient) {}
 
+  /** Public and slow-changing: cached for a day per instance. */
   async listAll(): Promise<SemesterResource[]> {
-    return this.client.paginateAll<SemesterResource>("/semesters", { "page[limit]": "100" });
+    return cachedJson(`semesters:${this.client.apiBase}`, 24 * 3_600_000, () =>
+      this.client.paginateAll<SemesterResource>("/semesters", { "page[limit]": "100" }),
+    );
   }
 
   async get(semesterId: string): Promise<SemesterResource> {

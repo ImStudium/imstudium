@@ -12,12 +12,22 @@ export type AgentId =
   | "windsurf"
   | "opencode";
 
+/**
+ * How a harness stores MCP servers:
+ * json      — `{ "mcpServers": { … } }` file (Cursor, Claude Desktop, Windsurf)
+ * claude-cli — Claude Code keeps user servers in ~/.claude.json; write through `claude mcp`
+ * codex-toml — `[mcp_servers.<name>]` tables in ~/.codex/config.toml
+ * opencode  — `{ "mcp": { name: { type: "local", command: [...] } } }` in opencode.json
+ */
+export type McpStyle = "json" | "claude-cli" | "codex-toml" | "opencode";
+
 export interface AgentProfile {
   id: AgentId;
   label: string;
   detect: () => boolean;
   skillsDir: () => string;
   mcpFiles: () => string[];
+  mcpStyle: McpStyle;
 }
 
 function claudeDesktopConfigPath(): string {
@@ -40,6 +50,7 @@ export const AGENT_REGISTRY: AgentProfile[] = [
       Boolean(process.env.CURSOR_TRACE_ID || process.env.CURSOR_AGENT),
     skillsDir: () => join(homedir(), ".cursor", "skills"),
     mcpFiles: () => [join(homedir(), ".cursor", "mcp.json")],
+    mcpStyle: "json",
   },
   {
     id: "claude-code",
@@ -47,7 +58,8 @@ export const AGENT_REGISTRY: AgentProfile[] = [
     detect: () =>
       existsSync(join(homedir(), ".claude")) || Boolean(process.env.CLAUDE_CODE),
     skillsDir: () => join(homedir(), ".claude", "skills"),
-    mcpFiles: () => [join(homedir(), ".claude", "mcp.json")],
+    mcpFiles: () => [join(homedir(), ".claude.json")],
+    mcpStyle: "claude-cli",
   },
   {
     id: "claude-desktop",
@@ -59,20 +71,23 @@ export const AGENT_REGISTRY: AgentProfile[] = [
     },
     skillsDir: () => join(homedir(), ".claude", "skills"),
     mcpFiles: () => [claudeDesktopConfigPath()],
+    mcpStyle: "json",
   },
   {
     id: "codex",
     label: "OpenAI Codex",
     detect: () => existsSync(join(homedir(), ".codex")) || Boolean(process.env.CODEX_HOME),
     skillsDir: () => join(homedir(), ".codex", "skills"),
-    mcpFiles: () => [join(homedir(), ".codex", "mcp.json")],
+    mcpFiles: () => [join(process.env.CODEX_HOME || join(homedir(), ".codex"), "config.toml")],
+    mcpStyle: "codex-toml",
   },
   {
     id: "windsurf",
     label: "Windsurf",
     detect: () => existsSync(join(homedir(), ".codeium", "windsurf")),
     skillsDir: () => join(homedir(), ".codeium", "windsurf", "skills"),
-    mcpFiles: () => [join(homedir(), ".codeium", "windsurf", "mcp.json")],
+    mcpFiles: () => [join(homedir(), ".codeium", "windsurf", "mcp_config.json")],
+    mcpStyle: "json",
   },
   {
     id: "opencode",
@@ -81,7 +96,8 @@ export const AGENT_REGISTRY: AgentProfile[] = [
       existsSync(join(homedir(), ".config", "opencode")) ||
       existsSync(join(homedir(), ".opencode")),
     skillsDir: () => join(homedir(), ".config", "opencode", "skills"),
-    mcpFiles: () => [join(homedir(), ".config", "opencode", "mcp.json")],
+    mcpFiles: () => [join(homedir(), ".config", "opencode", "opencode.json")],
+    mcpStyle: "opencode",
   },
 ];
 

@@ -11,6 +11,7 @@ import {
 import { courseRelativePath, semesterFolderSlug } from "./workspace-path.js";
 import { agentSearchGuidance, type CourseSearchIndex, type WorkspaceSearchIndex } from "./search-corpus.js";
 import { EXTRACTION_LIMITS_FOR_AGENTS } from "./extraction-guidance.js";
+import { courseScheduleFromResources } from "./timetable.js";
 import type {
   StudiumCourse,
   StudiumExamDate,
@@ -46,6 +47,15 @@ export class StudiumBuilder {
       semesterId?: string;
       semesterLabel?: string;
       allSemesters?: boolean;
+      /** Relative folder for course dirs (default: the semester slug, e.g. WS2026-27). */
+      folder?: string;
+      /** Only these courses (all-semester sync groups courses per semester). */
+      courseIds?: string[];
+      /**
+       * Past semester: write `<folder>/semester.json` and leave the root
+       * overview (studium.json, STUDIUM.md, klausuren.md, llms.txt) alone.
+       */
+      archive?: boolean;
     },
   ): Promise<StudiumWorkspace> {
     await ensureDir(workspacePath);
@@ -60,13 +70,18 @@ export class StudiumBuilder {
       semesterLabel: options?.semesterLabel,
       allSemesters: options?.allSemesters,
     });
-    const rawCourses = await this.courses.listMine(me.id, {
+    const listed = await this.courses.listMine(me.id, {
       semesterId: options?.semesterId ?? semesterCtx?.semester.id,
       allSemesters: options?.allSemesters,
     });
-    const semesterFolder = semesterFolderSlug(semesterCtx, options?.allSemesters);
+    const onlyIds = options?.courseIds ? new Set(options.courseIds) : null;
+    const rawCourses = onlyIds ? listed.filter((c) => onlyIds.has(c.id)) : listed;
+    const semesterFolder = options?.folder ?? semesterFolderSlug(semesterCtx, options?.allSemesters);
     const semesterTitle = semesterCtx?.title || semesterFolder;
-    const scheduleEntries = await this.schedule.getSchedule(me.id);
+    const semStart = Date.parse(String(semesterCtx?.semester.attributes?.start ?? ""));
+    const scheduleEntries = await this.schedule.getSchedule(me.id, {
+      timestamp: Number.isFinite(semStart) ? semStart / 1000 + 86_400 : undefined,
+    });
 
     const studiumCourses: StudiumCourse[] = [];
     const allExams: StudiumExamDate[] = [];
@@ -77,20 +92,12 @@ export class StudiumBuilder {
       const folders = await this.files.listAllFolders(c.id);
       const events = await this.courses.getEvents(c.id);
 
-      const courseSchedule: StudiumScheduleEntry[] = scheduleEntries
-        .filter((e) => {
-          const rel = e.relationships?.["course"]?.data;
-          const cid = rel && !Array.isArray(rel) ? rel.id : undefined;
-          return cid === c.id;
-        })
-        .map((e) => ({
-          title: (e.attributes?.title as string) || "Event",
-          start: e.attributes?.["start-date"] as string | undefined,
-          end: e.attributes?.["end-date"] as string | undefined,
-          location: e.attributes?.location as string | undefined,
-          courseId: c.id,
-          courseTitle: title,
-        }));
+      // Cycles are `seminar-cycle-dates` owned by the course; single dates come from its events.
+      const courseSchedule: StudiumScheduleEntry[] = courseScheduleFromResources(
+        { id: c.id, title, number: c.attributes?.["course-number"] },
+        scheduleEntries,
+        events,
+      );
 
       const examDates = extractExamDates(c.id, title, events, c.attributes);
       allExams.push(...examDates);
@@ -161,6 +168,15 @@ export class StudiumBuilder {
       courses: studiumCourses,
       nextDeadlines: allExams.filter((e) => e.date && (e.daysRemaining ?? 999) >= 0).slice(0, 10),
     };
+
+    if (options?.archive) {
+      workspace.activeSemester.isCurrent = false;
+      const dir = join(workspacePath, semesterFolder);
+      await ensureDir(dir);
+      await writeFile(join(dir, "semester.json"), JSON.stringify(workspace, null, 2));
+      await this.writeKlausurenMd(dir, allExams);
+      return workspace;
+    }
 
     await this.attachSearchMetadata(workspacePath, workspace);
 
@@ -255,7 +271,8 @@ export class StudiumBuilder {
       "",
       "- `search/materials.json` — file list, extract slugs, cite refs",
       "- `search/corpus.jsonl` — page index for your grep / semantic search (one JSON line per page)",
-      "- `extracted/<slug>/content.md` — full text; `pages/` — slide images (read before explaining visuals)",
+      "- `extracted/<slug>/content.md` — full text; formulas and diagrams: open the original in `files/`",
+      "- `news/` · `forum/` · `courseware/` · `wiki/` — course communication and learning content as markdown",
       "",
     ];
 
@@ -294,6 +311,8 @@ export class StudiumBuilder {
       `📅 **Focus: ${sem.title}**${progress} — courses live in \`${ws.workspaceFolder}/\``,
       `Generated: ${ws.generatedAt}`,
       `Student: ${ws.user?.name || "—"}`,
+      "",
+      "Today and next: `imstudium context` · [stundenplan.md](stundenplan.md) · [abgaben.md](abgaben.md) · [NEW.md](NEW.md) · [klausuren.md](klausuren.md)",
       "",
     ];
 
@@ -372,15 +391,20 @@ function extractExamDates(
   const results: StudiumExamDate[] = [];
 
   for (const ev of events) {
-    const title = String(ev.attributes?.title || "");
-    const category = String(ev.attributes?.category || "");
-    const combined = `${title} ${category}`;
+    const a = ev.attributes ?? {};
+    // Stud.IP 6 course-events: `start`/`categories`/`is-cancelled`, and `title` is the
+    // course's own name — so only the date type and description say "Klausur".
+    const v6 = "categories" in a || "is-cancelled" in a;
+    if (a["is-cancelled"]) continue;
+    const title = String(a.title || "");
+    const category = String(a.categories || a.category || "");
+    const combined = v6 ? `${category} ${a.description || ""}` : `${title} ${category}`;
     if (EXAM_KEYWORDS.some((re) => re.test(combined))) {
       results.push({
         courseId,
         courseTitle,
-        date: ev.attributes?.["start-date"] as string | undefined,
-        title: title || "Exam",
+        date: (a.start ?? a["start-date"]) as string | undefined,
+        title: (v6 ? category : title) || "Exam",
         location: ev.attributes?.location as string | undefined,
         confirmed: true,
         source: "event",
@@ -442,31 +466,28 @@ export async function writeLlmsTxt(workspacePath: string, ws: StudiumWorkspace):
   const lines = [
     `# Studium — ${ws.user?.name || "student"}`,
     "",
-    `> Local mirror of Stud.IP course materials, optimized for LLM navigation.`,
+    `> Local mirror of one student's Stud.IP: course files, news, forum, courseware, wiki, dates and deadlines.`,
     `> Active semester: ${sem.title}${sem.weekNumber != null ? ` (week ${sem.weekNumber}, ${sem.progressPercent}% elapsed)` : ""}. Generated: ${ws.generatedAt}`,
     "",
     "## Start here",
     "",
-    "- [studium.json](studium.json): machine-readable index — courses, exam dates, `course.path` for every folder. Always resolve paths from here, never guess.",
+    "- `imstudium context --json` — run this first: semester, today's dates, open Abgaben, Klausuren, new files, news, next steps.",
+    "- [NEW.md](NEW.md): files that arrived in the last 14 days, per course (log: `.imstudium/changes.jsonl`).",
+    "- [abgaben.md](abgaben.md): courseware tasks with deadlines, soonest first.",
+    "- [stundenplan.md](stundenplan.md): weekly plan, single dates and cancellations.",
+    "- [klausuren.md](klausuren.md): exam dates; unconfirmed ones come from course text — verify in Stud.IP.",
+    "- [studium.json](studium.json): machine-readable course map — resolve every folder from `course.path`, never guess.",
     "- [STUDIUM.md](STUDIUM.md): human overview of the semester.",
-    "- [klausuren.md](klausuren.md): exam dates with days remaining.",
+    "",
+    "## Finding content",
+    "",
+    "- `imstudium search \"<words>\" --json` — ranked offline search over materials, news, forum, courseware and wiki (`--course`, `--kind`, `--archive`).",
+    `- Grep works too: \`${guidance.grepExample.replace("your terms", "keyword")}\``,
+    `- Cite with the hit's \`ref\`; then read ${guidance.resolveHit.pageText}.`,
   ];
 
   if (guidance.chunkCount) {
-    lines.push(
-      "",
-      "## Finding content (use YOUR search tools)",
-      "",
-      "This workspace does not ship a custom search command. Use the harness you already have:",
-      "",
-      `- **Grep:** \`${guidance.grepExample.replace("your terms", "keyword")}\``,
-      "- **Semantic / codebase search:** index or search \`*/search/corpus.jsonl\` and \`extracted/*/content.md\`",
-      `- **Fields per JSONL line:** ${guidance.corpusFields.join(", ")}`,
-      `- **Cite with:** \`${guidance.citeWith}\``,
-      `- **Then read:** ${guidance.resolveHit.pageText} · ${guidance.resolveHit.pageImage}`,
-      "",
-      `${guidance.chunkCount} indexed pages across ${guidance.courseCount} courses.`,
-    );
+    lines.push("", `${guidance.chunkCount} indexed pages across ${guidance.courseCount} courses.`);
   }
 
   lines.push("", "## Courses", "");
@@ -480,20 +501,23 @@ export async function writeLlmsTxt(workspacePath: string, ws: StudiumWorkspace):
     "## Per-course layout",
     "",
     "- `COURSE.md` — brief: type, ECTS, exams, description",
-    "- `search/materials.json` — file list + extract slugs + cite refs",
-    "- `files/` — original downloads (PDF, PPTX, …)",
-    "- `extracted/<slug>/content.md` — full extracted text, one `## Page N` per page",
-    "- `extracted/<slug>/pages/page-NN.png` — rendered page images",
-    "- `search/corpus.jsonl` — page index for grep / semantic search",
+    "- `files/` — originals, in the course's Stud.IP folder tree",
+    "- `extracted/<slug>/content.md` — extracted text, one `## Page N` section per page",
+    "- `search/corpus.jsonl` · `search/materials.json` — page index and file list with cite refs",
+    "- `news/` — announcements as dated markdown · `forum/<topic>/<thread>.md` — forum threads",
+    "- `courseware/<unit>/` — courseware pages and block files · `wiki/` — the course wiki",
+    "",
+    "Earlier semesters live under `archive/<semester>/` with the same layout (`imstudium search --archive`).",
     "",
     "## Rules for agents",
     "",
-    "1. Search with your native tools on corpus.jsonl — do not expect an ImStudium search MCP tool.",
-    "2. Cite pages with `ref` from JSONL hits or materials.json.",
-    "3. Slides/diagrams/formulas: read `pages/page-NNN.png` before explaining visual content — text alone is insufficient.",
-    "4. Refresh: `imstudium sync --quiet --extract` (daily), `imstudium index` (rebuild page index).",
+    "1. Orient with `imstudium context --json`; prefer the CLI (`imstudium <command> --json`) over guessing from files.",
+    "2. Cite with `ref` from search hits or materials.json.",
+    "3. Formulas and diagrams: `content.md` is not LaTeX — open the original under `files/`.",
+    "4. Read-only: never change anything in Stud.IP (`imstudium api --write`) unless the student asks for that exact change.",
+    "5. Refresh: `imstudium sync --extract` (files, news, forum, courseware, wiki, dates, search index).",
     "",
-    "## Extraction limits (local poppler + Tesseract)",
+    "## Extraction limits (local AnyDoc + pdf-inspector)",
     "",
     ...EXTRACTION_LIMITS_FOR_AGENTS.map((line) => `- ${line}`),
     "",

@@ -1,12 +1,12 @@
 {
   "name": "imstudium-monorepo",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "ImStudium — extraction harness + study workspace for Stud.IP",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddy-shrp/imstudium.git"
+    "url": "https://github.com/ImStudium/imstudium.git"
   },
   "workspaces": [
     "packages/*"
@@ -18,14 +18,19 @@
     "clean": "turbo run clean",
     "test": "vitest run",
     "validate": "turbo run typecheck build && vitest run",
-    "install:dev": "bash scripts/install-dev.sh"
+    "install:dev": "bash scripts/install-dev.sh",
+    "docs": "bun scripts/gen-docs.ts",
+    "docs:check": "bun scripts/gen-docs.ts --check",
+    "docs:commands": "bun scripts/gen-docs.ts commands",
+    "docs:errors": "bun scripts/gen-docs.ts errors"
   },
   "devDependencies": {
-    "turbo": "^2.5.4",
-    "typescript": "^5.8.3",
-    "vitest": "^4.1.9"
+    "@typescript/native": "npm:typescript@7.0.2",
+    "turbo": "^2.11.10",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.12"
   },
-  "packageManager": "bun@1.2.0",
+  "packageManager": "bun@1.4.2",
   "engines": {
     "bun": ">=1.2"
   }

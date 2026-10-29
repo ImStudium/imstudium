@@ -1,18 +1,18 @@
 {
   "name": "@imstudium/cli",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "ImStudium CLI — study workspace from Stud.IP",
   "license": "MIT",
   "type": "module",
   "author": "Patrick Schröppel",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddy-shrp/imstudium.git",
+    "url": "https://github.com/ImStudium/imstudium.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/paddy-shrp/imstudium#readme",
+  "homepage": "https://github.com/ImStudium/imstudium#readme",
   "bugs": {
-    "url": "https://github.com/paddy-shrp/imstudium/issues"
+    "url": "https://github.com/ImStudium/imstudium/issues"
   },
   "keywords": [
     "imstudium",
@@ -28,6 +28,13 @@
   "bin": {
     "imstudium": "dist/cli.js"
   },
+  "exports": {
+    "./program": {
+      "types": "./dist/program.d.ts",
+      "import": "./dist/program.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "skills",
@@ -40,15 +47,17 @@
     "prepublishOnly": "bun run build && bun run typecheck"
   },
   "dependencies": {
-    "@imstudium/sdk": "^0.1.3",
+    "@imstudium/contract": "^0.2.0",
+    "@imstudium/sdk": "^0.2.0",
     "commander": "^13.1.0",
-    "playwright": "^1.52.0"
+    "playwright": "^1.64.1"
   },
   "devDependencies": {
-    "@types/node": "^22.15.21",
+    "@types/node": "^24",
     "tsup": "^8.5.0",
-    "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.2",
+    "@typescript/native": "npm:typescript@7.0.2"
   },
   "engines": {
     "node": ">=20"

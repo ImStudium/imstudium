@@ -2,7 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright";
 import type { SessionData } from "./types.js";
-import { paths } from "./config.js";
+import { getDefaultConfig, paths } from "./config.js";
+import { assertSameOrigin, originOf } from "./client.js";
 import { ImstudiumError } from "./errors.js";
 import {
   type BrowserProfileMode,
@@ -31,7 +32,8 @@ import {
 
 const KEYTAR_SERVICE = "imstudium";
 const KEYTAR_ACCOUNT = "session";
-const LOGIN_TIMEOUT_MS = 5 * 60_000;
+const LOGIN_TIMEOUT_MS = 10 * 60_000;
+const SILENT_REFRESH_COOLDOWN_MS = 30 * 60_000;
 
 export interface BrowserLoginOptions {
   instanceOrigin: string;
@@ -51,7 +53,13 @@ export interface InteractiveLoginOptions {
   onMessage?: (text: string) => void;
 }
 
+/** IMSTUDIUM_SESSION_STORE=file: plain 0600 file only — no keychain, no ImSicheren (tests, CI, headless boxes). */
+function fileStoreOnly(): boolean {
+  return process.env.IMSTUDIUM_SESSION_STORE === "file";
+}
+
 async function getKeytar() {
+  if (fileStoreOnly()) return null;
   try {
     return await import("keytar");
   } catch {
@@ -59,95 +67,228 @@ async function getKeytar() {
   }
 }
 
-export class AuthManager {
-  private session: SessionData | null = null;
-  private instanceOrigin = "";
+type SecureContext = {
+  getRaw: (kind: string, id: string) => Promise<unknown>;
+  set: (kind: string, id: string, value: unknown) => Promise<void>;
+  delete: (kind: string, id: string) => Promise<void>;
+};
 
-  setInstanceOrigin(origin: string): void {
-    this.instanceOrigin = origin.replace(/\/$/, "");
+/** ImSicheren is an optional peer: when installed it holds the session, nothing else does. */
+async function getSecureContext(): Promise<SecureContext | null> {
+  if (process.env.IMSTUDIUM_PLAIN_SESSION === "1" || fileStoreOnly()) return null;
+  try {
+    const mod = (await import(/* webpackIgnore: true */ "@imsicheren/sdk" as string)) as {
+      createSecureContext: (o: { app: string; enforceAccessMode?: boolean }) => SecureContext;
+    };
+    return mod.createSecureContext({ app: "imstudium", enforceAccessMode: false });
+  } catch {
+    return null;
   }
+}
 
-  async loadSession(): Promise<SessionData | null> {
-    if (this.session) return this.session;
+async function removePlainSessionFile(): Promise<void> {
+  try {
+    const { unlink } = await import("node:fs/promises");
+    await unlink(join(paths.configDir, "session.json"));
+  } catch {
+    // not there
+  }
+}
 
+/** valid: Stud.IP answered JSON for /users/me · rejected: 401 or login page · offline: no answer */
+export type CookieCheck = "valid" | "rejected" | "offline";
+
+/** Keychain / ImSicheren account for the session of one Stud.IP origin. */
+export function sessionAccount(origin: string): string {
+  return `session:${originOf(origin)}`;
+}
+
+/**
+ * One store (ImSicheren → keychain → 0600 file). Raw values only; the
+ * AuthManager decides which account it reads. The file holds one session
+ * (with its origin); the keyed stores hold one per origin.
+ */
+const store = {
+  async get(account: string): Promise<{ where: "imsicheren" | "keychain" | "file"; value: unknown } | null> {
+    const secure = await getSecureContext();
+    if (secure) {
+      try {
+        const raw = await secure.getRaw("generic_json", account);
+        if (raw && typeof raw === "object") return { where: "imsicheren", value: raw };
+      } catch {
+        // fall through
+      }
+    }
     const keytar = await getKeytar();
     if (keytar?.getPassword) {
       try {
-        const raw = await keytar.getPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT);
-        if (raw) {
-          this.session = JSON.parse(raw) as SessionData;
-          return this.session;
-        }
+        const raw = await keytar.getPassword(KEYTAR_SERVICE, account);
+        if (raw) return { where: "keychain", value: JSON.parse(raw) };
       } catch {
         // fall through to file storage
       }
     }
-
     try {
       const { readFile } = await import("node:fs/promises");
-      const raw = await readFile(join(paths.configDir, "session.json"), "utf-8");
-      this.session = JSON.parse(raw) as SessionData;
-      return this.session;
+      const value = JSON.parse(await readFile(join(paths.configDir, "session.json"), "utf-8")) as SessionData;
+      // The file is shared by every account: the legacy account reads a
+      // session without origin, an origin account only its own origin.
+      const fileAccount = value.origin ? sessionAccount(value.origin) : KEYTAR_ACCOUNT;
+      if (fileAccount === account) return { where: "file", value };
     } catch {
-      return null;
+      // no file
     }
-  }
+    return null;
+  },
 
-  async saveSession(session: SessionData): Promise<void> {
-    this.session = session;
-    const raw = JSON.stringify(session);
-
+  async set(account: string, session: SessionData): Promise<void> {
+    const secure = await getSecureContext();
+    if (secure) {
+      try {
+        await secure.set("generic_json", account, session as unknown as Record<string, unknown>);
+        await removePlainSessionFile();
+        return;
+      } catch {
+        // fall through
+      }
+    }
     const keytar = await getKeytar();
     if (keytar?.setPassword) {
       try {
-        await keytar.setPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT, raw);
+        await keytar.setPassword(KEYTAR_SERVICE, account, JSON.stringify(session));
+        await removePlainSessionFile();
         return;
       } catch {
         // fall through to file storage
       }
     }
-
     const { mkdir, writeFile } = await import("node:fs/promises");
     await mkdir(paths.configDir, { recursive: true });
-    await writeFile(`${paths.configDir}/session.json`, raw, { mode: 0o600 });
-  }
+    await writeFile(join(paths.configDir, "session.json"), JSON.stringify(session), { mode: 0o600 });
+  },
 
-  async clearSession(): Promise<void> {
-    this.session = null;
-    const keytar = await getKeytar();
-    if (keytar?.deletePassword) {
+  async delete(account: string): Promise<void> {
+    const secure = await getSecureContext();
+    if (secure) {
       try {
-        await keytar.deletePassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT);
+        await secure.delete("generic_json", account);
       } catch {
         // ignore
       }
     }
-    try {
-      const { unlink } = await import("node:fs/promises");
-      await unlink(`${paths.configDir}/session.json`);
-    } catch {
-      // ignore
+    const keytar = await getKeytar();
+    if (keytar?.deletePassword) {
+      try {
+        await keytar.deletePassword(KEYTAR_SERVICE, account);
+      } catch {
+        // ignore
+      }
     }
+    if ((await this.get(account))?.where === "file") await removePlainSessionFile();
+  },
+};
+
+export class AuthManager {
+  private session: SessionData | null = null;
+  private instanceOrigin = originOf(getDefaultConfig().instanceOrigin);
+  /** The origin a pre-0.2 session (stored without origin) is assumed to belong to: the configured one. */
+  private legacyOrigin = this.instanceOrigin;
+
+  setInstanceOrigin(origin: string): void {
+    const next = originOf(origin);
+    if (next !== this.instanceOrigin) this.session = null;
+    this.instanceOrigin = next;
   }
 
-  /** Refresh OAuth tokens when close to expiry (Stud.IP Refresh Token Grant). */
+  /** Set by createSdk from the saved config — never from --instance. */
+  setConfiguredOrigin(origin: string): void {
+    this.legacyOrigin = originOf(origin);
+  }
+
+  /** Origin this manager reads and writes sessions for. */
+  get origin(): string {
+    return this.instanceOrigin;
+  }
+
+  /**
+   * The session for this manager's origin (keychain account
+   * `session:<origin>`). A legacy session (account `session`, no origin) is
+   * moved once to the configured origin's account.
+   */
+  async loadSession(): Promise<SessionData | null> {
+    if (this.session) return this.session;
+    await this.migrateLegacySession();
+    const found = await store.get(sessionAccount(this.instanceOrigin));
+    if (!found) return null;
+    const session = found.value as SessionData;
+    if (!session.origin || originOf(session.origin) !== this.instanceOrigin) return null;
+    this.session = session;
+    return session;
+  }
+
+  /** One-time move of the pre-0.2 `session` entry to `session:<configured origin>`. */
+  async migrateLegacySession(): Promise<boolean> {
+    const legacy = await store.get(KEYTAR_ACCOUNT);
+    if (!legacy) return false;
+    const session = { ...(legacy.value as SessionData) };
+    session.origin = originOf(session.origin || this.legacyOrigin);
+    if (!(await store.get(sessionAccount(session.origin)))) {
+      await store.set(sessionAccount(session.origin), session);
+    }
+    if (legacy.where !== "file") await store.delete(KEYTAR_ACCOUNT);
+    return true;
+  }
+
+  /** Stores the session under its origin (default: this manager's origin). */
+  async saveSession(session: SessionData): Promise<void> {
+    const stamped: SessionData = { ...session, origin: originOf(session.origin || this.instanceOrigin) };
+    if (stamped.origin === this.instanceOrigin) this.session = stamped;
+    await store.set(sessionAccount(stamped.origin!), stamped);
+  }
+
+  async clearSession(): Promise<void> {
+    this.session = null;
+    await store.delete(sessionAccount(this.instanceOrigin));
+  }
+
+  /** Where the session lives right now — for status output, never the value. */
+  async sessionStore(): Promise<"imsicheren" | "keychain" | "file" | "none"> {
+    return (await store.get(sessionAccount(this.instanceOrigin)))?.where ?? "none";
+  }
+
+  /** Result of the last ensureValidSession() check. */
+  lastCheck: CookieCheck | "oauth" | "none" = "none";
+
+  /**
+   * Check the stored session against Stud.IP. Only a definite rejection
+   * (401, or the login page instead of JSON) clears it — being offline never
+   * logs you out. Returns the session, or null when there is none or it was
+   * rejected; `lastCheck` says which.
+   */
   async ensureValidSession(options?: {
     instanceOrigin?: string;
     clientId?: string;
   }): Promise<SessionData | null> {
     const session = await this.loadSession();
-    if (!session) return null;
+    if (!session) {
+      this.lastCheck = "none";
+      return null;
+    }
 
-    const origin = (options?.instanceOrigin || this.instanceOrigin).replace(/\/$/, "");
+    // The session only ever goes to the origin it was issued by.
+    const origin = originOf(session.origin!);
+    if (options?.instanceOrigin) assertSameOrigin(session, options.instanceOrigin);
     if (session.type === "cookie" && origin && session.cookies?.Seminar_Session) {
-      const ok = await this.isCookieValid(origin, session.cookies.Seminar_Session);
-      if (!ok) {
+      const check = await this.checkCookie(origin, session.cookies.Seminar_Session);
+      this.lastCheck = check;
+      if (check === "rejected") {
         await this.clearSession();
         return null;
       }
       return session;
     }
 
+    this.lastCheck = "oauth";
     if (session.type !== "oauth") return session;
 
     const clientId = options?.clientId;
@@ -166,6 +307,7 @@ export class AuthManager {
 
     const refreshed: SessionData = {
       type: "oauth",
+      origin,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token ?? session.refreshToken,
       expiresAt: tokens.expires_in
@@ -174,6 +316,91 @@ export class AuthManager {
     };
     await this.saveSession(refreshed);
     return refreshed;
+  }
+
+  /**
+   * Renew an expired cookie session without a window: reuse the isolated
+   * login profile headless. Works while the university IdP still remembers
+   * you ("Stay signed in"); never types credentials. Returns false when a
+   * human sign-in is needed.
+   */
+  async refreshSilently(options?: { instanceOrigin?: string; timeoutMs?: number }): Promise<boolean> {
+    if (process.env.IMSTUDIUM_NO_SILENT_REFRESH === "1") return false;
+    const origin = (options?.instanceOrigin || this.instanceOrigin).replace(/\/$/, "");
+    if (!origin) return false;
+    const { existsSync } = await import("node:fs");
+    if (!existsSync(resolveIsolatedProfileDir())) return false;
+    // A failed attempt costs ~10 s of headless browser; don't retry it on every command.
+    const marker = join(paths.dataDir, "silent-refresh-failed");
+    const { readFile, writeFile, mkdir, unlink } = await import("node:fs/promises");
+    try {
+      const last = Date.parse((await readFile(marker, "utf-8")).trim());
+      if (Number.isFinite(last) && Date.now() - last < SILENT_REFRESH_COOLDOWN_MS) return false;
+    } catch {
+      // no recent failure
+    }
+    const ok = await this.refreshSilentlyOnce(origin, options?.timeoutMs);
+    if (ok) await unlink(marker).catch(() => undefined);
+    else {
+      await mkdir(paths.dataDir, { recursive: true }).catch(() => undefined);
+      await writeFile(marker, new Date().toISOString()).catch(() => undefined);
+    }
+    return ok;
+  }
+
+  private async refreshSilentlyOnce(origin: string, timeoutMs?: number): Promise<boolean> {
+
+    let playwright: typeof import("playwright");
+    try {
+      playwright = await import("playwright");
+    } catch {
+      return false;
+    }
+
+    let context: BrowserContext | null = null;
+    try {
+      context = await this.launchLoginContext(playwright, {
+        profile: "isolated",
+        profileDirectory: "Default",
+        headless: true,
+      });
+      let cookie = await this.extractSeminarSession(context, origin);
+      if (!cookie) {
+        const page = context.pages().find((p) => !p.isClosed()) ?? (await context.newPage());
+        await page
+          .goto(buildShibbolethLoginUrl(origin), { waitUntil: "domcontentloaded", timeout: 30_000 })
+          .catch(() => undefined);
+        const deadline = Date.now() + (timeoutMs ?? 40_000);
+        while (Date.now() < deadline && !cookie) {
+          await this.assistLoginFlow(page);
+          if (await this.needsHuman(page)) break;
+          await this.sleep(1200);
+          cookie = await this.extractSeminarSession(context, origin);
+        }
+      }
+      if (!cookie) return false;
+      await this.persistCookieSession(cookie, origin);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      await context?.close().catch(() => undefined);
+    }
+  }
+
+  /** A password, e-mail or MFA field means the IdP wants a person — stop silently. */
+  private async needsHuman(page: Page): Promise<boolean> {
+    if (page.isClosed()) return true;
+    const count = await page
+      .locator('input[type="password"], input[type="email"], input[name="loginfmt"], input[type="tel"]')
+      .count()
+      .catch(() => 0);
+    return count > 0;
+  }
+
+  /** Origin of the loaded session (undefined when signed out). */
+  getSessionOrigin(): string | undefined {
+    return this.session?.origin;
   }
 
   getCookies(): Record<string, string> {
@@ -243,6 +470,7 @@ export class AuthManager {
     }
     const session: SessionData = {
       type: "cookie",
+      origin,
       cookies: { Seminar_Session: seminarSession },
     };
     await this.saveSession(session);
@@ -250,17 +478,29 @@ export class AuthManager {
   }
 
   private async isCookieValid(origin: string, seminarSession: string): Promise<boolean> {
+    return (await this.checkCookie(origin, seminarSession)) === "valid";
+  }
+
+  async checkCookie(origin: string, seminarSession: string): Promise<CookieCheck> {
     try {
       const res = await fetch(`${origin}/jsonapi.php/v1/users/me`, {
         headers: {
           Accept: "application/vnd.api+json",
           Cookie: `Seminar_Session=${seminarSession}`,
         },
+        redirect: "manual",
+        signal: AbortSignal.timeout(15_000),
       });
       const contentType = res.headers.get("content-type") || "";
-      return res.ok && contentType.includes("json");
+      await res.body?.cancel().catch(() => undefined);
+      if (res.ok && contentType.includes("json")) return "valid";
+      if (res.status === 401 || res.status === 403 || (res.status >= 300 && res.status < 400)) {
+        return "rejected";
+      }
+      if (res.ok) return "rejected"; // HTML login page instead of JSON
+      return "offline"; // 5xx etc. — don't throw the session away
     } catch {
-      return false;
+      return "offline";
     }
   }
 
@@ -419,7 +659,7 @@ export class AuthManager {
     if (!options.force) {
       const stored = await this.loadSession();
       const storedCookie = stored?.cookies?.Seminar_Session;
-      if (storedCookie && (await this.isCookieValid(origin, storedCookie))) {
+      if (storedCookie && stored?.origin === originOf(origin) && (await this.isCookieValid(origin, storedCookie))) {
         options.onMessage?.("Already signed in — reusing saved session.");
         return stored;
       }
@@ -449,7 +689,7 @@ export class AuthManager {
       if (!options.force) {
         seminarSession = await this.extractSeminarSession(context, origin);
         if (seminarSession) {
-          return this.persistCookieSession(seminarSession);
+          return this.persistCookieSession(seminarSession, origin);
         }
       }
 
@@ -493,7 +733,7 @@ export class AuthManager {
         );
       }
 
-      const session = await this.persistCookieSession(seminarSession);
+      const session = await this.persistCookieSession(seminarSession, origin);
 
       try {
         const donePage = context.pages().find((p) => !p.isClosed()) ?? page;
@@ -537,9 +777,12 @@ export class AuthManager {
     }
   }
 
-  private async persistCookieSession(seminarSession: string): Promise<SessionData> {
+  private async persistCookieSession(seminarSession: string, origin: string): Promise<SessionData> {
+    const { unlink } = await import("node:fs/promises");
+    await unlink(join(paths.dataDir, "silent-refresh-failed")).catch(() => undefined);
     const session: SessionData = {
       type: "cookie",
+      origin: originOf(origin),
       cookies: { Seminar_Session: seminarSession },
     };
     await this.saveSession(session);
@@ -731,6 +974,7 @@ export class AuthManager {
 
     const session: SessionData = {
       type: "oauth",
+      origin,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
       expiresAt: tokens.expires_in
@@ -760,8 +1004,10 @@ function startCallbackServer(): Promise<{
 }> {
   return new Promise((resolve, reject) => {
     let resolveCode: (code: string) => void;
+    let rejectCode: (err: Error) => void;
     const codePromise = new Promise<string>((res, rej) => {
       resolveCode = res;
+      rejectCode = rej;
       setTimeout(() => rej(new Error("OAuth callback timed out")), 300_000);
     });
 
@@ -776,7 +1022,7 @@ function startCallbackServer(): Promise<{
         res.end(
           `<h1>Sign-in failed</h1><p>${errorDescription || error}</p><p>Close this tab and run imstudium login again.</p>`,
         );
-        reject(
+        rejectCode!(
           new ImstudiumError(
             errorDescription || error,
             "OAUTH_DENIED",

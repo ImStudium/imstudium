@@ -9,3 +9,8 @@ dist/
 coverage/
 *.tsbuildinfo
 pnpm-lock.yaml
+
+# agent worktrees and iCloud conflict copies
+.claude/worktrees/
+* 2.*
+* 2

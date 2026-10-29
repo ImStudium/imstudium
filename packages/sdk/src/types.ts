@@ -216,7 +216,18 @@ export interface SyncReport {
   failed: number;
   bytes: number;
   errors: Array<{ fileRefId: string; message: string }>;
-  files: Array<{ fileRefId: string; path: string; action: "download" | "skip" | "fail" }>;
+  files: Array<{
+    fileRefId: string;
+    path: string;
+    action: "download" | "skip" | "fail";
+    /** For downloads: first time seen, or a newer version of a known file. */
+    change?: "new" | "updated";
+    courseId?: string;
+    courseTitle?: string;
+    name?: string;
+  }>;
+  /** Courses whose listing failed — the rest of the sync still ran. */
+  courseErrors?: Array<{ courseId: string; courseTitle: string; message: string }>;
 }
 
 export interface ImstudiumConfig {
@@ -229,11 +240,19 @@ export interface ImstudiumConfig {
   };
   /** Override Stud.IP semester id for sync/studium (default: calendar current). */
   semesterId?: string;
+  /** Your own course shortcuts, e.g. { "nlp": "natural language processing" }. */
+  courseAliases?: Record<string, string>;
   user?: { id: string; name: string };
 }
 
 export interface SessionData {
   type: "cookie" | "oauth";
+  /**
+   * Stud.IP origin that issued the session (e.g. https://digicampus.uni-augsburg.de).
+   * The client never sends the cookie or token anywhere else. Always set
+   * since 0.2.0; sessions stored before are migrated to the configured origin.
+   */
+  origin?: string;
   cookies?: Record<string, string>;
   accessToken?: string;
   refreshToken?: string;

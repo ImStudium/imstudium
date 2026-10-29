@@ -59,7 +59,7 @@ export interface WorkspaceSearchIndex {
 }
 
 const PAGE_HEADING = /^## (Page|Slide) (\d+)\s*$/m;
-const PLACEHOLDER = /(?:^|[_(]) *(no extractable text|OCR — verify)/i;
+const PLACEHOLDER = /(?:^|[_(]) *(no extractable text|image-only page|OCR — verify)/i;
 const MIN_TEXT = 24;
 
 /** Split content.md into page/slide sections. */
@@ -453,7 +453,7 @@ export function agentSearchGuidance(
     resolveHit: {
       materialsIndex: "search/materials.json",
       pageText: "extracted/<extractSlug>/content.md (## Page N section)",
-      pageImage: "extracted/<extractSlug>/pages/page-NNN.png",
+      pageImage: "only for copied photos (extracted/<extractSlug>/pages/); for slides and formulas open the original in files/",
     },
     chunkCount: workspace.search?.chunkCount,
     courseCount: workspace.search?.courseCount,

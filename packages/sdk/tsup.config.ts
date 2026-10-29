@@ -5,5 +5,5 @@ export default defineConfig({
   format: ["esm"],
   dts: true,
   clean: true,
-  external: ["keytar", "playwright"],
+  external: ["keytar", "playwright", "@firecrawl/anydoc", "@firecrawl/pdf-inspector"],
 });

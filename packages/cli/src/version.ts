@@ -25,6 +25,9 @@ export function detectInstallMode(entryPath: string): InstallMode {
     if (resolved.includes(join("packages", "cli"))) {
       return "development";
     }
+    // Cheap answers first: `npm root -g` costs a process spawn.
+    if (resolved.includes("_npx")) return "npx";
+    if (resolved.includes(join("lib", "node_modules", "@imstudium", "cli"))) return "global";
     const globalRoot = execSync("npm root -g", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] }).trim();
     if (resolved.startsWith(globalRoot)) return "global";
   } catch {
@@ -44,12 +47,12 @@ export function semverLt(current: string, latest: string): boolean {
   return false;
 }
 
-export async function fetchNpmLatest(name: string): Promise<string | null> {
+export async function fetchNpmLatest(name: string, timeoutMs = 10_000): Promise<string | null> {
   const registryPath = name.startsWith("@") ? name.replace("/", "%2F") : name;
   try {
     const res = await fetch(`https://registry.npmjs.org/${registryPath}/latest`, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { version?: string };
@@ -69,15 +72,17 @@ export interface UpdateCheckResult {
   recommendedAction: string;
 }
 
-export async function checkForUpdates(entryPath: string): Promise<UpdateCheckResult> {
+/** Both npm lookups run in parallel within `timeoutMs` (doctor uses a 3 s budget). */
+export async function checkForUpdates(entryPath: string, timeoutMs = 10_000): Promise<UpdateCheckResult> {
   const current = getCliVersion();
   const installMode = detectInstallMode(entryPath);
 
   const packages: UpdateCheckResult["packages"] = [];
   let latestMain: string | null = null;
 
-  for (const name of CLI_PACKAGES) {
-    const latest = await fetchNpmLatest(name);
+  const latestByName = await Promise.all(CLI_PACKAGES.map((name) => fetchNpmLatest(name, timeoutMs)));
+  for (const [i, name] of CLI_PACKAGES.entries()) {
+    const latest = latestByName[i] ?? null;
     if (name === "@imstudium/cli") latestMain = latest;
     packages.push({
       name,

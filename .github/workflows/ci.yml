@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, semester-start]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, semester-start]
+
+permissions:
+  contents: read
 
 jobs:
   validate:
@@ -14,10 +17,13 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Validate
         run: bun run validate
+
+      - name: Generated docs are current
+        run: bun run docs:check

@@ -1,18 +1,20 @@
-#!/usr/bin/env node
+import { createRequire } from "node:module";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createSdk, expandPath, extractSlug, normalizeStudiumWorkspace, pageRef, pickCourse, resolveCourseDir, agentSearchGuidance, type StudiumWorkspace } from "@imstudium/sdk";
+import { createSdk, expandPath, extractSlug, ImstudiumError, normalizeStudiumWorkspace, pageRef, resolveCourseDir, resolveWorkspaceCourse, agentSearchGuidance, toImstudiumError, type StudiumWorkspace } from "@imstudium/sdk";
+import type { ErrorBody, KlausurenOutput } from "@imstudium/contract";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { MCP_TOOLS } from "./tools.js";
 import { materialVisualPayload } from "./visual.js";
+import { checkArgs, runCli } from "./cli-bridge.js";
 
 const server = new Server(
-  { name: "imstudium-studium", version: "0.1.0" },
+  { name: "imstudium", version: (createRequire(import.meta.url)("../package.json") as { version: string }).version },
   { capabilities: { tools: {} } },
 );
 
@@ -31,12 +33,27 @@ function jsonText(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
 
+/** Every failure: the contract error body (docs/ERRORS.md) with isError set. */
+function errorResult(e: unknown) {
+  const body: ErrorBody = toImstudiumError(e).toJSON();
+  return { ...jsonText(body), isError: true };
+}
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [...MCP_TOOLS],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+
+  if (name === "imstudium") {
+    const cliArgs = ((args as { args?: unknown })?.args ?? []) as unknown[];
+    const list = cliArgs.map(String);
+    const refused = checkArgs(list);
+    if (refused) return errorResult(new ImstudiumError(refused, "WRITE_NOT_ALLOWED", undefined, "Run it in a terminal"));
+    const res = await runCli(list);
+    return { ...jsonText(res.json), ...(res.ok ? {} : { isError: true }) };
+  }
 
   try {
     const sdk = await getSdk();
@@ -62,16 +79,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const exams = ws.courses.flatMap((c) =>
           c.examDates.map((e) => ({ ...e, courseTitle: c.title })),
         );
-        return jsonText({ nextDeadlines: ws.nextDeadlines, exams });
+        const payload: KlausurenOutput = { nextDeadlines: ws.nextDeadlines, exams };
+        return jsonText(payload);
+      }
+
+      case "studium_modules": {
+        const ws = await loadWorkspace(sdk);
+        const next = ws.nextDeadlines[0];
+        return jsonText({
+          schemaVersion: 1,
+          leaf: "imstudium",
+          pack: "studium",
+          workspace: workspacePath,
+          modules: [
+            {
+              schemaVersion: 1,
+              id: "studium.courses",
+              pack: "studium",
+              title: "Courses",
+              kpis: [{ id: "courses", label: "Courses", value: ws.courses.length }],
+            },
+            {
+              schemaVersion: 1,
+              id: "studium.exams",
+              pack: "studium",
+              title: "Exams",
+              kpis: [
+                { id: "exams", label: "Exams", value: ws.courses.reduce((n, c) => n + (c.examDates?.length ?? 0), 0) },
+                { id: "next", label: "Next date", value: next?.date ?? null },
+                { id: "days", label: "Days remaining", value: next?.daysRemaining ?? null },
+              ],
+            },
+          ],
+        });
       }
 
       case "studium_course_brief": {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");
-        const course = pickCourse(ws, courseArg);
-        if (!course) {
-          return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
-        }
+        const course = resolveWorkspaceCourse(ws, courseArg, sdk.config.courseAliases);
         const courseDir = resolveCourseDir(workspacePath, course, ws);
         let courseMd = "";
         try {
@@ -92,8 +138,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const ws = await loadWorkspace(sdk);
         const courseArg = String((args as { course?: string })?.course || "");
         const query = String((args as { query?: string })?.query || "").toLowerCase();
-        const course = pickCourse(ws, courseArg);
-        if (!course) return jsonText({ error: "Course not found" });
+        const course = resolveWorkspaceCourse(ws, courseArg, sdk.config.courseAliases);
 
         const filesDir = join(resolveCourseDir(workspacePath, course, ws), "files");
         const matches = await findFilesRecursive(filesDir, query);
@@ -106,27 +151,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const fileArg = String((args as { file?: string })?.file || "").toLowerCase();
         const page = (args as { page?: number })?.page;
 
-        const course = pickCourse(ws, courseArg);
-        if (!course) {
-          return jsonText({ error: "Course not found", available: ws.courses.map((c) => c.title) });
-        }
+        const course = resolveWorkspaceCourse(ws, courseArg, sdk.config.courseAliases);
 
         const courseDir = resolveCourseDir(workspacePath, course, ws);
         const filesDir = join(courseDir, "files");
         const candidates = await findFilesRecursive(filesDir, fileArg);
         if (candidates.length === 0) {
-          return jsonText({
-            error: `No file matching "${fileArg}" in ${course.title}`,
-            path: course.path,
-            hint: "Use studium_find_materials to list files, or imstudium_sync to refresh",
-          });
+          throw new ImstudiumError(
+            `No file matching "${fileArg}" in ${course.title}`,
+            "NOT_FOUND",
+            404,
+            "Use studium_find_materials to list files; run imstudium sync in a terminal to refresh",
+            { path: course.path },
+          );
         }
         const src = candidates[0];
 
         const outDir = join(courseDir, "extracted", extractSlug(basename(src)));
         const result = await sdk.extractor.extractFile(src, outDir);
         if (result.error) {
-          return jsonText({ error: result.error, hint: result.hint, source: src });
+          throw new ImstudiumError(result.error, "UNKNOWN", undefined, result.hint, { source: src });
         }
 
         let content = "";
@@ -160,31 +204,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           requiredAction: visual.requiredAction,
           viewerFileUrl: visual.viewerFileUrl,
           methods: visual.methods,
-          hint: pageImages.length ? undefined : result.hint || "Install poppler for slide images: imstudium doctor",
+          hint: pageImages.length ? undefined : result.hint || "Markdown-only extract — open the original file for diagrams",
           otherMatches: candidates.slice(1),
-        });
-      }
-
-      case "imstudium_sync": {
-        const course = (args as { course?: string })?.course;
-        const semOpts = { semesterId: sdk.config.semesterId };
-        const report = await sdk.sync.sync({
-          outputDir: workspacePath,
-          include: ["wiki", "news", "calendar"],
-          ...semOpts,
-          courseFilter: course
-            ? (c) => c.title.toLowerCase().includes(course.toLowerCase())
-            : undefined,
-        });
-        const workspace = await sdk.studium.build(workspacePath, sdk.config.instanceOrigin, semOpts);
-        return jsonText({
-          report,
-          workspaceSummary: {
-            courses: workspace.courses.length,
-            activeSemester: workspace.activeSemester,
-            workspaceFolder: workspace.workspaceFolder,
-            otherSemesters: workspace.otherSemesters,
-          },
         });
       }
 
@@ -231,22 +252,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       default:
-        return jsonText({ error: `Unknown tool: ${name}` });
+        throw new ImstudiumError(`Unknown tool: ${name}`, "BAD_ARGS", undefined, "tools/list shows the available tools");
     }
   } catch (e) {
-    return jsonText({
-      error: e instanceof Error ? e.message : String(e),
-      hint: "Run imstudium login if not authenticated",
-    });
+    return errorResult(e);
   }
 });
 
 async function loadWorkspace(sdk: Awaited<ReturnType<typeof createSdk>>): Promise<StudiumWorkspace> {
   const ws = await sdk.studium.loadWorkspace(workspacePath);
   if (!ws) {
-    throw new Error(
-      `No Studium workspace at ${workspacePath}. Run: imstudium init`,
-    );
+    throw new ImstudiumError(`No Studium workspace at ${workspacePath}`, "WORKSPACE_MISSING", undefined, "Run in a terminal: imstudium semester start");
   }
   return normalizeStudiumWorkspace(ws);
 }

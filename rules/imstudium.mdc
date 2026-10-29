@@ -1,49 +1,46 @@
 ---
-description: ImStudium — study workspace, MCP tools, and slide comprehension
+description: ImStudium — the student's Stud.IP in ~/Studium; CLI-first study sessions, read-only by default
 globs:
   - "**/*"
 ---
 
 # ImStudium
 
-## Workspace
-
-- Default workspace: `~/Studium` (`IMSTUDIUM_WORKSPACE`)
-- Agent entry point: `llms.txt` — navigation + search guidance
-- Machine-readable map: `studium.json`
-- Exam timeline: `klausuren.md`
-- Per-course briefs: `<semesterSlug>/<Course>/COURSE.md`
-
-## Daily loop
+## Orient first
 
 ```bash
-imstudium sync --quiet --extract -o ~/Studium
-imstudium setup status
+imstudium context --json    # semester, today, Abgaben, Klausuren, new files, news, next steps
 ```
 
-Re-run agent wiring after upgrades: `imstudium setup all -y`
+Act on `next`. If it suggests `semester start`, offer it; don't run it. If the student is signed out or sees `SESSION_EXPIRED`, ask them to run `imstudium login` themselves.
 
-## MCP tools (use in order)
+## CLI first
 
-`studium_overview` → `studium_klausuren` → **grep/semantic-search corpus.jsonl** → `studium_find_materials` → `studium_read_material` → **read pageImages**
+- Time: `today`, `week [--next]`, `stundenplan`, `holidays`
+- What's new: `changes --since 7d`, `news`, `feed`, `inbox --unread`
+- Due: `tasks --open`, `klausuren`
+- Material: `search "<words>"` (`--archive` for past semesters), then open the cited `content.md`. Also `courseware`, `wiki`, `forum`, `files tree <course>`
+- People: `people`, `sprechstunden`. Planning: `catalog search <topic> --semester "SS 2027"`
+- Anything else in Stud.IP: `routes <topic>`, then `api <path> --flat`
 
-`studium_overview` returns `searchGuidance` — use your native grep or codebase search on `corpus.jsonl`.
+Add `--json` when parsing. A course argument can be a title fragment, slug, number or id.
 
-Other tools: `studium_course_brief`, `imstudium_sync`, `imstudium_sync_dry_run`, `imstudium_list_courses`, `imstudium_whoami`
+## Workspace (`~/Studium`, `IMSTUDIUM_WORKSPACE`)
 
-## Slides and PDFs — visual comprehension required
+- `llms.txt` is the entry point. `studium.json` (resolve folders from `course.path`), `NEW.md`, `abgaben.md`, `stundenplan.md`, `klausuren.md` and `STUDIUM.md` sit at the root.
+- Each course has `COURSE.md`, `files/`, `extracted/<slug>/content.md`, `search/`, `news/`, `forum/`, `courseware/` and `wiki/`. Earlier semesters are under `archive/`.
+- Refresh with `imstudium sync --extract`.
 
-**Never summarize slides from extracted text alone.**
+## MCP (opt-in)
 
-After `studium_read_material`:
+The `imstudium` tool runs the same read-only commands: `{"args": ["context"]}`. It refuses writes.
 
-1. Read every `pageImages` PNG, or
-2. Open `viewerFileUrl` in a browser / Playwright
+## Limits
 
-Diagrams, formulas, and layout are lost in text extraction. Skill: `imstudium-visual`.
+- `content.md` (pdf-inspector / AnyDoc) is not LaTeX. For formulas and diagrams, open the original in `files/`. Image-only pages are marked `_(image-only page — no text layer)_`.
+- Exam dates from course text are unconfirmed; tell the student to check them in Stud.IP.
 
-**No LaTeX in markdown** — poppler/Tesseract only; read `pageImages` for math. See `searchGuidance.extractionLimits` on `studium_overview`.
+## Never
 
-## Exam dates
-
-Dates parsed from achievement text are **unconfirmed** — tell the student to verify in Stud.IP.
+- Write to Stud.IP (`api --write`, posting, messaging, booking), or run `semester start`, `sync` or `--save`, unless the student asks for that exact action.
+- Handle passwords or the session. Never paste messages, grades or classmates' names elsewhere, and never upload course material. See the `imstudium-datenschutz` skill.

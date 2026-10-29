@@ -2,8 +2,8 @@
 name: imstudium-visual
 description: |
   MANDATORY when explaining slides, PDFs, diagrams, or formulas from ImStudium materials.
-  Text extraction is incomplete — you MUST read page PNGs or open viewer.html in Playwright/browser before answering.
-  Use after studium_read_material, imstudium view, or when user asks about slide content.
+  Markdown is not LaTeX — open the original file in files/ for formulas and diagrams.
+  Use after studium_read_material or when the user asks about slide content.
 allowed-tools:
   - Bash(imstudium view *)
   - Bash(imstudium extract *)
@@ -16,25 +16,25 @@ Slides are **visual**. `content.md` text misses diagrams, plots, formulas, table
 
 ## Extraction limits (know this)
 
-ImStudium does **not** produce LaTeX `$...$` in markdown. Local tools only:
+ImStudium does **not** produce LaTeX `$...$` in markdown. Local Firecrawl stack:
 
 | Source | What you get in `content.md` |
 |--------|------------------------------|
-| Typed PDF | poppler Unicode text — math symbols at best, not LaTeX |
-| Scanned / handwritten | Tesseract OCR — **unreliable for formulas** (`_(OCR)_` prefix) |
-| PPTX (XML fallback) | Slide text only — Office Math omitted |
+| Typed PDF | pdf-inspector markdown — tables/reading order; still not LaTeX |
+| Scanned / handwritten | `_(image-only page — no text layer)_` — open the original |
+| PPTX / DOCX | AnyDoc native conversion |
 | `.tex` source files | LaTeX passthrough as-is |
 
 **corpus.jsonl** is for finding pages by keyword — not for answering math from OCR text alone.
 
-For any formula, diagram, plot, or table: **read `pageImages` or open `viewerFileUrl`** before explaining.
+For any formula, diagram, plot, or table: **open the original** under `files/` (or `pageImages` if a photo was copied).
 
 ## Rule (all agents)
 
-**Never summarize slide content from text alone.** Before answering:
+**Never invent math from markdown.** Before answering formulas/diagrams:
 
-1. Read **every** path in `pageImages`, OR
-2. Open `viewerFileUrl` (`file://.../viewer.html`) in Playwright / browser MCP and inspect each slide
+1. Open the source PDF/PPTX in `files/`, OR
+2. Read `pageImages` when the material is a photo copy
 
 ## Fast paths by harness
 
@@ -50,7 +50,7 @@ For any formula, diagram, plot, or table: **read `pageImages` or open `viewerFil
 
 ```json
 {
-  "requiredAction": "MANDATORY: Visually inspect all pageImages...",
+  "requiredAction": "Open the original file for figures; pageImages lists copied photos only",
   "pageImages": ["/abs/path/pages/page-1.png", "..."],
   "viewerHtml": "/abs/path/viewer.html",
   "viewerFileUrl": "file:///abs/path/viewer.html",
@@ -75,4 +75,4 @@ imstudium view --course "Analysis" --file "folien" --json
 
 ## When pageImages is empty
 
-Tell user: `imstudium doctor` then `imstudium extract --course "..."`. Poppler renders PDF slides; LibreOffice renders PPTX.
+Expected for PDFs/PPTX — the pipeline is markdown-only. Open `files/` for the original. Photos still copy into `pages/`.

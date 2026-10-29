@@ -21,10 +21,10 @@ imstudium sync --all-semesters   # legacy: every enrollment
 
 ```bash
 imstudium sync -o ~/Studium
-imstudium sync --extract        # also extract text + slide images
+imstudium sync --extract        # also extract to markdown + rebuild the search index
 ```
 
-Includes wiki, news, `calendar.ics`, rebuilds `studium.json`. With `--extract`, new/changed files get `extracted/<file>/content.md` + `pages/*.png`.
+Brings files (Stud.IP folder tree), `calendar.ics`, wiki, news, forum, courseware and Abgaben; rebuilds `studium.json`, `stundenplan.md`, `abgaben.md`, `NEW.md`. With `--extract`, new/changed files get `extracted/<file>/content.md` and the search index updates.
 
 ## Preview (dry run)
 
