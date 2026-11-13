@@ -48,9 +48,10 @@ The full layout is in [docs/STUDIUM.md](docs/STUDIUM.md).
 
 Some limits on extracted text:
 
-- `content.md` comes from pdf-inspector (PDF) and AnyDoc (Office) on the student's machine. It is **not LaTeX**.
-- Image-only pages are marked `_(image-only page — no text layer)_`.
-- For formulas and diagrams, open the original in `files/`. Never invent math from the markdown.
+- `content.md` comes from pdf-inspector (PDF) and AnyDoc (Office) on the student's machine. Its prose is markdown, not LaTeX: inline math keeps garbled sub- and superscripts (`x<sub>i</sub>`).
+- With `imstudium setup ocr`, scanned pages are read by on-device OCR (the header says `on-device OCR on N page(s)`). Pages it read poorly carry `_(read by OCR with low confidence — check the original)_`. Without it, they are marked `_(image-only page — no text layer)_`.
+- With `imstudium setup ocr --math`, display formulas follow their page as `$$…$$` blocks under `_Formulas on this page, read on this machine as LaTeX …_`, and `math.json` next to `content.md` lists each with its page and box. They are model output: a wrong exponent or a dropped term changes the meaning.
+- For formulas and diagrams, open the original in `files/` before you explain them, and quote formulas from there. Never invent math from the markdown.
 
 ### MCP (opt-in)
 
@@ -168,7 +169,7 @@ Bun workspaces, four packages:
   - `GET /courseware-structural-elements/{id}` stores the last-visited page
 - Workspace writers are idempotent (content hash in frontmatter) and keep a `## Student notes` section across rebuilds. Resolve folders from `course.path`.
 - Exam dates parsed from course text stay `confirmed: false`.
-- `content.md` is markdown, not LaTeX. Don't reintroduce poppler, Tesseract, LibreOffice or cloud parsing.
+- Extraction stays on the student's machine with pinned artifacts: pdf-inspector and AnyDoc, plus the optional runtime from `imstudium setup ocr` (PDFium, ONNX Runtime and the PP-OCR models through pdf-inspector; PP-DocLayout-S and PP-FormulaNet+ S for `--math`), every download checked against its SHA-256 in `ocr-runtime.ts` and `math.ts`. Don't reintroduce poppler, Tesseract, LibreOffice or cloud parsing, and never send a page to a remote model. Formula LaTeX goes only in `$$…$$` blocks under `FORMULAS_HEADING` and in `math.json`; the prose stays markdown. A change to OCR or math runs `bun run bench` (docs/BENCHMARKS.md) before and after.
 - Messages are never written into the workspace. `people` counts students and never names them. `snapshots/studium.json` holds counts and dates only.
 
 ### Tests and validation

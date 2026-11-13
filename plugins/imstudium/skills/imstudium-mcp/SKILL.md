@@ -42,7 +42,7 @@ rg -i "backprop" ~/Studium/SS2026/*/search/corpus.jsonl
 Each JSONL line has `ref`, `text`, `extractSlug`, `page`. Cite with `ref`, then read:
 
 - `extracted/<extractSlug>/content.md` (## Page N)
-- the original in `files/` for diagrams and formulas (markdown is not LaTeX)
+- the original in `files/` for diagrams and formulas (inline math is garbled; `$$…$$` formulas are on-device model output)
 
 Faster: the `imstudium` tool with `["search", "<words>"]` returns ranked hits with citations.
 

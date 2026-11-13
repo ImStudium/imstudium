@@ -124,17 +124,28 @@ The full reference is in [docs/STUDIUM.md](docs/STUDIUM.md).
 
 ### Extraction
 
-`sync --extract` and `imstudium extract` turn files into markdown on your machine, with no API key.
+`sync --extract` and `imstudium extract` turn files into markdown on your machine. No API key is needed, and no file leaves the machine.
 
 | Input | Engine |
 |---|---|
 | PDF | pdf-inspector (layout, tables, reading order) |
 | PPTX, DOCX, XLSX, ODP, EPUB | AnyDoc |
-| Scanned or image-only pages | marked `_(image-only page — no text layer)_`; open the original |
-| Photos | copied to `pages/` (no OCR) |
+| Scanned or image-only pages | on-device OCR once `imstudium setup ocr` has run; otherwise marked `_(image-only page — no text layer)_` |
+| Photos (JPEG, PNG) | copied to `pages/`, and read by OCR when it is installed |
+| Display formulas | LaTeX in `$$…$$` blocks plus `math.json`, once `imstudium setup ocr --math` has run |
 | Text, code, CSV | passed through |
 
-`content.md` is not LaTeX. For formulas and diagrams, open the original in `files/`. `imstudium doctor` checks both engines.
+OCR and math are optional downloads, pinned by version and SHA-256 and unpacked under `~/.local/share/imstudium/ocr`:
+
+```bash
+imstudium setup ocr          # OCR for scanned pages, ~60 MB (PDFium, ONNX Runtime, PP-OCRv6)
+imstudium setup ocr --math   # plus formula recognition, ~340 MB more download
+imstudium setup ocr --remove # remove it again (--remove --math removes only math)
+```
+
+After installing, the next `sync --extract` reads the scanned pages it skipped before. Only pages without a usable text layer go to OCR, so born-digital PDFs come out the same as without it. `--no-ocr` and `--no-math` switch them off for one run, `IMSTUDIUM_OCR=off` and `IMSTUDIUM_MATH=off` for a whole environment. OCR runs under Node 20 or newer; `imstudium doctor` checks both engines and the runtime.
+
+What to expect: synthetic prose scans come back almost character-perfect, slide scans keep about 98 % of their words, and about nine in ten clean display formulas come back exactly as typeset ([docs/BENCHMARKS.md](docs/BENCHMARKS.md), reproducible with `bun run bench`). Formula recognition finds display formulas only: math inside a sentence stays plain text with garbled sub- and superscripts. Recognised LaTeX can be wrong in ways that change the meaning, so check formulas and diagrams against the original in `files/`; `math.json` gives each formula's page and box.
 
 ## Agents
 
@@ -228,6 +239,7 @@ Browser sign-in goes through the instance's Shibboleth login. If your university
 | `LOGIN_TIMEOUT` | The sign-in window waits ten minutes. Run `imstudium login` again |
 | A course is missing after sync | Sync prints `⚠ <course>: …` and carries on with the rest. Retry with `imstudium sync --course <name>` |
 | Extraction fails | Run `imstudium doctor`. pdf-inspector and AnyDoc are native modules, so reinstall the CLI. Login, sync and MCP don't need them |
+| Scanned pages still say "image-only" | Run `imstudium setup ocr`, then `imstudium sync --extract`. `imstudium doctor` shows whether the OCR runtime is ready (it needs Node, not Bun) |
 | Still on last semester's folder | Run `imstudium semester`, then `imstudium semester start` |
 | The MCP tool doesn't show up | Run `imstudium setup mcp`, restart the harness, then check `imstudium setup status` |
 | Coming from the old DigiCampus tool | Run `imstudium setup migrate -y` |

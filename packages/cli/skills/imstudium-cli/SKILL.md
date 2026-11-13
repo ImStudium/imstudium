@@ -70,7 +70,7 @@ Global flags: `--json` (stable keys for agents), `--quiet`, `--instance <url>` (
 
 After `extract`, each file has `extracted/<file>/content.md` (pages as `## Page N` sections); photos are copied to `pages/`.
 
-**Limits:** one pipeline — pdf-inspector (PDF) + AnyDoc (Office). No Tesseract. Image-only pages have no text; open the original. See `imstudium-visual`.
+**Limits:** one local pipeline: pdf-inspector (PDF) and AnyDoc (Office), plus on-device OCR for scanned pages after `imstudium setup ocr` and `$$…$$` LaTeX for display formulas after `imstudium setup ocr --math` (`math.json` has page and box). Without OCR, image-only pages have no text. OCR text and formulas are model output: check formulas and diagrams against the original. See `imstudium-visual`.
 
 ## Auth
 

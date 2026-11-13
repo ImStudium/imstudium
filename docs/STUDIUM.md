@@ -53,7 +53,8 @@ Semester slugs look like `SS2026` and `WS2026-27`. A course folder is `slugify(t
 | `files/` | Originals. With the default `--layout tree` this mirrors the course's Stud.IP folder tree (`files/Übungen/Blatt01.pdf`); `--layout flat` puts everything directly in `files/` | `sync` |
 | `extracted/<slug>/content.md` | Extracted markdown, one `## Page N` (or `## Slide N`) section per page. `<slug>` is the folder-qualified file path, e.g. `Ubungen-Blatt01-pdf` | `sync --extract`, `extract` |
 | `extracted/<slug>/manifest.json` | Source path, size and mtime, engine, page count, error | same |
-| `extracted/<slug>/pages/` | Only for photos (copied as they are, no OCR) | same |
+| `extracted/<slug>/pages/` | Only for photos (copied as they are; their text is read by OCR when `imstudium setup ocr` has run) | same |
+| `extracted/<slug>/math.json` | Display formulas as LaTeX with page and box (pt, top-left), when `imstudium setup ocr --math` has run | same |
 | `search/corpus.jsonl` | Page index, one JSON line per page: `ref`, `citation`, `coursePath`, `courseTitle`, `sourceFile`, `extractSlug`, `page`, `pageLabel`, `kind`, `text` | `sync --extract`, `index` |
 | `search/materials.json` | Every file with kind, page count, extraction state and `extractSlug` | same |
 | `search/index.json` | Course corpus stats | same |
@@ -187,8 +188,9 @@ Cite with `ref` (e.g. `WS2026-27/Statistik-I#Folien-03.pdf:12`) and read the pag
 
 ### Extraction limits
 
-There's one local pipeline: pdf-inspector for PDFs and AnyDoc for Office. No API key, no Tesseract, no poppler, no LibreOffice.
+There's one local pipeline: pdf-inspector for PDFs and AnyDoc for Office, plus an optional on-device OCR and formula runtime (`imstudium setup ocr [--math]`, pinned and SHA-256-checked). No API key, no Tesseract, no poppler, no LibreOffice, and no page leaves the machine.
 
-- `content.md` is markdown, not LaTeX. For formulas and diagrams, open the original in `files/`.
-- Image-only pages are marked `_(image-only page — no text layer)_`. Open the original.
+- `content.md` prose is markdown. Inline math keeps garbled sub- and superscripts.
+- With OCR installed, scanned pages are read on the machine; poorly read pages carry `_(read by OCR with low confidence — check the original)_`. Without it, image-only pages are marked `_(image-only page — no text layer)_`.
+- With math installed, display formulas follow their page as `$$…$$` blocks under `_Formulas on this page, read on this machine as LaTeX …_`. They are model output: check them against the original in `files/`. Accuracy is in [BENCHMARKS.md](BENCHMARKS.md).
 - `corpus.jsonl` is for finding content, not for answering from image-only pages.

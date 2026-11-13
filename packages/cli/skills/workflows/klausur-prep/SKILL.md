@@ -37,7 +37,7 @@ Collect: allowed aids (Hilfsmittel), format (written / oral, minutes), excluded 
 
 `imstudium files tree <course>` and the search hits give the lecture sequence. Rank topics by
 (a) explicitly announced as relevant, (b) appears in Übungen / mock exams, (c) lecture time spent.
-Read the top `content.md` files at the cited pages; open the original PDF for formulas and figures (the markdown is not LaTeX).
+Read the top `content.md` files at the cited pages; open the original PDF for formulas and figures (inline math is garbled, and `$$…$$` formulas are on-device model output to check).
 
 ## 4. Build the plan
 
