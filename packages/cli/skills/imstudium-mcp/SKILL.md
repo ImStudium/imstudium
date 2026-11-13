@@ -1,7 +1,8 @@
 ---
 name: imstudium-mcp
 description: |
-  ImStudium MCP tools for all agent harnesses — studium overview, klausuren, course brief, find materials, sync.
+  ImStudium MCP tools for all agent harnesses — the read-only `imstudium` door to every CLI command, plus
+  studium overview, klausuren, course brief, find and read materials, sync preview.
   Use when working inside an MCP-enabled agent instead of terminal.
 ---
 
@@ -19,6 +20,7 @@ imstudium setup mcp
 
 | Intent | Tool |
 |--------|------|
+| **Any CLI command, read-only** | `imstudium` with `{"args": ["context"]}`, `["today"]`, `["search", "<words>"]`, … |
 | Course map + search guidance | `studium_overview` (read `searchGuidance`) |
 | Exams | `studium_klausuren` |
 | One course | `studium_course_brief` |

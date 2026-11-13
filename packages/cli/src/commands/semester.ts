@@ -37,7 +37,10 @@ export function registerSemester(program: Command): void {
         const ws = await sdk.studium.loadWorkspace(out);
         const archive = await listArchivedSemesters(out);
         const nowSlug = now ? semesterSlug(String(now.attributes?.title)) : undefined;
-        const needsRollover = !!(nowSlug && ws && ws.activeSemester.slug !== nowSlug);
+        const behind = !!(nowSlug && ws && ws.activeSemester.slug !== nowSlug);
+        // A rollover only makes sense once you have courses in the new semester.
+        const enrolled = behind && now ? await enrolledIn(sdk, now.id) : null;
+        const needsRollover = behind && enrolled !== 0;
         const progress = now ? computeSemesterProgress(now) : undefined;
         const lectures = now?.attributes as Record<string, string> | undefined;
 
@@ -51,13 +54,16 @@ export function registerSemester(program: Command): void {
           archive.length
             ? `Archive      ${archive.map((a) => `${a.title ?? a.slug} (${a.courses})`).join(" · ")}`
             : "Archive      empty",
+          enrolled !== null ? `Enrolled     ${enrolled} course${enrolled === 1 ? "" : "s"} in ${now!.attributes?.title} on Stud.IP` : "",
           "",
           needsRollover
             ? `→ New semester. Run: imstudium semester start   (archives ${ws!.activeSemester.slug}/, syncs ${now!.attributes?.title})`
-            : ws
-              ? "→ Up to date. Daily: imstudium sync --extract"
-              : "→ imstudium login && imstudium semester start",
-        ];
+            : behind
+              ? `→ No courses in ${now!.attributes?.title} yet — staying on ${ws!.activeSemester.title}. Daily: imstudium sync --extract · after you enrol: imstudium semester start`
+              : ws
+                ? "→ Up to date. Daily: imstudium sync --extract"
+                : "→ imstudium login && imstudium semester start",
+        ].filter((l, i) => l !== "" || i === 4);
         const str = (v: unknown) => (typeof v === "string" ? v : undefined);
         const payload: SemesterOutput = {
             current: now
@@ -76,6 +82,7 @@ export function registerSemester(program: Command): void {
               ? { title: ws.activeSemester.title, slug: ws.activeSemester.slug, folder: ws.workspaceFolder, courses: ws.courses.length, generatedAt: ws.generatedAt }
               : null,
             archive,
+            enrolled,
             needsRollover,
             next: needsRollover ? "imstudium semester start" : ws ? "imstudium sync --extract" : "imstudium semester start",
           };
@@ -90,8 +97,9 @@ export function registerSemester(program: Command): void {
     .option("--semester <label>", "Target semester (default: the one running now)")
     .option("--extract", "Extract materials and build the search index after syncing")
     .option("--dry-run", "Show what would move and download")
+    .option("--allow-empty", "Start the semester even when you have no courses in it on Stud.IP")
     .action(
-      act(async (opts: { output?: string; semester?: string; extract?: boolean; dryRun?: boolean }) => {
+      act(async (opts: { output?: string; semester?: string; extract?: boolean; dryRun?: boolean; allowEmpty?: boolean }) => {
         const sdk = await getSdk();
         const out = workspaceDir(sdk, opts);
         const all = await sdk.courses.semesters.listAll();
@@ -106,6 +114,17 @@ export function registerSemester(program: Command): void {
         }
         const title = String(target.attributes?.title);
         const slug = semesterSlug(title);
+        // Archiving the current folder for a semester you have no courses in leaves an empty workspace.
+        const courses = (await sdk.courses.listMine(undefined, { semesterId: target.id })).length;
+        if (courses === 0 && !opts.allowEmpty) {
+          throw new ImstudiumError(
+            `You have no courses in ${title} on Stud.IP — nothing was archived`,
+            "NO_ENROLMENTS",
+            undefined,
+            "Keep working in your current folder (imstudium sync --extract); run semester start after you enrol, or pass --allow-empty",
+            { semester: title },
+          );
+        }
         const plan = await planRollover(out, slug);
 
         note(`Semester start: ${title} → ${slug}/`);
@@ -114,10 +133,10 @@ export function registerSemester(program: Command): void {
 
         if (opts.dryRun) {
           const preview = await runSync(sdk, { out, semesterId: target.id, dryRun: true, onProgress: note });
-          const dry: SemesterStartOutput = { semester: { id: target.id, title, slug }, plan, downloads: preview.report.downloaded };
+          const dry: SemesterStartOutput = { semester: { id: target.id, title, slug }, plan, downloads: preview.report.downloaded, courses };
           output(
             dry,
-            `Dry run: ${plan.moves.length} folder(s) to archive, ${preview.report.downloaded} file(s) to download.`,
+            `Dry run: ${courses} course(s) in ${title}, ${plan.moves.length} folder(s) to archive, ${preview.report.downloaded} file(s) to download.`,
           );
           return;
         }
@@ -183,4 +202,14 @@ export function registerSemester(program: Command): void {
         output(payload, lines.join("\n"));
       }),
     );
+}
+
+/** Your course count in a semester, or null when signed out / offline (never throws). */
+async function enrolledIn(sdk: Awaited<ReturnType<typeof getSdk>>, semesterId: string): Promise<number | null> {
+  try {
+    if (!(await sdk.auth.loadSession())) return null;
+    return (await sdk.courses.listMine(undefined, { semesterId })).length;
+  } catch {
+    return null;
+  }
 }

@@ -79,6 +79,7 @@ loadConfig
 loadRouteCatalog
 matchRoute
 matchUnit
+mergeLiveAndSavedNews
 normalizeStudiumWorkspace
 oauthEndpoints
 offlinePlanningSnapshot
@@ -93,6 +94,7 @@ pickCourse
 planRollover
 probeOAuthServer
 readRouteCatalog
+readSavedNews
 rebuildSearchIndexes
 renderWiki
 resolveCourseDir
@@ -116,6 +118,7 @@ toImstudiumError
 toMs
 toZonedIso
 toolHints
+upgradeLegacyNews
 weekRange
 weekdayOf
 wikiPageUrl

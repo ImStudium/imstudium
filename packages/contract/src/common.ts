@@ -120,6 +120,7 @@ export const NewsItem = z.object({
   courseId: z.string().nullable(),
   courseTitle: z.string().nullable(),
   commentsAllowed: z.boolean(),
+  archived: z.boolean().optional().describe("Saved in the workspace; Stud.IP no longer serves it (publication ended)"),
 });
 export type NewsItem = z.infer<typeof NewsItem>;
 

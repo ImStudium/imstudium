@@ -271,6 +271,16 @@ export interface ExtractResult {
   skipped?: boolean;
   error?: string;
   hint?: string;
+  /** Pages (0-based) whose text came from on-device OCR. */
+  ocrPages?: number[];
+  /** Pages still without text. */
+  imageOnlyPages?: number[];
+}
+
+export interface ExtractOcrInfo {
+  model: string;
+  pages: number[];
+  lowConfidencePages: number[];
 }
 
 export interface ExtractManifest {
@@ -283,6 +293,12 @@ export interface ExtractManifest {
   extractedAt: string;
   sourceMtimeMs: number;
   sourceSize: number;
+  /** Pages (0-based) left without a text layer. */
+  imageOnlyPages?: number[];
+  /** Set when on-device OCR ran for this file. */
+  ocr?: ExtractOcrInfo;
+  /** OCR was available but failed; the native text was kept. */
+  ocrError?: string;
 }
 
 export interface FileTreeNode {

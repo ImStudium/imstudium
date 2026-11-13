@@ -43,7 +43,7 @@ Every ImStudium failure has one stable `code`. The CLI exits with the code's exi
 | `LOGIN_FAILED` | 4 | no | Browser sign-in did not produce a session | Run: imstudium login (or --manual) |
 | `LOGIN_TIMEOUT` | 4 | no | Sign-in took too long | Run: imstudium login and finish the sign-in within a few minutes |
 | `LOGIN_CANCELLED` | 4 | no | The sign-in window was closed before the login finished | Run: imstudium login |
-| `LOGIN_INVALID_COOKIE` | 4 | no | The pasted or imported session cookie is not valid | Copy Seminar_Session again, or run: imstudium login |
+| `LOGIN_INVALID_COOKIE` | 4 | no | The pasted or imported session cookie is not valid | Copy Studip_Session (or Seminar_Session) again, or run: imstudium login |
 | `CHROME_PROFILE_LOCKED` | 4 | no | --chrome-profile needs Chrome closed | Quit Chrome completely, then run: imstudium login --chrome-profile |
 | `OAUTH_UNAVAILABLE` | 4 | no | OAuth is not available on this Stud.IP instance | Run: imstudium login (browser sign-in) |
 | `OAUTH_CLIENT_INVALID` | 4 | no | Stud.IP rejected the OAuth client id | Check oauth.clientId in ~/.config/imstudium/config.json (docs/OAUTH.md) |
@@ -54,6 +54,7 @@ Every ImStudium failure has one stable `code`. The CLI exits with the code's exi
 | `COURSE_NOT_FOUND` | 5 | no | No course matches the name, shortcut or id | imstudium courses list shows your courses; pass a title fragment, slug or id |
 | `COURSE_AMBIGUOUS` | 5 | no | Several courses match; the CLI will not guess | Pass a longer title fragment or the course id (see details.candidates) |
 | `SEMESTER_NOT_FOUND` | 5 | no | No semester matches the label | imstudium semesters lists them, e.g. --semester "WS 2026/27" |
+| `NO_ENROLMENTS` | 5 | no | You are not enrolled in any course of that semester on Stud.IP | Enrol in Stud.IP first and keep working in your current semester folder (imstudium sync), or pass --allow-empty |
 | `UNIT_NOT_FOUND` | 5 | no | No Courseware unit matches | imstudium courseware &lt;course&gt; lists the units |
 | `PAGE_NOT_FOUND` | 5 | no | No wiki page matches | imstudium wiki &lt;course&gt; lists the pages |
 | `ROUTE_NOT_FOUND` | 5 | no | No JSON:API route matches the path | imstudium routes lists the routes of your Stud.IP |

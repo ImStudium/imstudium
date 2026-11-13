@@ -64,7 +64,7 @@ export const ERROR_CODES = {
   LOGIN_FAILED: spec("auth", "Browser sign-in did not produce a session", "Run: imstudium login (or --manual)"),
   LOGIN_TIMEOUT: spec("auth", "Sign-in took too long", "Run: imstudium login and finish the sign-in within a few minutes"),
   LOGIN_CANCELLED: spec("auth", "The sign-in window was closed before the login finished", "Run: imstudium login"),
-  LOGIN_INVALID_COOKIE: spec("auth", "The pasted or imported session cookie is not valid", "Copy Seminar_Session again, or run: imstudium login"),
+  LOGIN_INVALID_COOKIE: spec("auth", "The pasted or imported session cookie is not valid", "Copy Studip_Session (or Seminar_Session) again, or run: imstudium login"),
   CHROME_PROFILE_LOCKED: spec("auth", "--chrome-profile needs Chrome closed", "Quit Chrome completely, then run: imstudium login --chrome-profile"),
   OAUTH_UNAVAILABLE: spec("auth", "OAuth is not available on this Stud.IP instance", "Run: imstudium login (browser sign-in)"),
   OAUTH_CLIENT_INVALID: spec("auth", "Stud.IP rejected the OAuth client id", "Check oauth.clientId in ~/.config/imstudium/config.json (docs/OAUTH.md)"),
@@ -78,6 +78,7 @@ export const ERROR_CODES = {
   SEMESTER_NOT_FOUND: spec("not_found", "No semester matches the label", "imstudium semesters lists them, e.g. --semester \"WS 2026/27\"", {
     aliases: ["NO_SEMESTER"],
   }),
+  NO_ENROLMENTS: spec("not_found", "You are not enrolled in any course of that semester on Stud.IP", "Enrol in Stud.IP first and keep working in your current semester folder (imstudium sync), or pass --allow-empty"),
   UNIT_NOT_FOUND: spec("not_found", "No Courseware unit matches", "imstudium courseware <course> lists the units"),
   PAGE_NOT_FOUND: spec("not_found", "No wiki page matches", "imstudium wiki <course> lists the pages"),
   ROUTE_NOT_FOUND: spec("not_found", "No JSON:API route matches the path", "imstudium routes lists the routes of your Stud.IP", {

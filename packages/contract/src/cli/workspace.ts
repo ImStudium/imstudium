@@ -54,7 +54,13 @@ export const SemesterOutput = z
       })
       .nullable(),
     archive: z.array(ArchivedSemester),
-    needsRollover: z.boolean(),
+    enrolled: z
+      .number()
+      .int()
+      .nullable()
+      .optional()
+      .describe("Your courses in the running semester on Stud.IP; null when signed out or offline"),
+    needsRollover: z.boolean().describe("A semester start is due: Stud.IP is on a newer semester you have courses in"),
     next: z.string(),
   })
   .describe("Where you are in the semester and whether a rollover is due");
@@ -81,7 +87,12 @@ export const SemesterStartOutput = z.union([
     report: SyncReport,
     extracted: z.number().int(),
   }),
-  z.object({ semester: SemesterId, plan: RolloverPlan, downloads: z.number().int() }),
+  z.object({
+    semester: SemesterId,
+    plan: RolloverPlan,
+    downloads: z.number().int(),
+    courses: z.number().int().optional().describe("Your courses in the target semester"),
+  }),
 ]);
 export type SemesterStartOutput = z.infer<typeof SemesterStartOutput>;
 

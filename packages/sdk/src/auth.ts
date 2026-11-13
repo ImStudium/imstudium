@@ -14,8 +14,13 @@ import {
 } from "./browser-profile.js";
 import {
   buildShibbolethLoginUrl,
+  findSessionCookie,
+  isSessionCookieName,
+  unrecognisedSessionCookieNames,
   openInSystemBrowser,
-  parseSeminarSessionCookie,
+  parseSessionCookie,
+  SESSION_COOKIE_NAMES,
+  type SessionCookie,
 } from "./login-url.js";
 import {
   buildLoginHelperHtml,
@@ -278,8 +283,9 @@ export class AuthManager {
     // The session only ever goes to the origin it was issued by.
     const origin = originOf(session.origin!);
     if (options?.instanceOrigin) assertSameOrigin(session, options.instanceOrigin);
-    if (session.type === "cookie" && origin && session.cookies?.Seminar_Session) {
-      const check = await this.checkCookie(origin, session.cookies.Seminar_Session);
+    const storedCookie = session.type === "cookie" ? findSessionCookie(session.cookies) : null;
+    if (storedCookie && origin) {
+      const check = await this.checkCookie(origin, storedCookie.value, storedCookie.name);
       this.lastCheck = check;
       if (check === "rejected") {
         await this.clearSession();
@@ -427,8 +433,8 @@ export class AuthManager {
         cookies[parts[5]] = parts[6];
       }
     }
-    if (!cookies.Seminar_Session) {
-      throw new Error("No Seminar_Session cookie found in file");
+    if (!findSessionCookie(cookies)) {
+      throw new Error(`No ${SESSION_COOKIE_NAMES.join(" or ")} cookie found in file`);
     }
     await this.importCookies(cookies);
   }
@@ -438,55 +444,67 @@ export class AuthManager {
     const origin = options.instanceOrigin.replace(/\/$/, "");
 
     if (options.cookieValue) {
-      return this.finishCookieLogin(origin, parseSeminarSessionCookie(options.cookieValue));
+      return this.finishCookieLogin(origin, parseSessionCookie(options.cookieValue));
     }
     if (process.env.IMSTUDIUM_SESSION_COOKIE) {
-      return this.finishCookieLogin(
-        origin,
-        parseSeminarSessionCookie(process.env.IMSTUDIUM_SESSION_COOKIE),
-      );
+      return this.finishCookieLogin(origin, parseSessionCookie(process.env.IMSTUDIUM_SESSION_COOKIE));
     }
 
     return this.runGuidedLogin(origin, options);
   }
 
-  private async finishCookieLogin(origin: string, seminarSession: string): Promise<SessionData> {
-    if (!seminarSession) {
+  private async finishCookieLogin(
+    origin: string,
+    pasted: { name?: string; value: string },
+  ): Promise<SessionData> {
+    if (!pasted.value) {
       throw new ImstudiumError(
         "Empty session cookie.",
         "LOGIN_INVALID_COOKIE",
         undefined,
-        "Provide Seminar_Session after logging in at Stud.IP.",
+        "Provide Studip_Session (or Seminar_Session) after logging in at Stud.IP.",
       );
     }
-    const ok = await this.isCookieValid(origin, seminarSession);
-    if (!ok) {
+    // A bare value doesn't say which name it belongs to — ask Stud.IP.
+    const names = pasted.name ? [pasted.name] : [...SESSION_COOKIE_NAMES];
+    let cookie: SessionCookie | null = null;
+    for (const name of names) {
+      if (await this.isCookieValid(origin, pasted.value, name)) {
+        cookie = { name, value: pasted.value };
+        break;
+      }
+    }
+    if (!cookie) {
       throw new ImstudiumError(
         "Session cookie was rejected by Stud.IP.",
         "LOGIN_INVALID_COOKIE",
         undefined,
-        "Log in again and copy a fresh Seminar_Session value.",
+        "Log in again and copy a fresh Studip_Session (or Seminar_Session) value.",
       );
     }
     const session: SessionData = {
       type: "cookie",
       origin,
-      cookies: { Seminar_Session: seminarSession },
+      cookies: { [cookie.name]: cookie.value },
     };
     await this.saveSession(session);
     return session;
   }
 
-  private async isCookieValid(origin: string, seminarSession: string): Promise<boolean> {
-    return (await this.checkCookie(origin, seminarSession)) === "valid";
+  private async isCookieValid(origin: string, value: string, name: string): Promise<boolean> {
+    return (await this.checkCookie(origin, value, name)) === "valid";
   }
 
-  async checkCookie(origin: string, seminarSession: string): Promise<CookieCheck> {
+  async checkCookie(
+    origin: string,
+    value: string,
+    name: string = SESSION_COOKIE_NAMES[0],
+  ): Promise<CookieCheck> {
     try {
       const res = await fetch(`${origin}/jsonapi.php/v1/users/me`, {
         headers: {
           Accept: "application/vnd.api+json",
-          Cookie: `Seminar_Session=${seminarSession}`,
+          Cookie: `${name}=${value}`,
         },
         redirect: "manual",
         signal: AbortSignal.timeout(15_000),
@@ -518,7 +536,7 @@ export class AuthManager {
         origin,
         loginUrl,
         onManualSubmit: async (raw) => {
-          const session = await this.finishCookieLogin(origin, parseSeminarSessionCookie(raw));
+          const session = await this.finishCookieLogin(origin, parseSessionCookie(raw));
           finish(() => resolve(session));
           return session;
         },
@@ -649,7 +667,7 @@ export class AuthManager {
     res.end("Not found");
   }
 
-  /** Opens Chrome, waits for Shibboleth login, auto-captures Seminar_Session. */
+  /** Opens Chrome, waits for Shibboleth login, auto-captures the Stud.IP session cookie. */
   async loginWithBrowser(options: BrowserLoginOptions): Promise<SessionData> {
     const origin = options.instanceOrigin.replace(/\/$/, "");
     const loginUrl = buildShibbolethLoginUrl(origin);
@@ -658,8 +676,12 @@ export class AuthManager {
 
     if (!options.force) {
       const stored = await this.loadSession();
-      const storedCookie = stored?.cookies?.Seminar_Session;
-      if (storedCookie && stored?.origin === originOf(origin) && (await this.isCookieValid(origin, storedCookie))) {
+      const storedCookie = findSessionCookie(stored?.cookies);
+      if (
+        storedCookie &&
+        stored?.origin === originOf(origin) &&
+        (await this.isCookieValid(origin, storedCookie.value, storedCookie.name))
+      ) {
         options.onMessage?.("Already signed in — reusing saved session.");
         return stored;
       }
@@ -685,7 +707,7 @@ export class AuthManager {
     }
 
     try {
-      let seminarSession: string | null = null;
+      let seminarSession: SessionCookie | null = null;
       if (!options.force) {
         seminarSession = await this.extractSeminarSession(context, origin);
         if (seminarSession) {
@@ -718,7 +740,15 @@ export class AuthManager {
         const elapsed = Date.now() - (deadline - (options.timeoutMs ?? LOGIN_TIMEOUT_MS));
         if (elapsed - lastProgress > 30_000) {
           lastProgress = elapsed;
-          options.onMessage?.("Still waiting for sign-in in the browser window…");
+          // Signed in at Stud.IP, but no cookie we recognise? Say so instead of waiting out the clock.
+          const unknown = await this.unrecognisedSessionCookies(context, origin);
+          options.onMessage?.(
+            unknown.length
+              ? `Still waiting — Stud.IP set ${unknown.join(", ")}, which imstudium doesn't recognise as a session ` +
+                  `(it knows ${SESSION_COOKIE_NAMES.join(", ")}). If you already see your Stud.IP start page, ` +
+                  "please report this at https://github.com/ImStudium/imstudium/issues."
+              : "Still waiting for sign-in in the browser window…",
+          );
         }
 
         await this.sleep(1500);
@@ -758,13 +788,13 @@ export class AuthManager {
 
   private async fetchUserDisplayName(
     origin: string,
-    seminarSession: string,
+    cookie: SessionCookie,
   ): Promise<string | null> {
     try {
       const res = await fetch(`${origin}/jsonapi.php/v1/users/me`, {
         headers: {
           Accept: "application/vnd.api+json",
-          Cookie: `Seminar_Session=${seminarSession}`,
+          Cookie: `${cookie.name}=${cookie.value}`,
         },
       });
       if (!res.ok) return null;
@@ -777,13 +807,13 @@ export class AuthManager {
     }
   }
 
-  private async persistCookieSession(seminarSession: string, origin: string): Promise<SessionData> {
+  private async persistCookieSession(cookie: SessionCookie, origin: string): Promise<SessionData> {
     const { unlink } = await import("node:fs/promises");
     await unlink(join(paths.dataDir, "silent-refresh-failed")).catch(() => undefined);
     const session: SessionData = {
       type: "cookie",
       origin: originOf(origin),
-      cookies: { Seminar_Session: seminarSession },
+      cookies: { [cookie.name]: cookie.value },
     };
     await this.saveSession(session);
     return session;
@@ -840,17 +870,38 @@ export class AuthManager {
     }
   }
 
+  /**
+   * Names of cookies on the Stud.IP host that look like a session but aren't one we
+   * know — the tell-tale of a renamed session cookie (Stud.IP 6 renamed
+   * Seminar_Session to Studip_Session). Names only; values never leave this method.
+   */
+  private async unrecognisedSessionCookies(context: BrowserContext, origin: string): Promise<string[]> {
+    try {
+      const host = new URL(origin).hostname.replace(/^www\./, "");
+      return unrecognisedSessionCookieNames(
+        (await context.cookies()).filter((c) => {
+          const domain = c.domain.replace(/^\./, "");
+          return host === domain || host.endsWith(`.${domain}`);
+        }),
+      );
+    } catch {
+      return [];
+    }
+  }
+
   private async extractSeminarSession(
     context: BrowserContext,
     origin: string,
-  ): Promise<string | null> {
+  ): Promise<SessionCookie | null> {
     const host = new URL(origin).hostname.replace(/^www\./, "");
     const all = await context.cookies();
     for (const cookie of all) {
-      if (cookie.name !== "Seminar_Session") continue;
+      if (!isSessionCookieName(cookie.name)) continue;
       const domain = cookie.domain.replace(/^\./, "");
       if (host !== domain && !host.endsWith(`.${domain}`)) continue;
-      if (await this.isCookieValid(origin, cookie.value)) return cookie.value;
+      if (await this.isCookieValid(origin, cookie.value, cookie.name)) {
+        return { name: cookie.name, value: cookie.value };
+      }
     }
     return null;
   }

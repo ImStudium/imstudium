@@ -582,6 +582,7 @@ Options:
   --semester <label>  Target semester (default: the one running now)
   --extract           Extract materials and build the search index after syncing
   --dry-run           Show what would move and download
+  --allow-empty       Start the semester even when you have no courses in it on Stud.IP
   -h, --help          display help for command
 
 ### imstudium sync
@@ -835,16 +836,18 @@ Options:
   -h, --help        display help for command
 
 Commands:
-  import [options]  Store a Seminar_Session cookie (from --cookie or a Netscape cookie file)
+  import [options]  Store a Stud.IP session cookie (Studip_Session or Seminar_Session; from --cookie
+                    or a Netscape cookie file)
   help [command]    display help for command
 
 ### imstudium session import
 Usage: imstudium session import [options]
 
-Store a Seminar_Session cookie (from --cookie or a Netscape cookie file)
+Store a Stud.IP session cookie (Studip_Session or Seminar_Session; from --cookie or a Netscape
+cookie file)
 
 Options:
-  --cookie <value>  Seminar_Session cookie value
+  --cookie <value>  Session cookie value (checked against Stud.IP to find its name)
   --file <path>     Netscape cookie file
   -h, --help        display help for command
 

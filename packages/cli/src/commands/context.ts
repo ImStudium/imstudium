@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { Option, type Command } from "commander";
 import {
@@ -8,7 +8,7 @@ import {
   dateKey,
   findCurrentSemester,
   listArchivedSemesters,
-  parseFrontmatter,
+  readSavedNews,
   semesterSlug,
   type StudiumWorkspace,
 } from "@imstudium/sdk";
@@ -42,18 +42,11 @@ async function recentNews(out: string, ws: StudiumWorkspace | null, sinceMs: num
   const lines: NewsLine[] = [];
   for (const course of ws.courses) {
     if (!course.path) continue;
-    const dir = join(out, course.path, "news");
-    let files: string[] = [];
-    try {
-      files = (await readdir(dir)).filter((f) => /^\d{4}-\d{2}-\d{2}-.+\.md$/.test(f));
-    } catch {
-      continue;
-    }
-    for (const f of files) {
-      const date = f.slice(0, 10);
-      if (Date.parse(date) < sinceMs - 86_400_000) continue;
-      const fm = parseFrontmatter(await readFile(join(dir, f), "utf-8").catch(() => ""));
-      lines.push({ date: fm.date ?? date, course: course.title, title: fm.title ?? f.slice(11, -3), path: `${course.path}/news/${f}` });
+    // Both formats: current `<date>-<title>.md` and 0.1.x `<id>.md` files.
+    for (const n of await readSavedNews(join(out, course.path, "news"), { courseTitle: course.title, courseId: course.id })) {
+      const ms = Date.parse(n.date);
+      if (Number.isFinite(ms) && ms < sinceMs - 86_400_000) continue;
+      lines.push({ date: n.date, course: course.title, title: n.title, path: `${course.path}/news` });
     }
   }
   return lines.sort((a, b) => b.date.localeCompare(a.date));
@@ -81,10 +74,12 @@ async function buildContext(sdk: Sdk, out: string, opts: ContextOptions): Promis
   const ws = await sdk.studium.loadWorkspace(out);
 
   let studip: ContextReport["semester"]["studip"] = null;
+  let studipSemesterId: string | null = null;
   if (!opts.offline) {
     try {
       const cur = findCurrentSemester(await sdk.courses.semesters.listAll());
       if (cur) {
+        studipSemesterId = cur.id;
         studip = {
           title: String(cur.attributes?.title),
           slug: semesterSlug(String(cur.attributes?.title)),
@@ -144,11 +139,23 @@ async function buildContext(sdk: Sdk, out: string, opts: ContextOptions): Promis
   }
 
   const lastSync = await lastSyncAt(out);
-  const rolloverNeeded = !!(studip && ws && ws.activeSemester.slug !== studip.slug);
+  const behind = !!(studip && ws && ws.activeSemester.slug !== studip.slug);
+  // Only suggest a rollover into a semester you actually have courses in.
+  let noCoursesYet = false;
+  if (behind && signedIn && studipSemesterId) {
+    try {
+      noCoursesYet = (await sdk.courses.listMine(undefined, { semesterId: studipSemesterId })).length === 0;
+    } catch {
+      noCoursesYet = false;
+    }
+  }
+  const rolloverNeeded = behind && !noCoursesYet;
   const next: string[] = [];
   if (!signedIn) next.push("imstudium login   (signed out — briefing from local files only)");
   if (!ws) next.push("imstudium semester start");
   else if (rolloverNeeded) next.push(`imstudium semester start   (${ws.activeSemester.title} → ${studip!.title})`);
+  else if (noCoursesYet && (!lastSync || now.getTime() - Date.parse(lastSync) > 24 * 3_600_000)) next.push(`imstudium sync --extract   (no ${studip!.title} courses on Stud.IP yet — refreshing ${ws.activeSemester.title})`);
+  else if (noCoursesYet) next.push(`imstudium semester   (no ${studip!.title} courses on Stud.IP yet — staying on ${ws.activeSemester.title})`);
   else if (!lastSync || now.getTime() - Date.parse(lastSync) > 24 * 3_600_000) next.push("imstudium sync --extract   (last sync > 1 day)");
   if (tasks.some((t) => t.status === "overdue")) next.push("imstudium tasks --open   (something is overdue)");
   if (unreadMessages) next.push(`imstudium inbox --unread   (${unreadMessages} unread)`);

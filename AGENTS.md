@@ -62,7 +62,7 @@ The door refuses anything that writes:
 - `semester start`, `files download`
 - every command outside its allowlist (`login`, `setup`, `sync`, …)
 
-The workspace tools are still there: `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium_find_materials`, `studium_read_material`, `imstudium_sync`, `imstudium_sync_dry_run`, `imstudium_list_courses`, `imstudium_whoami` and `studium_modules`.
+The workspace tools are still there: `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium_find_materials`, `studium_read_material`, `imstudium_sync_dry_run`, `imstudium_list_courses`, `imstudium_whoami` and `studium_modules`. A sync runs only in a terminal (`imstudium sync`).
 
 ### Never
 
@@ -71,6 +71,10 @@ The workspace tools are still there: `studium_overview`, `studium_klausuren`, `s
 - Handle the university password, print the session, or copy anything from `~/.config/imstudium`.
 - Paste messages, grades, Matrikelnummer or classmates' names anywhere outside the session. Don't upload `~/Studium` content anywhere. Course material is licensed for the student's own studies (UrhG §60a). See the `imstudium-datenschutz` skill.
 - Hand in solutions to current Übungsblätter as the student's own work. Explain, quiz, and give hints and worked examples of *similar* problems instead.
+
+### Plugin (Claude Code, Codex)
+
+`plugins/imstudium/` is one plugin for both: skills, slash commands (`/imstudium:today`, `:week`, `:catchup`, `:klausur`, `:explain`, `:quiz`, `:sync`, `:doctor`), the `studium-tutor` subagent, a SessionStart hook that adds the offline briefing inside a workspace, and the MCP door. Install with `claude plugin marketplace add ImStudium/imstudium` or `codex plugin marketplace add ImStudium/imstudium`. Use the plugin *or* `imstudium setup all` per harness, not both.
 
 ### Setup per harness
 
@@ -92,12 +96,12 @@ The installed skills:
 - `imstudium-cli`: command map
 - `imstudium-datenschutz`
 - `imstudium-studium`, `imstudium-klausuren`, `imstudium-sync`, `imstudium-visual`, `imstudium-mcp`
-- workflows `klausur-prep` and `semester-refresh`
+- workflows `imstudium-klausur-prep`, `imstudium-semester-refresh` and `imstudium-study-session`
 
 Paths:
 
 - setup manifest: `~/.config/imstudium/setup-manifest.json`
-- workspace: `~/Studium` (`IMSTUDIUM_WORKSPACE`)
+- workspace: `~/Studium`. `IMSTUDIUM_WORKSPACE` overrides `config.json` for one process (so do `IMSTUDIUM_ORIGIN` and `IMSTUDIUM_BASE_URL`) and is never saved
 
 ## Part 2 — Working on this repository
 
@@ -176,5 +180,15 @@ Bun workspaces, four packages:
 - Build and check commands with `bun run build`, then `node packages/cli/dist/cli.js <command> --help`.
 - CLI integration tests use `packages/cli/src/test/harness.ts`: a synthetic workspace, a throwaway `HOME`, the file session store and a preload that fails every network call.
 - Never commit anything from `~/Studium`, `~/.config/imstudium` or `~/.local/share/imstudium`.
+
+- `plugins/imstudium/` is partly generated (`scripts/docs/plugin.ts`): both manifests, `.mcp.json`, `skills/` (copied from `packages/cli/skills`, workflows flattened) and the root marketplaces (`.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json`, `.cursor-plugin/plugin.json`). Edit the sources and run `bun run docs`; `commands/`, `agents/` and `hooks/` are hand-written. `scripts/plugin.test.ts` checks for stale files, frontmatter, versions and the hook. `claude plugin validate .` and `claude plugin validate plugins/imstudium` must pass.
+
+### Stud.IP 5 and 6
+
+Both must work. Stud.IP 6 differs in ways the SDK absorbs:
+
+- The session cookie is `Studip_Session` (5.x: `Seminar_Session`). `SESSION_COOKIE_NAMES` in `login-url.ts` lists both; never hard-code one.
+- Some routes (e.g. `/courseware-tasks`) take no `page[…]` parameters and answer 400; `client.paginate` retries those once unpaged.
+- Error objects may omit `status`; `parseApiErrors` falls back to the HTTP status.
 
 User-facing changes go in [CHANGELOG.md](CHANGELOG.md), plus the README, [docs/](docs/) and the bundled skills when behaviour changes.

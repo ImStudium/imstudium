@@ -113,7 +113,7 @@ export { EXTRACTION_LIMITS_FOR_AGENTS } from "./extraction-guidance.js";
 // ── Resources (one per Stud.IP area; GET only) ───────────────────────────────
 export { CoursesResource, ScheduleResource, DiscoveryResource, type ListMineOptions, type ResolvedSemesterContext } from "./resources/courses.js";
 export { FilesResource, formatFileTree, type FileTreeEntry } from "./resources/files.js";
-export { NewsResource, selectNews, writeNewsMarkdown, type NewsItem, type NewsScope, type NewsWriteResult } from "./resources/news.js";
+export { mergeLiveAndSavedNews, NewsResource, readSavedNews, selectNews, upgradeLegacyNews, writeNewsMarkdown, type NewsItem, type NewsScope, type NewsWriteResult } from "./resources/news.js";
 export { WikiResource, buildWikiTree, renderWiki, wikiPageUrl, type WikiPage, type WikiNode } from "./resources/wiki.js";
 export { MessagesResource, type MessageItem, type MessageBox } from "./resources/messages.js";
 export {

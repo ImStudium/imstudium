@@ -8,9 +8,11 @@ import {
   buildSlideViewer,
   expandPath,
   extractSlug,
+  findCurrentSemester,
   ImstudiumError,
   rebuildSearchIndexes,
   resolveCourseDir,
+  semesterSlug,
   toImstudiumError,
   toolHints,
   type SyncPart,
@@ -18,11 +20,11 @@ import {
 } from "@imstudium/sdk";
 import type { SyncOutput } from "@imstudium/contract";
 import { runSync } from "../pipeline.js";
-import { act, getSdk, globalOpts, note, output } from "../runtime.js";
+import { act, getSdk, globalOpts, note, output, type Sdk } from "../runtime.js";
 import { workspaceCourse } from "../course-arg.js";
 import { courseOption, outputOption, parseDuration, workspaceDir } from "../kit/args.js";
 import { nowStamp } from "../kit/format.js";
-import { requireWorkspace, semesterSyncOptions } from "./workspace.js";
+import { requireWorkspace, workspaceSyncOptions } from "./workspace.js";
 
 const SYNC_PARTS: SyncPart[] = ["calendar", "wiki", "news", "forum", "courseware", "tasks"];
 
@@ -63,9 +65,10 @@ export function registerSync(program: Command): void {
         if (opts.layout && opts.layout !== "tree" && opts.layout !== "flat") {
           throw new ImstudiumError(`--layout must be tree or flat, got "${opts.layout}"`, "BAD_ARGS");
         }
+        const semOpts = await workspaceSyncOptions(sdk, out, opts);
         const result = await runSync(sdk, {
           out,
-          ...semesterSyncOptions(sdk, opts),
+          ...semOpts,
           course: opts.course,
           layout: (opts.layout as "flat" | "tree") || "tree",
           dryRun: opts.dryRun,
@@ -80,7 +83,9 @@ export function registerSync(program: Command): void {
         const lines = [
           `Sync: ${report.downloaded} downloaded (${fresh} new, ${updated} updated), ${report.skipped} unchanged, ${report.failed} failed${opts.extract ? `, ${result.extracted} extracted` : ""}`,
           where ? `      ${where}` : "",
+          await newerSemesterHint(sdk, result.workspace?.activeSemester?.slug),
           ...(report.courseErrors ?? []).map((e) => `      ⚠ ${e.courseTitle}: ${e.message}`),
+          ...failedFiles(report).map((f) => `      ✗ ${f.courseTitle ?? ""} · ${f.name ?? f.path}: ${f.message}`),
           result.changes.length ? "      What's new: imstudium changes · NEW.md" : "",
         ];
         const { files: _files, ...counts } = report;
@@ -251,11 +256,11 @@ export function registerSync(program: Command): void {
         const sdk = await getSdk();
         const out = workspaceDir(sdk, opts);
         note(`Watching every ${opts.interval} → ${out} (Ctrl+C to stop)`);
-        const semOpts = semesterSyncOptions(sdk, {});
         for (;;) {
           try {
             // Same pipeline as sync: files, news, forum, courseware, wiki, Abgaben, change log, NEW.md.
-            const result = await runSync(sdk, { out, ...semOpts, extract: true });
+            // The workspace's own semester, re-read each round (a semester start may have moved it).
+            const result = await runSync(sdk, { out, ...(await workspaceSyncOptions(sdk, out, {})), extract: true });
             const round = { at: new Date().toISOString(), changes: result.changes, downloaded: result.report.downloaded, failed: result.report.failed };
             if (globalOpts.json) console.log(JSON.stringify({ schemaVersion: "1", ...round }));
             else if (!globalOpts.quiet) {
@@ -271,4 +276,25 @@ export function registerSync(program: Command): void {
         }
       }),
     );
+}
+
+/** One line when Stud.IP has moved on to a semester the workspace isn't on yet (cached /semesters; silent offline). */
+async function newerSemesterHint(sdk: Sdk, workspaceSlug: string | undefined): Promise<string> {
+  if (!workspaceSlug) return "";
+  try {
+    const now = findCurrentSemester(await sdk.courses.semesters.listAll());
+    const title = now ? String(now.attributes?.title ?? "") : "";
+    if (!title || semesterSlug(title) === workspaceSlug) return "";
+    return `      Stud.IP is in ${title} now; this workspace stays on its semester. See: imstudium semester`;
+  } catch {
+    return "";
+  }
+}
+
+/** Files that failed to download, with Stud.IP's reason — so "1 failed" names the file. */
+function failedFiles(report: { files?: Array<{ fileRefId: string; action: string; path: string; name?: string; courseTitle?: string }>; errors?: Array<{ fileRefId: string; message: string }> }) {
+  const why = new Map((report.errors ?? []).map((e) => [e.fileRefId, e.message]));
+  return (report.files ?? [])
+    .filter((f) => f.action === "fail")
+    .map((f) => ({ ...f, message: why.get(f.fileRefId) ?? "download failed" }));
 }

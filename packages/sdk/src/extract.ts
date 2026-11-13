@@ -1,9 +1,10 @@
 import { cp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative } from "node:path";
 import { ensureDir, slugify } from "./config.js";
-import { convertLocalDocument, probeLocalIngest } from "./ingest/local-docs.js";
+import { convertImage, convertLocalDocument, IMAGE_ONLY, probeLocalIngest, type LocalConvertOk } from "./ingest/local-docs.js";
+import { ocrRuntimeStatus } from "./ingest/ocr-runtime.js";
 import { buildCourseSearchIndex } from "./search-corpus.js";
-import type { ExtractManifest, ExtractResult, MaterialKind, StudiumCourse } from "./types.js";
+import type { ExtractManifest, ExtractOcrInfo, ExtractResult, MaterialKind, StudiumCourse } from "./types.js";
 
 const PDF_EXT = new Set([".pdf"]);
 const OFFICE_EXT = new Set([
@@ -59,7 +60,7 @@ export class Extractor {
   async extractFile(
     src: string,
     outDir: string,
-    opts: { images?: boolean; dpi?: number; force?: boolean } = {},
+    opts: { images?: boolean; dpi?: number; force?: boolean; ocr?: boolean } = {},
   ): Promise<ExtractResult> {
     const name = basename(src);
     const kind = detectKind(name);
@@ -69,7 +70,8 @@ export class Extractor {
     if (!opts.force) {
       try {
         const prev = JSON.parse(await readFile(manifestPath, "utf-8")) as ExtractManifest;
-        if (prev.sourceMtimeMs === srcStat.mtimeMs && prev.sourceSize === srcStat.size) {
+        const unchanged = prev.sourceMtimeMs === srcStat.mtimeMs && prev.sourceSize === srcStat.size;
+        if (unchanged && !(await this.ocrWouldAdd(prev, outDir, opts))) {
           return { source: src, outDir, kind, pages: prev.pages, skipped: true, tool: prev.tool };
         }
       } catch {
@@ -81,7 +83,7 @@ export class Extractor {
 
     let result: ExtractResult;
     if (kind === "image") {
-      result = await this.extractImage(src, outDir);
+      result = await this.extractImage(src, outDir, opts);
     } else if (kind === "text") {
       result = await this.extractText(src, outDir);
     } else if (kind === "unsupported") {
@@ -90,7 +92,7 @@ export class Extractor {
         error: `Unsupported file type: ${extname(name)}`,
       };
     } else {
-      result = await this.extractDocument(src, outDir, kind);
+      result = await this.extractDocument(src, outDir, kind, opts);
     }
 
     const manifest: ExtractManifest = {
@@ -103,9 +105,39 @@ export class Extractor {
       extractedAt: new Date().toISOString(),
       sourceMtimeMs: srcStat.mtimeMs,
       sourceSize: srcStat.size,
+      ...(result.imageOnlyPages?.length ? { imageOnlyPages: result.imageOnlyPages } : {}),
+      ...(this.lastOcr ? { ocr: this.lastOcr } : {}),
+      ...(this.lastOcrError ? { ocrError: this.lastOcrError } : {}),
     };
+    this.lastOcr = undefined;
+    this.lastOcrError = undefined;
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
     return result;
+  }
+
+  private lastOcr: ExtractOcrInfo | undefined;
+  private lastOcrError: string | undefined;
+
+  /**
+   * An unchanged file is extracted again when on-device OCR is now available and
+   * would add text: it has pages without a text layer (older extractions only left
+   * the marker in content.md) or it is an image, and OCR hasn't run on it yet.
+   */
+  private async ocrWouldAdd(prev: ExtractManifest, outDir: string, opts: { ocr?: boolean }): Promise<boolean> {
+    if (opts.ocr === false || prev.ocr) return false;
+    const status = ocrRuntimeStatus();
+    if (!status.ready || status.disabled) return false;
+    if (prev.kind === "image") return true;
+    if (prev.kind !== "pdf") return false;
+    if (prev.imageOnlyPages?.length) return true;
+    const content = await readFile(join(outDir, "content.md"), "utf-8").catch(() => "");
+    return content.includes(IMAGE_ONLY);
+  }
+
+  private recordOcr(converted: LocalConvertOk): void {
+    const ocr = converted.metadata.ocr as { model: string; pages: number[]; lowConfidencePages: number[] } | undefined;
+    this.lastOcr = ocr ? { model: ocr.model, pages: ocr.pages, lowConfidencePages: ocr.lowConfidencePages } : undefined;
+    this.lastOcrError = typeof converted.metadata.ocrError === "string" ? converted.metadata.ocrError : undefined;
   }
 
   async extractDir(
@@ -115,6 +147,8 @@ export class Extractor {
       images?: boolean;
       dpi?: number;
       force?: boolean;
+      /** false: native text only, even with the OCR runtime installed. */
+      ocr?: boolean;
       course?: Pick<StudiumCourse, "title" | "path">;
       workspaceRoot?: string;
     } = {},
@@ -140,9 +174,10 @@ export class Extractor {
     src: string,
     outDir: string,
     kind: "pdf" | "office",
+    opts: { ocr?: boolean } = {},
   ): Promise<ExtractResult> {
     const bytes = new Uint8Array(await readFile(src));
-    const converted = await convertLocalDocument(bytes, src);
+    const converted = await convertLocalDocument(bytes, src, { ocr: opts.ocr });
     if (!converted.ok) {
       return {
         source: src, outDir, kind, pages: 0,
@@ -155,7 +190,9 @@ export class Extractor {
     const label =
       kind === "pdf" ? "pdf" : ext === ".pptx" || ext === ".ppt" || ext === ".odp" ? "slides" : "document";
     const pageTexts = converted.pages.map((p) => p.markdown);
-    await writeFile(join(outDir, "content.md"), renderContentMd(basename(src), label, pageTexts, false));
+    const ocrPages = converted.pages.filter((p) => p.ocr).map((p) => p.index);
+    this.recordOcr(converted);
+    await writeFile(join(outDir, "content.md"), renderContentMd(basename(src), label, pageTexts, false, ocrPages.length));
     return {
       source: src,
       outDir,
@@ -163,14 +200,27 @@ export class Extractor {
       pages: converted.pageCount,
       hasImages: false,
       tool: converted.engine,
+      ocrPages,
+      imageOnlyPages: converted.pages.filter((p) => p.imageOnly).map((p) => p.index),
     };
   }
 
-  private async extractImage(src: string, outDir: string): Promise<ExtractResult> {
+  private async extractImage(src: string, outDir: string, opts: { ocr?: boolean } = {}): Promise<ExtractResult> {
     const pagesDir = join(outDir, "pages");
     await ensureDir(pagesDir);
     const dest = join(pagesDir, `page-1${extname(src).toLowerCase()}`);
     await cp(src, dest);
+    // JPEG/PNG: read the text on-device when OCR is installed; the picture stays in pages/ either way.
+    const ocr = await convertImage(new Uint8Array(await readFile(src)), { ocr: opts.ocr });
+    if (ocr?.ok) {
+      this.recordOcr(ocr);
+      await writeFile(
+        join(outDir, "content.md"),
+        renderContentMd(basename(src), "image", [`${ocr.markdown}\n\n(image: ${dest})`], true, 1),
+      );
+      return { source: src, outDir, kind: "image", pages: 1, hasImages: true, tool: ocr.engine, ocrPages: [0] };
+    }
+    if (ocr && !ocr.ok) this.lastOcrError = ocr.error.message;
     await writeFile(
       join(outDir, "content.md"),
       renderContentMd(basename(src), "image", [`(image — read ${dest})`], true),
@@ -194,17 +244,19 @@ function renderContentMd(
   label: string,
   pageTexts: string[],
   hasImages: boolean,
+  ocrPages = 0,
 ): string {
+  const ocr = ocrPages ? ` · on-device OCR on ${ocrPages} page(s)` : "";
   const lines = [
     `# ${filename}`,
     "",
-    `> ${label} · ${pageTexts.length} page(s) · local AnyDoc / pdf-inspector${hasImages ? " · image in pages/" : ""}`,
+    `> ${label} · ${pageTexts.length} page(s) · local AnyDoc / pdf-inspector${ocr}${hasImages ? " · image in pages/" : ""}`,
     "",
   ];
   const unit = label === "slides" ? "Slide" : "Page";
   pageTexts.forEach((text, i) => {
     if (pageTexts.length > 1) lines.push(`## ${unit} ${i + 1}`, "");
-    lines.push(text.trim() || "_(image-only page — no text layer)_", "");
+    lines.push(text.trim() || IMAGE_ONLY, "");
   });
   return lines.join("\n");
 }

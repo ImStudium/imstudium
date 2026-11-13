@@ -1,12 +1,17 @@
 /**
- * Single local ingest pipeline — Firecrawl AnyDoc + pdf-inspector.
- * No API key, no Tesseract, no poppler, no LibreOffice.
+ * Single local ingest pipeline — Firecrawl AnyDoc + pdf-inspector, all on this machine.
+ * No API key, no cloud parsing, no Tesseract, no poppler, no LibreOffice.
  *
- *   PDF      → pdf-inspector extractPagesMarkdownAsync
- *   Office   → AnyDoc toMarkdownBytes
- *   scanned  → image-only page markers (no OCR)
+ *   PDF      → pdf-inspector: native text, plus on-device OCR (PP-OCRv6 via PDFium +
+ *              ONNX Runtime) for the pages its quality signals reject — once
+ *              `imstudium setup ocr` has installed the runtime
+ *   image    → wrapped into a one-page PDF, same OCR
+ *   Office   → AnyDoc toMarkdownBytes (local; never `ocr: 'hosted'`)
+ *   no OCR   → image-only page markers
  */
 import { Buffer } from "node:buffer";
+import { imageToPdf } from "./image-pdf.js";
+import { activateOcrRuntime, OCR_MODEL, ocrRuntimeStatus } from "./ocr-runtime.js";
 
 type AnyDoc = typeof import("@firecrawl/anydoc");
 type PdfInspector = typeof import("@firecrawl/pdf-inspector");
@@ -35,13 +40,15 @@ function looksLikePdf(bytes: Uint8Array): boolean {
   return PDF_MAGIC.every((b, i) => bytes[i] === b);
 }
 
-export type LocalEngine = "pdf-inspector" | "anydoc";
+export type LocalEngine = "pdf-inspector" | "pdf-inspector+ocr" | "anydoc";
 
 export type LocalPage = {
   /** 0-based */
   index: number;
   markdown: string;
   imageOnly?: boolean;
+  /** Text came (partly) from on-device OCR. */
+  ocr?: { source: "Ocr" | "Fused"; confidence: number | null; low: boolean };
 };
 
 export type LocalConvertOk = {
@@ -87,13 +94,115 @@ export function joinPagesFormFeed(pages: LocalPage[]): string {
   return pages.map((p) => p.markdown.replace(/\r\n/g, "\n").trimEnd()).join("\f");
 }
 
-const IMAGE_ONLY = "_(image-only page — no text layer)_";
+export const IMAGE_ONLY = "_(image-only page — no text layer)_";
+export const OCR_LOW_CONFIDENCE = "_(read by OCR with low confidence — check the original)_";
+
+/** Pages below this OCR confidence get the low-confidence note. */
+const LOW_CONFIDENCE = 0.6;
+
+export interface ConvertOptions {
+  /** false: native text only, even when the OCR runtime is installed. */
+  ocr?: boolean;
+}
+
+/** OCR is used when it is installed, not switched off, and the caller allows it. */
+function ocrEnabled(options: ConvertOptions): boolean {
+  return options.ocr !== false && activateOcrRuntime(ocrRuntimeStatus());
+}
 
 function asError(err: unknown, fallback: string): Error {
   return err instanceof Error ? err : new Error(fallback);
 }
 
-async function convertPdf(bytes: Uint8Array): Promise<LocalConvertResult> {
+/**
+ * Native extraction plus on-device OCR for the pages pdf-inspector routes.
+ * `offline: true` — the engine may never download anything during extraction.
+ */
+async function convertPdfWithOcr(bytes: Uint8Array): Promise<LocalConvertResult> {
+  const { processPdfWithOcr } = await loadPdfInspector();
+  const r = await processPdfWithOcr(toNodeBuffer(bytes), { mode: "Auto" as never, offline: true });
+  const pages: LocalPage[] = r.pages.map((p) => {
+    const source = String(p.provenance.source);
+    const confidence = typeof p.provenance.ocrConfidence === "number" ? p.provenance.ocrConfidence : null;
+    const markdown = (p.markdown ?? "").trim();
+    const fromOcr = source === "Ocr" || source === "Fused";
+    const low = fromOcr && (p.provenance.hostedRecommended || (confidence !== null && confidence < LOW_CONFIDENCE));
+    return {
+      index: p.pageNumber - 1,
+      markdown: !markdown ? IMAGE_ONLY : low ? `${markdown}\n\n${OCR_LOW_CONFIDENCE}` : markdown,
+      imageOnly: !markdown,
+      ...(fromOcr ? { ocr: { source: source as "Ocr" | "Fused", confidence, low } } : {}),
+    };
+  });
+  const pageCount = r.pageCount || pages.length || 1;
+  const ocrPages = pages.filter((p) => p.ocr).map((p) => p.index);
+  return {
+    ok: true,
+    markdown: joinPagesFormFeed(pages),
+    pages: pages.length ? pages : [{ index: 0, markdown: IMAGE_ONLY, imageOnly: true }],
+    engine: "pdf-inspector+ocr",
+    pageCount,
+    metadata: {
+      engine: "pdf-inspector+ocr",
+      local: true,
+      pageCount,
+      numPages: pageCount,
+      imageOnlyPages: pages.filter((p) => p.imageOnly).map((p) => p.index),
+      ocr: {
+        model: OCR_MODEL,
+        onDevice: true,
+        pages: ocrPages,
+        lowConfidencePages: pages.filter((p) => p.ocr?.low).map((p) => p.index),
+        ocrTimeMs: r.ocrTimeMs,
+      },
+      pagesWithTables: r.pagesWithTables,
+      pagesWithColumns: r.pagesWithColumns,
+      isComplex: r.isComplex,
+    },
+  };
+}
+
+async function convertPdf(bytes: Uint8Array, options: ConvertOptions = {}): Promise<LocalConvertResult> {
+  if (ocrEnabled(options)) {
+    try {
+      return await convertPdfWithOcr(bytes);
+    } catch (err) {
+      // A broken runtime must not cost the student the native text.
+      const native = await convertPdfNative(bytes);
+      if (native.ok) native.metadata.ocrError = asError(err, "OCR failed").message;
+      return native;
+    }
+  }
+  return convertPdfNative(bytes);
+}
+
+/** OCR an image by wrapping it in a one-page PDF. null: OCR unavailable or the format can't be wrapped. */
+export async function convertImage(bytes: Uint8Array, options: ConvertOptions = {}): Promise<LocalConvertResult | null> {
+  if (!ocrEnabled(options)) return null;
+  const pdf = imageToPdf(bytes);
+  if (!pdf) return null;
+  try {
+    const { processPdfWithOcr } = await loadPdfInspector();
+    const r = await processPdfWithOcr(pdf, { mode: "Force" as never, offline: true });
+    const page = r.pages[0];
+    const markdown = (page?.markdown ?? "").trim();
+    const confidence = typeof page?.provenance.ocrConfidence === "number" ? page.provenance.ocrConfidence : null;
+    const low = !!page && (page.provenance.hostedRecommended || (confidence !== null && confidence < LOW_CONFIDENCE));
+    const text = !markdown ? "_(no text found in the image)_" : low ? `${markdown}\n\n${OCR_LOW_CONFIDENCE}` : markdown;
+    return {
+      ok: true,
+      markdown: text,
+      pages: [{ index: 0, markdown: text, imageOnly: !markdown, ocr: { source: "Ocr", confidence, low } }],
+      engine: "pdf-inspector+ocr",
+      pageCount: 1,
+      metadata: { engine: "pdf-inspector+ocr", local: true, ocr: { model: OCR_MODEL, onDevice: true, pages: [0], lowConfidencePages: low ? [0] : [], ocrTimeMs: r.ocrTimeMs } },
+    };
+  } catch (err) {
+    return { ok: false, error: asError(err, "OCR failed"), engine: "pdf-inspector+ocr" };
+  }
+}
+
+async function convertPdfNative(bytes: Uint8Array): Promise<LocalConvertResult> {
   try {
     const { extractPagesMarkdownAsync } = await loadPdfInspector();
     const extracted = await extractPagesMarkdownAsync(toNodeBuffer(bytes));
@@ -171,9 +280,10 @@ async function convertAnydoc(bytes: Uint8Array, fileName: string): Promise<Local
 export async function convertLocalDocument(
   bytes: Uint8Array,
   fileName: string,
+  options: ConvertOptions = {},
 ): Promise<LocalConvertResult> {
   const name = fileName.trim().split(/[/\\]/).pop() || fileName;
-  if (isPdfFileName(name) || looksLikePdf(bytes)) return convertPdf(bytes);
+  if (isPdfFileName(name) || looksLikePdf(bytes)) return convertPdf(bytes, options);
   return convertAnydoc(bytes, name);
 }
 

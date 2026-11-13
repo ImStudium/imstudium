@@ -804,7 +804,8 @@ imstudium semester <command> [options]
 | `current` | object \| null | The semester running now per Stud.IP; null offline |
 | `workspace` | object \| null |  |
 | `archive` | object[] |  |
-| `needsRollover` | boolean |  |
+| `enrolled`? | integer \| null | Your courses in the running semester on Stud.IP; null when signed out or offline |
+| `needsRollover` | boolean | A semester start is due: Stud.IP is on a newer semester you have courses in |
 | `next` | string |  |
 | `schemaVersion` | "1" |  |
 
@@ -822,6 +823,7 @@ imstudium semester start [options]
 | `--semester <label>` | Target semester (default: the one running now) |
 | `--extract` | Extract materials and build the search index after syncing |
 | `--dry-run` | Show what would move and download |
+| `--allow-empty` | Start the semester even when you have no courses in it on Stud.IP |
 
 **`--json`** — full JSON Schema: `imstudium schema semester start`
 
@@ -842,6 +844,7 @@ Shape 2 of 2:
 | `semester` | object |  |
 | `plan` | object |  |
 | `downloads` | integer |  |
+| `courses`? | integer | Your courses in the target semester |
 | `schemaVersion` | "1" |  |
 
 ### `imstudium sync`
@@ -1145,7 +1148,7 @@ imstudium session <command>
 
 #### `imstudium session import`
 
-Store a Seminar_Session cookie (from --cookie or a Netscape cookie file)
+Store a Stud.IP session cookie (Studip_Session or Seminar_Session; from --cookie or a Netscape cookie file)
 
 ```
 imstudium session import [options]
@@ -1153,7 +1156,7 @@ imstudium session import [options]
 
 | Option | |
 |---|---|
-| `--cookie <value>` | Seminar_Session cookie value |
+| `--cookie <value>` | Session cookie value (checked against Stud.IP to find its name) |
 | `--file <path>` | Netscape cookie file |
 
 ### `imstudium doctor`

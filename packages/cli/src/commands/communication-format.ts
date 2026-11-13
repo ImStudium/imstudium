@@ -37,7 +37,8 @@ export function formatNews(items: NewsItem[], options: { showCourse?: boolean } 
     .map((n) => {
       const where = n.courseTitle ?? (n.scope === "global" ? "Stud.IP" : null);
       const head = [isoDay(n.date), options.showCourse ? where : null, n.title].filter(Boolean).join(" · ");
-      return block(`${head} — ${displayName(n.author)}`, excerpt(n.text));
+      const who = n.author ? ` — ${displayName(n.author)}` : "";
+      return block(`${head}${who}${n.archived ? "  (archived — no longer on Stud.IP)" : ""}`, excerpt(n.text));
     })
     .join("\n");
 }
