@@ -13,18 +13,20 @@ import {
   rebuildSearchIndexes,
   resolveCourseDir,
   semesterSlug,
+  summarizeOcr,
   toImstudiumError,
   toolHints,
   type SyncPart,
   type StudiumWorkspace,
 } from "@imstudium/sdk";
-import type { SyncOutput } from "@imstudium/contract";
+import type { ExtractOutput, SyncOutput } from "@imstudium/contract";
 import { runSync } from "../pipeline.js";
 import { act, getSdk, globalOpts, note, output, type Sdk } from "../runtime.js";
 import { workspaceCourse } from "../course-arg.js";
 import { courseOption, outputOption, parseDuration, workspaceDir } from "../kit/args.js";
 import { nowStamp } from "../kit/format.js";
 import { requireWorkspace, workspaceSyncOptions } from "./workspace.js";
+import { ocrSummaryLine } from "../ocr.js";
 
 const SYNC_PARTS: SyncPart[] = ["calendar", "wiki", "news", "forum", "courseware", "tasks"];
 
@@ -58,8 +60,9 @@ export function registerSync(program: Command): void {
     .option("--dry-run", "List changes without downloading")
     .option("--include <items>", `Comma-separated: ${SYNC_PARTS.join(",")} (default: all)`)
     .option("--extract", "Extract new/changed files to markdown and rebuild the search index")
+    .option("--no-ocr", "With --extract: native text only, even when on-device OCR is installed")
     .action(
-      act(async (opts: { output?: string; course?: string; semester?: string; layout?: string; dryRun?: boolean; include?: string; extract?: boolean; allSemesters?: boolean }) => {
+      act(async (opts: { output?: string; course?: string; semester?: string; layout?: string; dryRun?: boolean; include?: string; extract?: boolean; ocr?: boolean; allSemesters?: boolean }) => {
         const sdk = await getSdk();
         const out = workspaceDir(sdk, opts);
         if (opts.layout && opts.layout !== "tree" && opts.layout !== "flat") {
@@ -74,6 +77,7 @@ export function registerSync(program: Command): void {
           dryRun: opts.dryRun,
           include: parseInclude(opts.include),
           extract: opts.extract,
+          ocr: opts.ocr,
           onProgress: note,
         });
         const { report } = result;
@@ -83,13 +87,20 @@ export function registerSync(program: Command): void {
         const lines = [
           `Sync: ${report.downloaded} downloaded (${fresh} new, ${updated} updated), ${report.skipped} unchanged, ${report.failed} failed${opts.extract ? `, ${result.extracted} extracted` : ""}`,
           where ? `      ${where}` : "",
+          opts.extract && ocrSummaryLine(result.ocr) ? `      ${ocrSummaryLine(result.ocr)}` : "",
           await newerSemesterHint(sdk, result.workspace?.activeSemester?.slug),
           ...(report.courseErrors ?? []).map((e) => `      ⚠ ${e.courseTitle}: ${e.message}`),
           ...failedFiles(report).map((f) => `      ✗ ${f.courseTitle ?? ""} · ${f.name ?? f.path}: ${f.message}`),
           result.changes.length ? "      What's new: imstudium changes · NEW.md" : "",
         ];
         const { files: _files, ...counts } = report;
-        const payload: SyncOutput = { ...counts, semesters: result.semesters, changes: result.changes, extracted: opts.extract ? result.extracted : undefined };
+        const payload: SyncOutput = {
+          ...counts,
+          semesters: result.semesters,
+          changes: result.changes,
+          extracted: opts.extract ? result.extracted : undefined,
+          ocr: opts.extract ? result.ocr : undefined,
+        };
         output(payload, lines.filter(Boolean).join("\n"));
       }),
     );
@@ -97,22 +108,24 @@ export function registerSync(program: Command): void {
   program
     .command("extract")
     .alias("ingest")
-    .description("Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md; photos copied to pages/")
+    .description("Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and photos once `setup ocr` ran")
     .addOption(courseOption("Only one course (title fragment, shortcut, slug or id)"))
     .option("--file <path>", "Extract a single file to <file>-extracted/")
     .option("--no-images", "Don't copy photos into pages/")
+    .option("--no-ocr", "Native text only, even when on-device OCR is installed (also: IMSTUDIUM_OCR=off)")
     .option("--force", "Re-extract even if unchanged")
     .addOption(outputOption())
     .action(
-      act(async (opts: { course?: string; file?: string; images?: boolean; force?: boolean; output?: string }) => {
+      act(async (opts: { course?: string; file?: string; images?: boolean; ocr?: boolean; force?: boolean; output?: string }) => {
         const sdk = await getSdk();
-        const extractOpts = { images: opts.images, force: opts.force };
+        const extractOpts = { images: opts.images, force: opts.force, ocr: opts.ocr };
 
         if (opts.file) {
           const src = expandPath(opts.file);
           const outDir = src.replace(/\.[^.]+$/, "") + "-extracted";
           const result = await sdk.extractor.extractFile(src, outDir, extractOpts);
-          output(result, `Extracted ${result.pages} page(s) → ${result.outDir}${result.hint ? `\nHint: ${result.hint}` : ""}`);
+          const ocr = ocrSummaryLine(summarizeOcr([result]));
+          output(result, `Extracted ${result.pages} page(s) → ${result.outDir}${ocr ? `\n${ocr}` : ""}${result.error ? `\nError: ${result.error}` : ""}${result.hint ? `\nHint: ${result.hint}` : ""}`);
           return;
         }
 
@@ -142,9 +155,12 @@ export function registerSync(program: Command): void {
         const skipped = results.filter((r) => r.skipped).length;
         const failed = results.filter((r) => r.error).length;
         const hints = toolHints(tools);
+        const ocr = summarizeOcr(results);
+        const ocrLine = ocrSummaryLine(ocr);
+        const payload: ExtractOutput = { extracted: done, skipped, failed, hints, ocr, results, searchIndex };
         output(
-          { extracted: done, skipped, failed, hints, results, searchIndex },
-          `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}${hints.length ? `\n${hints.join("\n")}` : ""}`,
+          payload,
+          `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}${ocrLine ? `\n${ocrLine}` : ""}${hints.length ? `\n${hints.join("\n")}` : ""}`,
         );
       }),
     );

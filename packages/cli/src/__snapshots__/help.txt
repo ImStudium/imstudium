@@ -69,7 +69,8 @@ Commands:
   sync [options]                                 Sync files and rebuild the Studium workspace
                                                  (current semester by default)
   extract|ingest [options]                       Local ingest: pdf-inspector (PDF) + AnyDoc (Office)
-                                                 → content.md; photos copied to pages/
+                                                 → content.md, with on-device OCR for scans and
+                                                 photos once `setup ocr` ran
   index [options]                                Build/rebuild page index (corpus.jsonl) — for agent
                                                  grep / semantic search, not a custom search engine
   view [options]                                 Build viewer.html for slide PNGs — fast path for
@@ -599,17 +600,21 @@ Options:
   --dry-run           List changes without downloading
   --include <items>   Comma-separated: calendar,wiki,news,forum,courseware,tasks (default: all)
   --extract           Extract new/changed files to markdown and rebuild the search index
+  --no-ocr            With --extract: native text only, even when on-device OCR is installed
   -h, --help          display help for command
 
 ### imstudium extract
 Usage: imstudium extract|ingest [options]
 
-Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md; photos copied to pages/
+Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and
+photos once `setup ocr` ran
 
 Options:
   --course <name>     Only one course (title fragment, shortcut, slug or id)
   --file <path>       Extract a single file to <file>-extracted/
   --no-images         Don't copy photos into pages/
+  --no-ocr            Native text only, even when on-device OCR is installed (also:
+                      IMSTUDIUM_OCR=off)
   --force             Re-extract even if unchanged
   -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
   -h, --help          display help for command
@@ -727,6 +732,8 @@ Commands:
   skills [options]     Install or refresh the bundled agent skills
   workflows [options]  Install or refresh agent workflows / slash commands
   mcp [options]        Register the imstudium MCP server with your agents (opt-in)
+  ocr [options]        Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified
+                       PDFium + ONNX Runtime + PP-OCRv6 (~60 MB, once)
   migrate [options]    Migrate DigiCampus config/skills/MCP to ImStudium (idempotent)
   all [options]        Skills + workflows (idempotent — skips unchanged). MCP is opt-in: setup mcp
   help [command]       display help for command
@@ -773,6 +780,17 @@ Options:
   --force             Rewrite MCP config even if identical
   -o, --output <dir>  Studium workspace path (default: config / IMSTUDIUM_WORKSPACE)
   -h, --help          display help for command
+
+### imstudium setup ocr
+Usage: imstudium setup ocr [options]
+
+Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified PDFium + ONNX Runtime +
+PP-OCRv6 (~60 MB, once)
+
+Options:
+  --force     Download and verify everything again, models included
+  --remove    Delete the runtime and models; extraction keeps native text and marks image-only pages
+  -h, --help  display help for command
 
 ### imstudium setup migrate
 Usage: imstudium setup migrate [options]

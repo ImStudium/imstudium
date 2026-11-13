@@ -35,6 +35,7 @@ Every ImStudium failure has one stable `code`. The CLI exits with the code's exi
 | `UPDATE_FAILED` | 1 | no | `imstudium update` could not upgrade the global npm install | Run: npm i -g @imstudium/cli@latest |
 | `BROWSER_LAUNCH_FAILED` | 1 | no | The sign-in browser (Playwright) could not start | Run: npx playwright install chromium |
 | `CLI_NOT_FOUND` | 1 | no | The MCP server could not find the imstudium CLI to run | npm i -g @imstudium/cli, or set IMSTUDIUM_CLI to its path |
+| `OCR_INSTALL_FAILED` | 1 | yes | Downloading, verifying or starting the on-device OCR runtime failed (nothing half-installed is used) | Check the connection, then run: imstudium setup ocr --force |
 | `BAD_ARGS` | 2 | no | An argument or flag is missing, unknown or malformed | See: imstudium &lt;command&gt; --help |
 | `NO_CLIENT_ID` | 2 | no | OAuth sign-in was requested without a client id | Set IMSTUDIUM_OAUTH_CLIENT_ID or oauth.clientId (docs/OAUTH.md), or run imstudium login without --oauth |
 | `WRITE_NOT_ALLOWED` | 3 | no | The call would change something in Stud.IP and was not explicitly allowed | Read-only by default: add --write in a terminal if you really mean it (never over MCP) |
@@ -54,6 +55,7 @@ Every ImStudium failure has one stable `code`. The CLI exits with the code's exi
 | `COURSE_NOT_FOUND` | 5 | no | No course matches the name, shortcut or id | imstudium courses list shows your courses; pass a title fragment, slug or id |
 | `COURSE_AMBIGUOUS` | 5 | no | Several courses match; the CLI will not guess | Pass a longer title fragment or the course id (see details.candidates) |
 | `SEMESTER_NOT_FOUND` | 5 | no | No semester matches the label | imstudium semesters lists them, e.g. --semester "WS 2026/27" |
+| `OCR_UNSUPPORTED` | 5 | no | No pinned on-device OCR runtime for this platform or JavaScript runtime | Extraction keeps the native text and marks image-only pages; OCR runs on macOS arm64, Linux x64/arm64 and Windows x64 under Node |
 | `NO_ENROLMENTS` | 5 | no | You are not enrolled in any course of that semester on Stud.IP | Enrol in Stud.IP first and keep working in your current semester folder (imstudium sync), or pass --allow-empty |
 | `UNIT_NOT_FOUND` | 5 | no | No Courseware unit matches | imstudium courseware &lt;course&gt; lists the units |
 | `PAGE_NOT_FOUND` | 5 | no | No wiki page matches | imstudium wiki &lt;course&gt; lists the pages |

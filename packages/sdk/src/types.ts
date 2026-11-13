@@ -273,6 +273,8 @@ export interface ExtractResult {
   hint?: string;
   /** Pages (0-based) whose text came from on-device OCR. */
   ocrPages?: number[];
+  /** Of the OCR pages, those below the confidence threshold. */
+  ocrLowConfidencePages?: number[];
   /** Pages still without text. */
   imageOnlyPages?: number[];
 }

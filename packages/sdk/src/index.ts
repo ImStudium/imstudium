@@ -93,7 +93,20 @@ export { pickCourse, resolveCourseDir, resolveCourseQuery, resolveWorkspaceCours
 export { ensureMigrated, archiveLegacyConfigDir, convertLegacyManifest, legacyPaths, type MigrationResult } from "./migrate.js";
 
 // ── Extraction, viewer and search ────────────────────────────────────────────
-export { Extractor, detectTools, toolHints, extractSlug, type ExtractTools } from "./extract.js";
+export { Extractor, detectTools, toolHints, extractSlug, shouldRedoForOcr, summarizeOcr, type ExtractTools, type OcrSummary } from "./extract.js";
+export {
+  installOcrRuntime,
+  removeOcrRuntime,
+  ocrRuntimeStatus,
+  ocrDisabledByEnv,
+  OCR_MODEL,
+  OCR_RUNTIMES,
+  ONNXRUNTIME_VERSION,
+  PDFIUM_VERSION,
+  type OcrInstallResult,
+  type OcrRuntimeInfo,
+  type OcrRuntimeStatus,
+} from "./ingest/ocr-runtime.js";
 export { buildSlideViewer, buildAgentVisualPayload, type AgentVisualPayload } from "./viewer.js";
 export { searchWorkspace, type SearchKind, type SearchDoc, type SearchHit, type SearchOptions } from "./search.js";
 export {

@@ -17,7 +17,11 @@ ForumResource
 ImstudiumError
 MessagesResource
 NewsResource
+OCR_MODEL
+OCR_RUNTIMES
+ONNXRUNTIME_VERSION
 OnboardUI
+PDFIUM_VERSION
 PeopleResource
 PlanningResource
 SDK_VERSION
@@ -67,6 +71,7 @@ getDefaultConfig
 groupRoutes
 hhmm
 htmlToText
+installOcrRuntime
 isAuthError
 isChromeRunning
 isDateKey
@@ -82,6 +87,8 @@ matchUnit
 mergeLiveAndSavedNews
 normalizeStudiumWorkspace
 oauthEndpoints
+ocrDisabledByEnv
+ocrRuntimeStatus
 offlinePlanningSnapshot
 pageRef
 parseActivityTypes
@@ -96,6 +103,7 @@ probeOAuthServer
 readRouteCatalog
 readSavedNews
 rebuildSearchIndexes
+removeOcrRuntime
 renderWiki
 resolveCourseDir
 resolveCourseQuery
@@ -108,9 +116,11 @@ searchWorkspace
 selectNews
 semesterIdFromRelationships
 semesterSlug
+shouldRedoForOcr
 slugify
 sortTasks
 startOfDay
+summarizeOcr
 syncCommunication
 syncContent
 syncPlanning

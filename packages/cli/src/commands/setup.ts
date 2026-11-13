@@ -1,10 +1,12 @@
 import { Option, type Command } from "commander";
-import { archiveLegacyConfigDir, ensureMigrated, ImstudiumError } from "@imstudium/sdk";
+import { archiveLegacyConfigDir, ensureMigrated, ImstudiumError, installOcrRuntime, ocrRuntimeStatus, removeOcrRuntime } from "@imstudium/sdk";
+import type { SetupOcrOutput } from "@imstudium/contract";
 import { formatSetupSummary, getSetupStatus, runSetup, type AgentId } from "../setup.js";
 import { checkForUpdates, runGlobalUpdate } from "../version.js";
-import { act, getSdk, output } from "../runtime.js";
+import { act, getSdk, note, output } from "../runtime.js";
 import { outputOption } from "../kit/args.js";
 import { CLI_ENTRY } from "../entry.js";
+import { formatBytes, ocrRuntimeView } from "../ocr.js";
 
 const AGENT_HELP = "cursor | claude-code | claude-desktop | codex | windsurf | opencode | all";
 
@@ -67,7 +69,9 @@ export function registerSetup(program: Command): void {
           ...status.detected.map((a) => `  ${a.label} (${a.id}) — skills: ${a.skillsDir}`),
         ];
         if (status.staleSkills.length) lines.push("", `Stale skills: ${status.staleSkills.join(", ")}`, "Run: imstudium setup all -y");
-        output(status, lines.join("\n"));
+        const ocr = ocrRuntimeView();
+        lines.push("", `On-device OCR: ${ocr.ready ? `ready (${ocr.model})` : ocr.reason ?? "not ready"}${!ocr.ready && ocr.supported && !ocr.disabled ? " · imstudium setup ocr" : ""}`);
+        output({ ...status, ocr }, lines.join("\n"));
       }),
     );
 
@@ -119,6 +123,55 @@ export function registerSetup(program: Command): void {
       output(result, formatSetupSummary(result));
     }),
   );
+
+  setup
+    .command("ocr")
+    .description("Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified PDFium + ONNX Runtime + PP-OCRv6 (~60 MB, once)")
+    .option("--force", "Download and verify everything again, models included")
+    .option("--remove", "Delete the runtime and models; extraction keeps native text and marks image-only pages")
+    .action(
+      act(async (opts: { force?: boolean; remove?: boolean }) => {
+        if (opts.force && opts.remove) throw new ImstudiumError("--force and --remove exclude each other", "BAD_ARGS");
+        if (opts.remove) {
+          const started = Date.now();
+          const removed = await removeOcrRuntime();
+          const payload: SetupOcrOutput = {
+            action: removed.removed ? "removed" : "absent",
+            runtime: ocrRuntimeView(),
+            installed: [],
+            skipped: [],
+            downloadedBytes: 0,
+            diskBytes: removed.freedBytes,
+            durationMs: Date.now() - started,
+          };
+          output(payload, removed.removed ? `Removed on-device OCR (${formatBytes(removed.freedBytes)} freed) from ${removed.dir}` : `No OCR runtime in ${removed.dir}`);
+          return;
+        }
+        const before = ocrRuntimeStatus();
+        if (!before.supported) {
+          throw new ImstudiumError(`No local OCR runtime for ${before.platform}`, "OCR_UNSUPPORTED", undefined, undefined, { platform: before.platform });
+        }
+        const result = await installOcrRuntime({ force: opts.force, onProgress: note });
+        const runtime = ocrRuntimeView(result.status);
+        const payload: SetupOcrOutput = {
+          action: result.installed.length ? "installed" : "unchanged",
+          runtime,
+          installed: result.installed,
+          skipped: result.skipped,
+          downloadedBytes: result.downloadedBytes,
+          diskBytes: result.diskBytes,
+          durationMs: result.durationMs,
+        };
+        const lines = [
+          result.installed.length
+            ? `On-device OCR ready: ${result.installed.join(", ")} installed${result.downloadedBytes ? ` (${formatBytes(result.downloadedBytes)} downloaded, SHA-256 verified)` : ""}`
+            : "On-device OCR already installed and verified",
+          `  ${runtime.model} · PDFium ${runtime.pins.pdfium} · ONNX Runtime ${runtime.pins.onnxruntime} · ${formatBytes(result.diskBytes)} in ${runtime.dir}`,
+          runtime.disabled ? "  Switched off by IMSTUDIUM_OCR=off: unset it to use OCR" : "  Pages without a text layer and JPEG/PNG photos are read on this machine at the next extract (imstudium extract, or sync --extract)",
+        ];
+        output(payload, lines.join("\n"));
+      }),
+    );
 
   withWorkspace(
     setup

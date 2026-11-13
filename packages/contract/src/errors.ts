@@ -49,6 +49,7 @@ export const ERROR_CODES = {
   UPDATE_FAILED: spec("internal", "`imstudium update` could not upgrade the global npm install", "Run: npm i -g @imstudium/cli@latest"),
   BROWSER_LAUNCH_FAILED: spec("internal", "The sign-in browser (Playwright) could not start", "Run: npx playwright install chromium"),
   CLI_NOT_FOUND: spec("internal", "The MCP server could not find the imstudium CLI to run", "npm i -g @imstudium/cli, or set IMSTUDIUM_CLI to its path"),
+  OCR_INSTALL_FAILED: spec("internal", "Downloading, verifying or starting the on-device OCR runtime failed (nothing half-installed is used)", "Check the connection, then run: imstudium setup ocr --force", { retryable: true }),
   // ── 2 usage ────────────────────────────────────────────────────────────────
   BAD_ARGS: spec("usage", "An argument or flag is missing, unknown or malformed", "See: imstudium <command> --help", {
     aliases: ["MISSING_ARG", "INVALID_KEY"],
@@ -78,6 +79,7 @@ export const ERROR_CODES = {
   SEMESTER_NOT_FOUND: spec("not_found", "No semester matches the label", "imstudium semesters lists them, e.g. --semester \"WS 2026/27\"", {
     aliases: ["NO_SEMESTER"],
   }),
+  OCR_UNSUPPORTED: spec("not_found", "No pinned on-device OCR runtime for this platform or JavaScript runtime", "Extraction keeps the native text and marks image-only pages; OCR runs on macOS arm64, Linux x64/arm64 and Windows x64 under Node"),
   NO_ENROLMENTS: spec("not_found", "You are not enrolled in any course of that semester on Stud.IP", "Enrol in Stud.IP first and keep working in your current semester folder (imstudium sync), or pass --allow-empty"),
   UNIT_NOT_FOUND: spec("not_found", "No Courseware unit matches", "imstudium courseware <course> lists the units"),
   PAGE_NOT_FOUND: spec("not_found", "No wiki page matches", "imstudium wiki <course> lists the pages"),

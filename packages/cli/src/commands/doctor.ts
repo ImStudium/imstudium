@@ -7,7 +7,7 @@ import type { Command } from "commander";
 import {
   detectTools,
   findCurrentSemester,
-
+  ocrRuntimeStatus,
   probeOAuthServer,
   readRouteCatalog,
   SDK_VERSION,
@@ -274,6 +274,18 @@ export const DOCTOR_CHECKS: CheckDef[] = [
       const tools = await detectTools();
       const detail = `pdf-inspector ${tools.pdfInspector ? "ok" : "missing"} · anydoc ${tools.anydoc ? "ok" : "missing"}`;
       return tools.pdfInspector && tools.anydoc ? ok(detail, { ...tools }) : warn(detail, toolHints(tools)[0] ?? "npm i -g @imstudium/cli@latest", { ...tools });
+    },
+  },
+  {
+    id: "ocr",
+    title: "On-device OCR",
+    run: async () => {
+      const s = ocrRuntimeStatus();
+      const data = { platform: s.platform, ready: s.ready, disabled: s.disabled, dir: s.dir, installed: s.installed };
+      if (!s.supported) return skip(`no pinned runtime for ${s.platform}; image-only pages stay marked, native text is unaffected`);
+      if (s.ready && s.disabled) return skip("installed, switched off by IMSTUDIUM_OCR=off");
+      if (s.ready) return ok(`${s.model} · PDFium ${s.installed?.pdfium} · ONNX Runtime ${s.installed?.onnxruntime} (offline, on this machine)`, data);
+      return warn(`${s.reason ?? "not ready"}: scanned pages and photos stay unread`, s.reason?.startsWith("runs under Node") ? "Run imstudium with Node: npm i -g @imstudium/cli" : "imstudium setup ocr", data);
     },
   },
   {

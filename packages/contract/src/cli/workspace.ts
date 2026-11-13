@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChangeEntry, IsoDateTime, SearchHit, SemesterProgress, SyncReport } from "../common.js";
+import { OcrSummary } from "./setup.js";
 
 /** `imstudium search --json` */
 export const SearchOutput = z
@@ -109,8 +110,37 @@ export const SyncOutput = SyncReport.extend({
   ),
   changes: z.array(ChangeEntry),
   extracted: z.number().int().optional().describe("Only with --extract"),
+  ocr: OcrSummary.optional().describe("Only with --extract: pages read by on-device OCR"),
 }).describe("Sync report: downloads, per-semester folders and the files that changed");
 export type SyncOutput = z.infer<typeof SyncOutput>;
+
+const ExtractResult = z.object({
+  source: z.string(),
+  outDir: z.string(),
+  kind: z.enum(["pdf", "office", "image", "text", "unsupported"]),
+  pages: z.number().int(),
+  tool: z.string().optional().describe("pdf-inspector · pdf-inspector+ocr · anydoc · passthrough · copy"),
+  skipped: z.boolean().optional().describe("Unchanged since the last extraction"),
+  error: z.string().optional(),
+  hint: z.string().optional(),
+  ocrPages: z.array(z.number().int()).optional().describe("0-based pages read by on-device OCR"),
+  ocrLowConfidencePages: z.array(z.number().int()).optional(),
+  imageOnlyPages: z.array(z.number().int()).optional().describe("0-based pages still without text"),
+});
+
+/** `imstudium extract --json` (workspace mode; `--file` returns one result) */
+export const ExtractOutput = z
+  .object({
+    extracted: z.number().int(),
+    skipped: z.number().int(),
+    failed: z.number().int(),
+    hints: z.array(z.string()),
+    ocr: OcrSummary,
+    results: z.array(ExtractResult),
+    searchIndex: z.unknown().nullable().optional(),
+  })
+  .describe("Local extraction to content.md: counts, OCR totals and one result per file");
+export type ExtractOutput = z.infer<typeof ExtractOutput>;
 
 export const ExamDate = z.object({
   courseId: z.string(),

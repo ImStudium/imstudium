@@ -2,7 +2,7 @@ import { cp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative } from "node:path";
 import { ensureDir, slugify } from "./config.js";
 import { convertImage, convertLocalDocument, IMAGE_ONLY, probeLocalIngest, type LocalConvertOk } from "./ingest/local-docs.js";
-import { ocrRuntimeStatus } from "./ingest/ocr-runtime.js";
+import { ocrRuntimeStatus, type OcrRuntimeStatus } from "./ingest/ocr-runtime.js";
 import { buildCourseSearchIndex } from "./search-corpus.js";
 import type { ExtractManifest, ExtractOcrInfo, ExtractResult, MaterialKind, StudiumCourse } from "./types.js";
 
@@ -118,24 +118,19 @@ export class Extractor {
   private lastOcr: ExtractOcrInfo | undefined;
   private lastOcrError: string | undefined;
 
-  /**
-   * An unchanged file is extracted again when on-device OCR is now available and
-   * would add text: it has pages without a text layer (older extractions only left
-   * the marker in content.md) or it is an image, and OCR hasn't run on it yet.
-   */
+  /** See {@link shouldRedoForOcr}. */
   private async ocrWouldAdd(prev: ExtractManifest, outDir: string, opts: { ocr?: boolean }): Promise<boolean> {
     if (opts.ocr === false || prev.ocr) return false;
     const status = ocrRuntimeStatus();
     if (!status.ready || status.disabled) return false;
-    if (prev.kind === "image") return true;
-    if (prev.kind !== "pdf") return false;
-    if (prev.imageOnlyPages?.length) return true;
-    const content = await readFile(join(outDir, "content.md"), "utf-8").catch(() => "");
-    return content.includes(IMAGE_ONLY);
+    const content = prev.kind === "pdf" && !prev.imageOnlyPages?.length ? await readFile(join(outDir, "content.md"), "utf-8").catch(() => "") : "";
+    return shouldRedoForOcr(prev, content, status, opts.ocr);
   }
 
   private recordOcr(converted: LocalConvertOk): void {
     const ocr = converted.metadata.ocr as { model: string; pages: number[]; lowConfidencePages: number[] } | undefined;
+    // Present whenever the OCR engine looked at the file, even if it read no page: that file is
+    // not redone for OCR again. Native-only runs leave it out, so a later `setup ocr` redoes them.
     this.lastOcr = ocr ? { model: ocr.model, pages: ocr.pages, lowConfidencePages: ocr.lowConfidencePages } : undefined;
     this.lastOcrError = typeof converted.metadata.ocrError === "string" ? converted.metadata.ocrError : undefined;
   }
@@ -191,6 +186,7 @@ export class Extractor {
       kind === "pdf" ? "pdf" : ext === ".pptx" || ext === ".ppt" || ext === ".odp" ? "slides" : "document";
     const pageTexts = converted.pages.map((p) => p.markdown);
     const ocrPages = converted.pages.filter((p) => p.ocr).map((p) => p.index);
+    const ocrLowConfidencePages = converted.pages.filter((p) => p.ocr?.low).map((p) => p.index);
     this.recordOcr(converted);
     await writeFile(join(outDir, "content.md"), renderContentMd(basename(src), label, pageTexts, false, ocrPages.length));
     return {
@@ -201,6 +197,7 @@ export class Extractor {
       hasImages: false,
       tool: converted.engine,
       ocrPages,
+      ...(ocrLowConfidencePages.length ? { ocrLowConfidencePages } : {}),
       imageOnlyPages: converted.pages.filter((p) => p.imageOnly).map((p) => p.index),
     };
   }
@@ -218,7 +215,8 @@ export class Extractor {
         join(outDir, "content.md"),
         renderContentMd(basename(src), "image", [`${ocr.markdown}\n\n(image: ${dest})`], true, 1),
       );
-      return { source: src, outDir, kind: "image", pages: 1, hasImages: true, tool: ocr.engine, ocrPages: [0] };
+      const low = ocr.pages[0]?.ocr?.low;
+      return { source: src, outDir, kind: "image", pages: 1, hasImages: true, tool: ocr.engine, ocrPages: [0], ...(low ? { ocrLowConfidencePages: [0] } : {}) };
     }
     if (ocr && !ocr.ok) this.lastOcrError = ocr.error.message;
     await writeFile(
@@ -233,6 +231,47 @@ export class Extractor {
     await writeFile(join(outDir, "content.md"), renderContentMd(basename(src), "text", [raw], false));
     return { source: src, outDir, kind: "text", pages: 1, tool: "passthrough" };
   }
+}
+
+/**
+ * An unchanged file is extracted again when on-device OCR is ready and would
+ * add text: an image, or a PDF with pages that had no text layer (older
+ * extractions only left the marker in content.md), and OCR hasn't run on it
+ * yet. Never with `--no-ocr` / IMSTUDIUM_OCR=off.
+ */
+export function shouldRedoForOcr(
+  prev: Pick<ExtractManifest, "kind" | "imageOnlyPages" | "ocr">,
+  contentMd: string,
+  status: Pick<OcrRuntimeStatus, "ready" | "disabled">,
+  ocr?: boolean,
+): boolean {
+  if (ocr === false || prev.ocr || !status.ready || status.disabled) return false;
+  if (prev.kind === "image") return true;
+  if (prev.kind !== "pdf") return false;
+  if (prev.imageOnlyPages?.length) return true;
+  return contentMd.includes(IMAGE_ONLY);
+}
+
+/** OCR totals over extraction results, for sync and extract summaries. */
+export interface OcrSummary {
+  /** Files with at least one page read by OCR. */
+  files: number;
+  /** Pages read by OCR. */
+  pages: number;
+  /** Of those, pages below the confidence threshold (marked in content.md). */
+  lowConfidencePages: number;
+  /** Pages that still have no text (no OCR, or OCR found nothing). */
+  imageOnlyPages: number;
+}
+
+export function summarizeOcr(results: Array<Pick<ExtractResult, "ocrPages" | "ocrLowConfidencePages" | "imageOnlyPages" | "skipped" | "error">>): OcrSummary {
+  const done = results.filter((r) => !r.skipped && !r.error);
+  return {
+    files: done.filter((r) => r.ocrPages?.length).length,
+    pages: done.reduce((n, r) => n + (r.ocrPages?.length ?? 0), 0),
+    lowConfidencePages: done.reduce((n, r) => n + (r.ocrLowConfidencePages?.length ?? 0), 0),
+    imageOnlyPages: done.reduce((n, r) => n + (r.imageOnlyPages?.length ?? 0), 0),
+  };
 }
 
 export function extractSlug(filename: string): string {

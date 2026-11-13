@@ -865,6 +865,7 @@ imstudium sync [options]
 | `--dry-run` | List changes without downloading |
 | `--include <items>` | Comma-separated: calendar,wiki,news,forum,courseware,tasks (default: all) |
 | `--extract` | Extract new/changed files to markdown and rebuild the search index |
+| `--no-ocr` | With --extract: native text only, even when on-device OCR is installed |
 
 **`--json`** — full JSON Schema: `imstudium schema sync`
 
@@ -879,11 +880,12 @@ imstudium sync [options]
 | `semesters` | object[] |  |
 | `changes` | object[] |  |
 | `extracted`? | integer | Only with --extract |
+| `ocr`? | object | Only with --extract: pages read by on-device OCR |
 | `schemaVersion` | "1" |  |
 
 ### `imstudium extract`
 
-Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md; photos copied to pages/
+Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and photos once `setup ocr` ran
 
 ```
 imstudium extract [options]
@@ -896,8 +898,22 @@ Alias: `ingest`
 | `--course <name>` | Only one course (title fragment, shortcut, slug or id) |
 | `--file <path>` | Extract a single file to &lt;file&gt;-extracted/ |
 | `--no-images` | Don't copy photos into pages/ |
+| `--no-ocr` | Native text only, even when on-device OCR is installed (also: IMSTUDIUM_OCR=off) |
 | `--force` | Re-extract even if unchanged |
 | `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema extract`
+
+| Key | Type | |
+|---|---|---|
+| `extracted` | integer |  |
+| `skipped` | integer |  |
+| `failed` | integer |  |
+| `hints` | string[] |  |
+| `ocr` | object |  |
+| `results` | object[] |  |
+| `searchIndex`? | any \| null |  |
+| `schemaVersion` | "1" |  |
 
 ### `imstudium index`
 
@@ -1078,6 +1094,32 @@ imstudium setup mcp [options]
 | `--all-agents` | Configure every harness, not only detected |
 | `--force` | Rewrite MCP config even if identical |
 | `-o, --output <dir>` | Studium workspace path (default: config / IMSTUDIUM_WORKSPACE) |
+
+#### `imstudium setup ocr`
+
+Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified PDFium + ONNX Runtime + PP-OCRv6 (~60 MB, once)
+
+```
+imstudium setup ocr [options]
+```
+
+| Option | |
+|---|---|
+| `--force` | Download and verify everything again, models included |
+| `--remove` | Delete the runtime and models; extraction keeps native text and marks image-only pages |
+
+**`--json`** — full JSON Schema: `imstudium schema setup ocr`
+
+| Key | Type | |
+|---|---|---|
+| `action` | "installed" \| "unchanged" \| "removed" \| "absent" | installed: something was fetched · unchanged: all in place · removed / absent: --remove |
+| `runtime` | object |  |
+| `installed` | string[] | Pieces fetched in this run: PDFium, ONNX Runtime, models |
+| `skipped` | string[] | Pieces already in place |
+| `downloadedBytes` | integer |  |
+| `diskBytes` | integer | Size on disk after the run (freed bytes with --remove) |
+| `durationMs` | integer |  |
+| `schemaVersion` | "1" |  |
 
 #### `imstudium setup migrate`
 
