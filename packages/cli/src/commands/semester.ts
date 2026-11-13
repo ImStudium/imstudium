@@ -204,8 +204,12 @@ export function registerSemester(program: Command): void {
     );
 }
 
-/** Your course count in a semester, or null when signed out / offline (never throws). */
-async function enrolledIn(sdk: Awaited<ReturnType<typeof getSdk>>, semesterId: string): Promise<number | null> {
+/**
+ * Your course count in a semester, or null when signed out / offline (never
+ * throws). A new semester with 0 courses is not a reason to roll over yet:
+ * semester status and doctor both read this.
+ */
+export async function enrolledIn(sdk: Awaited<ReturnType<typeof getSdk>>, semesterId: string): Promise<number | null> {
   try {
     if (!(await sdk.auth.loadSession())) return null;
     return (await sdk.courses.listMine(undefined, { semesterId })).length;

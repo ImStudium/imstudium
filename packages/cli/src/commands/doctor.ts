@@ -22,6 +22,7 @@ import { checkForUpdates, getCliVersion } from "../version.js";
 import { getSetupStatus, type SetupStatusReport } from "../setup.js";
 import { act, getSdk, output, type Sdk } from "../runtime.js";
 import { CLI_ENTRY } from "../entry.js";
+import { enrolledIn } from "./semester.js";
 import { outputOption, workspaceDir } from "../kit/args.js";
 import { berlinDateTime, cell } from "../kit/format.js";
 
@@ -252,20 +253,27 @@ export const DOCTOR_CHECKS: CheckDef[] = [
       if (!ws) return skip("no workspace");
       const local = ws.activeSemester;
       const end = local.end ? Date.parse(local.end) : NaN;
-      if (Number.isFinite(end) && end < Date.now()) {
-        return warn(`workspace is on ${local.title}, which ended ${berlinDateTime(end)}`, "imstudium semester start", { workspace: local.slug });
-      }
-      if (offline) return ok(`workspace on ${local.title} (Stud.IP not asked: --offline)`, { workspace: local.slug });
+      const ended = Number.isFinite(end) && end < Date.now();
+      const data = { workspace: local.slug };
+      // Without Stud.IP we can't tell whether you have courses in the next semester yet: semester (status) asks.
+      const endedHere = () => warn(`workspace is on ${local.title}, which ended ${berlinDateTime(end)}`, "imstudium semester", data);
+      if (offline) return ended ? endedHere() : ok(`workspace on ${local.title} (Stud.IP not asked: --offline)`, data);
+      let cur: ReturnType<typeof findCurrentSemester>;
       try {
-        const cur = findCurrentSemester(await withBudget(sdk.courses.semesters.listAll(), NETWORK_BUDGET_MS, "semesters"));
-        const slug = cur ? semesterSlug(String(cur.attributes?.title)) : null;
-        if (slug && slug !== local.slug) {
-          return warn(`workspace on ${local.title}, Stud.IP is in ${cur!.attributes?.title}`, "imstudium semester start", { workspace: local.slug, studip: slug });
-        }
-        return ok(`${local.title} — matches Stud.IP`, { workspace: local.slug, studip: slug });
+        cur = findCurrentSemester(await withBudget(sdk.courses.semesters.listAll(), NETWORK_BUDGET_MS, "semesters"));
       } catch {
-        return ok(`workspace on ${local.title} (Stud.IP not reachable)`, { workspace: local.slug });
+        return ended ? endedHere() : ok(`workspace on ${local.title} (Stud.IP not reachable)`, data);
       }
+      const slug = cur ? semesterSlug(String(cur.attributes?.title)) : null;
+      if (!cur || !slug || slug === local.slug) return ended ? endedHere() : ok(`${local.title} — matches Stud.IP`, { ...data, studip: slug });
+      const title = String(cur.attributes?.title);
+      // Same rule as semester status: roll over once you have courses in the new semester, not before.
+      const enrolled = await withBudget(enrolledIn(sdk, cur.id), NETWORK_BUDGET_MS, "courses").catch(() => null);
+      if (enrolled === 0) {
+        return ok(`${local.title}: no courses in ${title} on Stud.IP yet, so the workspace stays (semester start once you enrol)`, { ...data, studip: slug, enrolled });
+      }
+      const count = enrolled === null ? "" : ` (${enrolled} course${enrolled === 1 ? "" : "s"} there)`;
+      return warn(`workspace on ${local.title}, Stud.IP is in ${title}${count}`, "imstudium semester start", { ...data, studip: slug, enrolled });
     },
   },
   {
