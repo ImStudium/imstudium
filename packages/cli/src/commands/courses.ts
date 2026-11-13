@@ -6,6 +6,17 @@ import { parseLimit } from "../kit/args.js";
 import { table } from "../kit/format.js";
 import { semesterSyncOptions } from "./workspace.js";
 
+/**
+ * Where `files download` writes without -o: the file's Stud.IP name as one
+ * name in the current folder. Whoever uploaded the file chose that name, so
+ * separators become "_" and "." or ".." is never a path.
+ */
+export function downloadName(name: string | undefined, fallback: string): string {
+  const cleaned = (name ?? "").replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim();
+  if (!cleaned) return fallback;
+  return /^\.+$/.test(cleaned) ? "_" : cleaned;
+}
+
 export function registerCourses(program: Command): void {
   const courses = program.command("courses").description("Your enrolled courses (live from Stud.IP)");
 
@@ -101,8 +112,7 @@ export function registerCourses(program: Command): void {
       act(async (fileRefId: string, opts: { output?: string }) => {
         const sdk = await getSdk();
         const meta = await sdk.files.getFileRef(fileRefId);
-        const name = meta.attributes?.name || fileRefId;
-        const dest = opts.output || name;
+        const dest = opts.output || downloadName(meta.attributes?.name, fileRefId);
         if (!dest) throw new ImstudiumError("No output path", "BAD_ARGS");
         const bytes = await sdk.files.downloadFileRef(fileRefId, dest);
         output({ path: dest, bytes }, `Downloaded ${dest} (${bytes} bytes)`);
