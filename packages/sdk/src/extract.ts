@@ -1,7 +1,7 @@
 import { cp, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative } from "node:path";
 import { ensureDir, slugify } from "./config.js";
-import { convertImage, convertLocalDocument, IMAGE_ONLY, OCR_MERGE, probeLocalIngest, type LocalConvertOk } from "./ingest/local-docs.js";
+import { convertImage, convertLocalDocument, IMAGE_ONLY, NATIVE_RULE, OCR_MERGE, probeLocalIngest, type LocalConvertOk } from "./ingest/local-docs.js";
 import { imageToPdf } from "./ingest/image-pdf.js";
 import { isMathCandidate, LAYOUT_MODEL, MATH_MODEL, mathRuntimeStatus, recognizeMath, type Formula, type MathRuntimeStatus } from "./ingest/math.js";
 import { ocrRuntimeStatus, type OcrRuntimeStatus } from "./ingest/ocr-runtime.js";
@@ -74,7 +74,7 @@ export class Extractor {
       try {
         const prev = JSON.parse(await readFile(manifestPath, "utf-8")) as ExtractManifest;
         const unchanged = prev.sourceMtimeMs === srcStat.mtimeMs && prev.sourceSize === srcStat.size;
-        if (unchanged && !(await this.ocrWouldAdd(prev, outDir, opts)) && !(await this.mathWouldAdd(prev, outDir, opts))) {
+        if (unchanged && !nativeOutdated(prev) && !(await this.ocrWouldAdd(prev, outDir, opts)) && !(await this.mathWouldAdd(prev, outDir, opts))) {
           return { source: src, outDir, kind, pages: prev.pages, skipped: true, tool: prev.tool };
         }
       } catch {
@@ -109,6 +109,7 @@ export class Extractor {
       sourceMtimeMs: srcStat.mtimeMs,
       sourceSize: srcStat.size,
       ...(result.imageOnlyPages?.length ? { imageOnlyPages: result.imageOnlyPages } : {}),
+      ...(kind === "pdf" && !result.error ? { nativeRule: NATIVE_RULE } : {}),
       ...(this.lastOcr ? { ocr: this.lastOcr } : {}),
       ...(this.lastOcrError ? { ocrError: this.lastOcrError } : {}),
       ...(this.lastMath ? { math: this.lastMath } : {}),
@@ -264,7 +265,7 @@ export class Extractor {
     let pageTexts = converted.pages.map((p) => p.markdown);
     const ocrPages = converted.pages.filter((p) => p.ocr).map((p) => p.index);
     const ocrLowConfidencePages = converted.pages.filter((p) => p.ocr?.low).map((p) => p.index);
-    const recoveredPages = converted.pages.filter((p) => p.recovered).map((p) => p.index);
+    const recoveredPages = converted.pages.filter((p) => p.recovered || p.fromPositions).map((p) => p.index);
     this.recordOcr(converted);
 
     let formulas = 0;
@@ -335,9 +336,19 @@ export class Extractor {
 }
 
 /**
- * A PDF the OCR path read under the first merge rule, which dropped the text a
- * page's own text layer gave back through PDFium. Only one with pages still
- * text-less can have lost any.
+ * A PDF extracted under the first native rule, which left the pages
+ * pdf-inspector rates scanned image-only even when they carry a text layer.
+ * Only one with pages still text-less can have lost any; native extraction is
+ * quick, so it is simply done again once.
+ */
+export function nativeOutdated(prev: Pick<ExtractManifest, "kind" | "imageOnlyPages" | "nativeRule" | "error">): boolean {
+  return prev.kind === "pdf" && !prev.error && !!prev.imageOnlyPages?.length && (prev.nativeRule ?? 1) < NATIVE_RULE;
+}
+
+/**
+ * A PDF the OCR path read under an older merge rule, which dropped the text a
+ * page's own text layer gave back (through PDFium, or as positioned runs).
+ * Only one with pages still text-less can have lost any.
  */
 function mergeOutdated(prev: Pick<ExtractManifest, "kind" | "imageOnlyPages" | "ocr">): boolean {
   return prev.kind === "pdf" && !!prev.ocr && (prev.ocr.merge ?? 1) < OCR_MERGE && !!prev.imageOnlyPages?.length;

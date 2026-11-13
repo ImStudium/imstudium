@@ -21,8 +21,8 @@ vi.mock("./ingest/local-docs.js", async (orig) => ({
   convertLocalDocument: convert,
 }));
 
-const { Extractor, shouldRedoForOcr, summarizeOcr } = await import("./extract.js");
-const { IMAGE_ONLY, OCR_MERGE } = await import("./ingest/local-docs.js");
+const { Extractor, nativeOutdated, shouldRedoForOcr, summarizeOcr } = await import("./extract.js");
+const { IMAGE_ONLY, MOSTLY_IMAGE, NATIVE_RULE, OCR_MERGE } = await import("./ingest/local-docs.js");
 const { MATH_MODEL, LAYOUT_MODEL } = await import("./ingest/math.js");
 
 const native = (): LocalConvertOk => ({
@@ -166,6 +166,36 @@ describe("Extractor: redo when OCR would add text", () => {
     expect(convert).toHaveBeenCalledTimes(2);
   });
 
+  it("a slide pdf-inspector rated scanned gets its own text without OCR; a file extracted under the old native rule is redone once", async () => {
+    const ex = new Extractor({ anydoc: true, pdfInspector: true });
+    convert.mockResolvedValueOnce(native());
+    await ex.extractFile(src, out);
+    const m = await manifest();
+    expect(m.nativeRule).toBe(NATIVE_RULE);
+    delete m.nativeRule; // as written before the positioned-text fallback
+    await writeFile(join(out, "manifest.json"), JSON.stringify(m));
+
+    const slide = `### Hierarchisches Clustering\n\nDendrogramm der Iris-Daten\n\n${MOSTLY_IMAGE}`;
+    convert.mockResolvedValueOnce({
+      ...native(),
+      markdown: `Page one text\f${slide}`,
+      pages: [
+        { index: 0, markdown: "Page one text" },
+        { index: 1, markdown: slide, fromPositions: true as const },
+      ],
+    });
+    const again = await ex.extractFile(src, out);
+    expect(again).toMatchObject({ recoveredPages: [1], ocrPages: [], imageOnlyPages: [] });
+    const content = await readFile(join(out, "content.md"), "utf-8");
+    expect(content).toContain("Dendrogramm der Iris-Daten");
+    expect(content).not.toContain(IMAGE_ONLY);
+    expect(await manifest()).toMatchObject({ nativeRule: NATIVE_RULE });
+    expect(summarizeOcr([again])).toMatchObject({ recoveredPages: 1, imageOnlyPages: 0 });
+
+    expect((await ex.extractFile(src, out)).skipped).toBe(true);
+    expect(convert).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps the native text and records the error when OCR fails", async () => {
     runtime.ready = true;
     const ex = new Extractor({ anydoc: true, pdfInspector: true });
@@ -194,6 +224,18 @@ describe("shouldRedoForOcr", () => {
     ["--no-ocr", { kind: "image" }, "", ready, false, false],
   ] as const)("%s → %s", (_label, prev, content, status, ocr, expected) => {
     expect(shouldRedoForOcr(prev as never, content, status, ocr)).toBe(expected);
+  });
+});
+
+describe("nativeOutdated", () => {
+  it.each([
+    ["old rule, a page still image-only", { kind: "pdf", imageOnlyPages: [2] }, true],
+    ["old rule, every page has text", { kind: "pdf" }, false],
+    ["current rule", { kind: "pdf", imageOnlyPages: [2], nativeRule: NATIVE_RULE }, false],
+    ["failed extraction", { kind: "pdf", imageOnlyPages: [2], error: "broken" }, false],
+    ["not a PDF", { kind: "office", imageOnlyPages: [0] }, false],
+  ] as const)("%s → %s", (_label, prev, expected) => {
+    expect(nativeOutdated(prev as never)).toBe(expected);
   });
 });
 

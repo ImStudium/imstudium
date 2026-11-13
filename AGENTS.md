@@ -49,7 +49,7 @@ The full layout is in [docs/STUDIUM.md](docs/STUDIUM.md).
 Some limits on extracted text:
 
 - `content.md` comes from pdf-inspector (PDF) and AnyDoc (Office) on the student's machine. Its prose is markdown, not LaTeX: inline math keeps garbled sub- and superscripts (`x<sub>i</sub>`).
-- With `imstudium setup ocr`, scanned pages are read by on-device OCR (the header says `on-device OCR on N page(s)`). Pages it read poorly carry `_(read by OCR with low confidence — check the original)_`. Without it, they are marked `_(image-only page — no text layer)_`.
+- With `imstudium setup ocr`, scanned pages are read by on-device OCR (the header says `on-device OCR on N page(s)`). Pages it read poorly carry `_(read by OCR with low confidence — check the original)_`. Without it, they are marked `_(image-only page — no text layer)_`. A slide that is mostly a picture keeps its own title and labels, marked `_(mostly an image: only the page's own text is above, the image itself is not read)_`.
 - With `imstudium setup ocr --math`, display formulas follow their page as `$$…$$` blocks under `_Formulas on this page, read on this machine as LaTeX …_`. `math.json` lists each with its page, box and check, and `formulas/<id>.png` is its image. They are model output: a wrong exponent or a dropped term changes the meaning.
 - Every formula is checked on the machine. On born-digital pages its letters and digits must be the ones the PDF has in that box. A formula that fails gets `_(formula p3-2 needs a look: …)_`, and a scanned one gets `_(formula p3-2 unchecked: …)_`.
 - Before you write formulas down for a student, follow the formula procedure in the `imstudium-visual` skill:

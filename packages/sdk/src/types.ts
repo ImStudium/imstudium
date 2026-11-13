@@ -314,6 +314,8 @@ export interface ExtractManifest {
   sourceSize: number;
   /** Pages (0-based) left without a text layer. */
   imageOnlyPages?: number[];
+  /** Native page rule the PDF was extracted under (NATIVE_RULE); absent: 1. */
+  nativeRule?: number;
   /** Set when on-device OCR ran for this file. */
   ocr?: ExtractOcrInfo;
   /** OCR was available but failed; the native text was kept. */

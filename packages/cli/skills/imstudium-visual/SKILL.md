@@ -24,6 +24,7 @@ Everything is extracted on the student's machine. The header line says what ran 
 | Typed PDF | pdf-inspector markdown: tables and reading order. Inline math keeps garbled sub- and superscripts (`x<sub>i</sub>`) |
 | Scanned page, OCR installed (`imstudium setup ocr`) | OCR text; `_(read by OCR with low confidence — check the original)_` where it read poorly |
 | Scanned page, no OCR | `_(image-only page — no text layer)_`: open the original |
+| Slide that is mostly a picture (chart, screenshot), no OCR | its own title and labels, then `_(mostly an image: only the page's own text is above, the image itself is not read)_`: open the original for the picture |
 | Display formulas, math installed (`imstudium setup ocr --math`) | `$$…$$` blocks after the page text, under `_Formulas on this page, read on this machine as LaTeX …_`; a note under each one that needs a look; `math.json` and `formulas/<id>.png` (each formula's image) |
 | PPTX / DOCX | AnyDoc native conversion |
 | `.tex` source files | LaTeX passthrough as-is |
