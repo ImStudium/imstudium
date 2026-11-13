@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LocalConvertResult } from "./ingest/local-docs.js";
+import type { LocalConvertOk, LocalConvertResult } from "./ingest/local-docs.js";
 
 /**
  * The extractor's "redo when OCR would add text" rule, with the engines
@@ -24,7 +24,7 @@ vi.mock("./ingest/local-docs.js", async (orig) => ({
 const { Extractor, shouldRedoForOcr, summarizeOcr } = await import("./extract.js");
 const { IMAGE_ONLY } = await import("./ingest/local-docs.js");
 
-const native = (): LocalConvertResult => ({
+const native = (): LocalConvertOk => ({
   ok: true,
   engine: "pdf-inspector",
   pageCount: 2,
@@ -36,7 +36,7 @@ const native = (): LocalConvertResult => ({
   metadata: { engine: "pdf-inspector" },
 });
 
-const withOcr = (): LocalConvertResult => ({
+const withOcr = (): LocalConvertOk => ({
   ok: true,
   engine: "pdf-inspector+ocr",
   pageCount: 2,
@@ -161,11 +161,39 @@ describe("summarizeOcr", () => {
   it("counts OCR files and pages of this run only", () => {
     expect(
       summarizeOcr([
-        { ocrPages: [0, 3], ocrLowConfidencePages: [3], imageOnlyPages: [] },
-        { ocrPages: [], imageOnlyPages: [1, 2] },
-        { ocrPages: [5], skipped: true },
+        { ocrPages: [0, 3], ocrLowConfidencePages: [3], imageOnlyPages: [], mathFormulas: 2 },
+        { ocrPages: [], imageOnlyPages: [1, 2], mathFormulas: 1 },
+        { ocrPages: [5], skipped: true, mathFormulas: 9 },
         { error: "broken" },
       ]),
-    ).toEqual({ files: 1, pages: 2, lowConfidencePages: 1, imageOnlyPages: 2 });
+    ).toEqual({ files: 1, pages: 2, lowConfidencePages: 1, imageOnlyPages: 2, formulas: 3 });
+  });
+});
+
+describe("math in the extractor", () => {
+  it("withFormulas appends $$…$$ blocks under a provenance line, top to bottom", async () => {
+    const { withFormulas, FORMULAS_HEADING } = await import("./extract.js");
+    const text = withFormulas("Page text", [
+      { page: 0, bbox: [0, 10, 5, 20], latex: "a^{2}+b^{2}=c^{2}", score: 0.9 },
+      { page: 0, bbox: [0, 40, 5, 50], latex: "\\sqrt{2}", score: 0.8 },
+    ]);
+    expect(text).toBe(`Page text\n\n${FORMULAS_HEADING}\n\n$$a^{2}+b^{2}=c^{2}$$\n\n$$\\sqrt{2}$$`);
+    expect(withFormulas("Page text", [])).toBe("Page text");
+  });
+
+  it.each([
+    ["pdf with math glyphs", { kind: "pdf" }, "∑ x<sub>i</sub>", true],
+    ["pdf with OCR pages", { kind: "pdf", ocr: { model: "m", pages: [1], lowConfidencePages: [] } }, "plain", true],
+    ["pdf with text-less pages", { kind: "pdf", imageOnlyPages: [0] }, "", true],
+    ["plain pdf", { kind: "pdf" }, "Agenda und Organisation", false],
+    ["OCR'd photo", { kind: "image", ocr: { model: "m", pages: [0], lowConfidencePages: [] } }, "", true],
+    ["math already ran", { kind: "pdf", math: { model: "m", layoutModel: "l", pages: [0], formulas: 0, ms: 1 } }, "∑", false],
+    ["office document", { kind: "office" }, "∑", false],
+  ] as const)("shouldRedoForMath: %s → %s", async (_label, prev, content, expected) => {
+    const { shouldRedoForMath } = await import("./extract.js");
+    expect(shouldRedoForMath(prev as never, content, { ready: true, disabled: false })).toBe(expected);
+    expect(shouldRedoForMath(prev as never, content, { ready: false, disabled: false })).toBe(false);
+    expect(shouldRedoForMath(prev as never, content, { ready: true, disabled: false }, { math: false })).toBe(false);
+    expect(shouldRedoForMath(prev as never, content, { ready: true, disabled: false }, { ocr: false })).toBe(false);
   });
 });

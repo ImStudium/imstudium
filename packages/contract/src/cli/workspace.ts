@@ -126,6 +126,7 @@ const ExtractResult = z.object({
   ocrPages: z.array(z.number().int()).optional().describe("0-based pages read by on-device OCR"),
   ocrLowConfidencePages: z.array(z.number().int()).optional(),
   imageOnlyPages: z.array(z.number().int()).optional().describe("0-based pages still without text"),
+  mathFormulas: z.number().int().optional().describe("Display formulas read into LaTeX (set when math recognition ran)"),
 });
 
 /** `imstudium extract --json` (workspace mode; `--file` returns one result) */

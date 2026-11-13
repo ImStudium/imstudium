@@ -866,6 +866,7 @@ imstudium sync [options]
 | `--include <items>` | Comma-separated: calendar,wiki,news,forum,courseware,tasks (default: all) |
 | `--extract` | Extract new/changed files to markdown and rebuild the search index |
 | `--no-ocr` | With --extract: native text only, even when on-device OCR is installed |
+| `--no-math` | With --extract: no formula recognition, even when installed (setup ocr --math) |
 
 **`--json`** — full JSON Schema: `imstudium schema sync`
 
@@ -899,6 +900,7 @@ Alias: `ingest`
 | `--file <path>` | Extract a single file to &lt;file&gt;-extracted/ |
 | `--no-images` | Don't copy photos into pages/ |
 | `--no-ocr` | Native text only, even when on-device OCR is installed (also: IMSTUDIUM_OCR=off) |
+| `--no-math` | No formula recognition, even when installed (also: IMSTUDIUM_MATH=off) |
 | `--force` | Re-extract even if unchanged |
 | `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
 
@@ -1105,8 +1107,9 @@ imstudium setup ocr [options]
 
 | Option | |
 |---|---|
+| `--math` | Also read display formulas into LaTeX: PP-DocLayout-S + PP-FormulaNet+ S (~340 MB download, once) |
 | `--force` | Download and verify everything again, models included |
-| `--remove` | Delete the runtime and models; extraction keeps native text and marks image-only pages |
+| `--remove` | Delete the runtime and models (with --math: only the math part) |
 
 **`--json`** — full JSON Schema: `imstudium schema setup ocr`
 
@@ -1114,7 +1117,7 @@ imstudium setup ocr [options]
 |---|---|---|
 | `action` | "installed" \| "unchanged" \| "removed" \| "absent" | installed: something was fetched · unchanged: all in place · removed / absent: --remove |
 | `runtime` | object |  |
-| `installed` | string[] | Pieces fetched in this run: PDFium, ONNX Runtime, models |
+| `installed` | string[] | Pieces fetched in this run: PDFium, ONNX Runtime, models, and with --math the binding, renderer and math models |
 | `skipped` | string[] | Pieces already in place |
 | `downloadedBytes` | integer |  |
 | `diskBytes` | integer | Size on disk after the run (freed bytes with --remove) |

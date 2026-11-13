@@ -1,12 +1,22 @@
 import { Option, type Command } from "commander";
-import { archiveLegacyConfigDir, ensureMigrated, ImstudiumError, installOcrRuntime, ocrRuntimeStatus, removeOcrRuntime } from "@imstudium/sdk";
+import {
+  archiveLegacyConfigDir,
+  ensureMigrated,
+  ImstudiumError,
+  installMathRuntime,
+  installOcrRuntime,
+  mathRuntimeStatus,
+  ocrRuntimeStatus,
+  removeMathRuntime,
+  removeOcrRuntime,
+} from "@imstudium/sdk";
 import type { SetupOcrOutput } from "@imstudium/contract";
 import { formatSetupSummary, getSetupStatus, runSetup, type AgentId } from "../setup.js";
 import { checkForUpdates, runGlobalUpdate } from "../version.js";
 import { act, getSdk, note, output } from "../runtime.js";
 import { outputOption } from "../kit/args.js";
 import { CLI_ENTRY } from "../entry.js";
-import { formatBytes, ocrRuntimeView } from "../ocr.js";
+import { formatBytes, ocrDiskBytes, ocrRuntimeView } from "../ocr.js";
 
 const AGENT_HELP = "cursor | claude-code | claude-desktop | codex | windsurf | opencode | all";
 
@@ -127,14 +137,15 @@ export function registerSetup(program: Command): void {
   setup
     .command("ocr")
     .description("Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified PDFium + ONNX Runtime + PP-OCRv6 (~60 MB, once)")
+    .option("--math", "Also read display formulas into LaTeX: PP-DocLayout-S + PP-FormulaNet+ S (~340 MB download, once)")
     .option("--force", "Download and verify everything again, models included")
-    .option("--remove", "Delete the runtime and models; extraction keeps native text and marks image-only pages")
+    .option("--remove", "Delete the runtime and models (with --math: only the math part)")
     .action(
-      act(async (opts: { force?: boolean; remove?: boolean }) => {
+      act(async (opts: { math?: boolean; force?: boolean; remove?: boolean }) => {
         if (opts.force && opts.remove) throw new ImstudiumError("--force and --remove exclude each other", "BAD_ARGS");
+        const started = Date.now();
         if (opts.remove) {
-          const started = Date.now();
-          const removed = await removeOcrRuntime();
+          const removed = opts.math ? { ...(await removeMathRuntime()), dir: mathRuntimeStatus().dir } : await removeOcrRuntime();
           const payload: SetupOcrOutput = {
             action: removed.removed ? "removed" : "absent",
             runtime: ocrRuntimeView(),
@@ -144,7 +155,8 @@ export function registerSetup(program: Command): void {
             diskBytes: removed.freedBytes,
             durationMs: Date.now() - started,
           };
-          output(payload, removed.removed ? `Removed on-device OCR (${formatBytes(removed.freedBytes)} freed) from ${removed.dir}` : `No OCR runtime in ${removed.dir}`);
+          const what = opts.math ? "on-device math recognition" : "on-device OCR";
+          output(payload, removed.removed ? `Removed ${what} (${formatBytes(removed.freedBytes)} freed) from ${removed.dir}` : `Nothing to remove in ${removed.dir}`);
           return;
         }
         const before = ocrRuntimeStatus();
@@ -152,22 +164,37 @@ export function registerSetup(program: Command): void {
           throw new ImstudiumError(`No local OCR runtime for ${before.platform}`, "OCR_UNSUPPORTED", undefined, undefined, { platform: before.platform });
         }
         const result = await installOcrRuntime({ force: opts.force, onProgress: note });
-        const runtime = ocrRuntimeView(result.status);
+        const installed = [...result.installed];
+        const skipped = [...result.skipped];
+        let downloadedBytes = result.downloadedBytes;
+        if (opts.math) {
+          if (!mathRuntimeStatus().ready) note(`math: up to ${formatBytes(mathRuntimeStatus().downloadBytes)} to download, once`);
+          const math = await installMathRuntime({ force: opts.force, onProgress: note });
+          installed.push(...math.installed);
+          skipped.push(...math.skipped);
+          downloadedBytes += math.downloadedBytes;
+        }
+        const runtime = ocrRuntimeView();
         const payload: SetupOcrOutput = {
-          action: result.installed.length ? "installed" : "unchanged",
+          action: installed.length ? "installed" : "unchanged",
           runtime,
-          installed: result.installed,
-          skipped: result.skipped,
-          downloadedBytes: result.downloadedBytes,
-          diskBytes: result.diskBytes,
-          durationMs: result.durationMs,
+          installed,
+          skipped,
+          downloadedBytes,
+          diskBytes: await ocrDiskBytes(runtime.dir),
+          durationMs: Date.now() - started,
         };
         const lines = [
-          result.installed.length
-            ? `On-device OCR ready: ${result.installed.join(", ")} installed${result.downloadedBytes ? ` (${formatBytes(result.downloadedBytes)} downloaded, SHA-256 verified)` : ""}`
+          installed.length
+            ? `On-device OCR ready: ${installed.join(", ")} installed${downloadedBytes ? ` (${formatBytes(downloadedBytes)} downloaded, SHA-256 verified)` : ""}`
             : "On-device OCR already installed and verified",
-          `  ${runtime.model} · PDFium ${runtime.pins.pdfium} · ONNX Runtime ${runtime.pins.onnxruntime} · ${formatBytes(result.diskBytes)} in ${runtime.dir}`,
-          runtime.disabled ? "  Switched off by IMSTUDIUM_OCR=off: unset it to use OCR" : "  Pages without a text layer and JPEG/PNG photos are read on this machine at the next extract (imstudium extract, or sync --extract)",
+          `  ${runtime.model} · PDFium ${runtime.pins.pdfium} · ONNX Runtime ${runtime.pins.onnxruntime} · ${formatBytes(payload.diskBytes)} in ${runtime.dir}`,
+          runtime.math.ready
+            ? `  Math: display formulas become $$…$$ LaTeX in content.md (${runtime.math.model}, ${runtime.math.layoutModel})`
+            : "  Math: not installed (optional, ~340 MB): imstudium setup ocr --math",
+          runtime.disabled
+            ? "  Switched off by IMSTUDIUM_OCR=off: unset it to use OCR"
+            : "  Pages without a text layer and JPEG/PNG photos are read on this machine at the next extract (imstudium extract, or sync --extract)",
         ];
         output(payload, lines.join("\n"));
       }),

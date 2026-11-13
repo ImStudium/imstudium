@@ -19,6 +19,16 @@ export const OcrRuntime = z.object({
   pins: z.object({ pdfium: z.string(), onnxruntime: z.string() }).describe("The versions this CLI installs"),
   installed: OcrInstalled.nullable().describe("What is on disk, also when it is for older pins"),
   reason: z.string().nullable().describe("Why OCR will not run, when it won't"),
+  math: z
+    .object({
+      ready: z.boolean().describe("Display formulas are read into LaTeX at extraction (setup ocr --math)"),
+      disabled: z.boolean().describe("Switched off with IMSTUDIUM_MATH=off or IMSTUDIUM_OCR=off"),
+      model: z.string(),
+      layoutModel: z.string(),
+      downloadBytes: z.number().int().describe("What setup ocr --math downloads"),
+      reason: z.string().nullable(),
+    })
+    .describe("Optional on-device math recognition (PP-DocLayout-S + PP-FormulaNet+ S)"),
 });
 export type OcrRuntime = z.infer<typeof OcrRuntime>;
 
@@ -27,7 +37,7 @@ export const SetupOcrOutput = z
   .object({
     action: z.enum(["installed", "unchanged", "removed", "absent"]).describe("installed: something was fetched · unchanged: all in place · removed / absent: --remove"),
     runtime: OcrRuntime,
-    installed: z.array(z.string()).describe("Pieces fetched in this run: PDFium, ONNX Runtime, models"),
+    installed: z.array(z.string()).describe("Pieces fetched in this run: PDFium, ONNX Runtime, models, and with --math the binding, renderer and math models"),
     skipped: z.array(z.string()).describe("Pieces already in place"),
     downloadedBytes: z.number().int(),
     diskBytes: z.number().int().describe("Size on disk after the run (freed bytes with --remove)"),
@@ -42,5 +52,6 @@ export const OcrSummary = z.object({
   pages: z.number().int().describe("Pages read by OCR"),
   lowConfidencePages: z.number().int().describe("OCR pages below the confidence threshold, marked in content.md"),
   imageOnlyPages: z.number().int().describe("Pages that still have no text"),
+  formulas: z.number().int().describe("Display formulas read into LaTeX on this machine ($$…$$ in content.md, boxes in math.json)"),
 });
 export type OcrSummary = z.infer<typeof OcrSummary>;

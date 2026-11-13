@@ -61,8 +61,9 @@ export function registerSync(program: Command): void {
     .option("--include <items>", `Comma-separated: ${SYNC_PARTS.join(",")} (default: all)`)
     .option("--extract", "Extract new/changed files to markdown and rebuild the search index")
     .option("--no-ocr", "With --extract: native text only, even when on-device OCR is installed")
+    .option("--no-math", "With --extract: no formula recognition, even when installed (setup ocr --math)")
     .action(
-      act(async (opts: { output?: string; course?: string; semester?: string; layout?: string; dryRun?: boolean; include?: string; extract?: boolean; ocr?: boolean; allSemesters?: boolean }) => {
+      act(async (opts: { output?: string; course?: string; semester?: string; layout?: string; dryRun?: boolean; include?: string; extract?: boolean; ocr?: boolean; math?: boolean; allSemesters?: boolean }) => {
         const sdk = await getSdk();
         const out = workspaceDir(sdk, opts);
         if (opts.layout && opts.layout !== "tree" && opts.layout !== "flat") {
@@ -78,6 +79,7 @@ export function registerSync(program: Command): void {
           include: parseInclude(opts.include),
           extract: opts.extract,
           ocr: opts.ocr,
+          math: opts.math,
           onProgress: note,
         });
         const { report } = result;
@@ -113,12 +115,13 @@ export function registerSync(program: Command): void {
     .option("--file <path>", "Extract a single file to <file>-extracted/")
     .option("--no-images", "Don't copy photos into pages/")
     .option("--no-ocr", "Native text only, even when on-device OCR is installed (also: IMSTUDIUM_OCR=off)")
+    .option("--no-math", "No formula recognition, even when installed (also: IMSTUDIUM_MATH=off)")
     .option("--force", "Re-extract even if unchanged")
     .addOption(outputOption())
     .action(
-      act(async (opts: { course?: string; file?: string; images?: boolean; ocr?: boolean; force?: boolean; output?: string }) => {
+      act(async (opts: { course?: string; file?: string; images?: boolean; ocr?: boolean; math?: boolean; force?: boolean; output?: string }) => {
         const sdk = await getSdk();
-        const extractOpts = { images: opts.images, force: opts.force, ocr: opts.ocr };
+        const extractOpts = { images: opts.images, force: opts.force, ocr: opts.ocr, math: opts.math };
 
         if (opts.file) {
           const src = expandPath(opts.file);

@@ -7,6 +7,7 @@ import type { Command } from "commander";
 import {
   detectTools,
   findCurrentSemester,
+  mathRuntimeStatus,
   ocrRuntimeStatus,
   probeOAuthServer,
   readRouteCatalog,
@@ -281,10 +282,12 @@ export const DOCTOR_CHECKS: CheckDef[] = [
     title: "On-device OCR",
     run: async () => {
       const s = ocrRuntimeStatus();
-      const data = { platform: s.platform, ready: s.ready, disabled: s.disabled, dir: s.dir, installed: s.installed };
+      const m = mathRuntimeStatus();
+      const data = { platform: s.platform, ready: s.ready, disabled: s.disabled, dir: s.dir, installed: s.installed, math: { ready: m.ready, disabled: m.disabled, reason: m.reason } };
       if (!s.supported) return skip(`no pinned runtime for ${s.platform}; image-only pages stay marked, native text is unaffected`);
       if (s.ready && s.disabled) return skip("installed, switched off by IMSTUDIUM_OCR=off");
-      if (s.ready) return ok(`${s.model} · PDFium ${s.installed?.pdfium} · ONNX Runtime ${s.installed?.onnxruntime} (offline, on this machine)`, data);
+      const math = m.ready ? (m.disabled ? " · math off (IMSTUDIUM_MATH=off)" : " · math: formulas as LaTeX") : " · math not installed (optional: imstudium setup ocr --math)";
+      if (s.ready) return ok(`${s.model} · PDFium ${s.installed?.pdfium} · ONNX Runtime ${s.installed?.onnxruntime} (offline, on this machine)${math}`, data);
       return warn(`${s.reason ?? "not ready"}: scanned pages and photos stay unread`, s.reason?.startsWith("runs under Node") ? "Run imstudium with Node: npm i -g @imstudium/cli" : "imstudium setup ocr", data);
     },
   },

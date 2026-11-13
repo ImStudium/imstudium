@@ -36,6 +36,8 @@ export interface RunSyncOptions {
   extract?: boolean;
   /** false: native text only, even with the OCR runtime installed (sync --no-ocr). */
   ocr?: boolean;
+  /** false: no formula recognition (sync --no-math). */
+  math?: boolean;
   include?: SyncPart[];
   onProgress?: (message: string) => void;
 }
@@ -309,6 +311,7 @@ async function extractAndIndex(
       course: { title: course.title, path: course.path },
       workspaceRoot: opts.out,
       ocr: opts.ocr,
+      math: opts.math,
     });
     result.extracted += results.filter((r) => !r.error && !r.skipped).length;
     const ocr = summarizeOcr(results);
@@ -317,6 +320,7 @@ async function extractAndIndex(
       pages: result.ocr.pages + ocr.pages,
       lowConfidencePages: result.ocr.lowConfidencePages + ocr.lowConfidencePages,
       imageOnlyPages: result.ocr.imageOnlyPages + ocr.imageOnlyPages,
+      formulas: result.ocr.formulas + ocr.formulas,
     };
   }
   await rebuildSearchIndexes(opts.out, ws);

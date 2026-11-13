@@ -15,6 +15,8 @@ Extractor
 FilesResource
 ForumResource
 ImstudiumError
+LAYOUT_MODEL
+MATH_MODEL
 MessagesResource
 NewsResource
 OCR_MODEL
@@ -71,6 +73,7 @@ getDefaultConfig
 groupRoutes
 hhmm
 htmlToText
+installMathRuntime
 installOcrRuntime
 isAuthError
 isChromeRunning
@@ -84,7 +87,9 @@ loadConfig
 loadRouteCatalog
 matchRoute
 matchUnit
+mathRuntimeStatus
 mergeLiveAndSavedNews
+normalizeLatex
 normalizeStudiumWorkspace
 oauthEndpoints
 ocrDisabledByEnv
@@ -103,6 +108,8 @@ probeOAuthServer
 readRouteCatalog
 readSavedNews
 rebuildSearchIndexes
+recognizeMath
+removeMathRuntime
 removeOcrRuntime
 renderWiki
 resolveCourseDir
@@ -116,6 +123,7 @@ searchWorkspace
 selectNews
 semesterIdFromRelationships
 semesterSlug
+shouldRedoForMath
 shouldRedoForOcr
 slugify
 sortTasks
@@ -132,5 +140,6 @@ upgradeLegacyNews
 weekRange
 weekdayOf
 wikiPageUrl
+withFormulas
 writeNewsMarkdown
 writeStundenplanMarkdown

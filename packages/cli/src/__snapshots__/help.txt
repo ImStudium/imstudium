@@ -601,6 +601,7 @@ Options:
   --include <items>   Comma-separated: calendar,wiki,news,forum,courseware,tasks (default: all)
   --extract           Extract new/changed files to markdown and rebuild the search index
   --no-ocr            With --extract: native text only, even when on-device OCR is installed
+  --no-math           With --extract: no formula recognition, even when installed (setup ocr --math)
   -h, --help          display help for command
 
 ### imstudium extract
@@ -615,6 +616,7 @@ Options:
   --no-images         Don't copy photos into pages/
   --no-ocr            Native text only, even when on-device OCR is installed (also:
                       IMSTUDIUM_OCR=off)
+  --no-math           No formula recognition, even when installed (also: IMSTUDIUM_MATH=off)
   --force             Re-extract even if unchanged
   -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
   -h, --help          display help for command
@@ -788,8 +790,10 @@ Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified PDF
 PP-OCRv6 (~60 MB, once)
 
 Options:
+  --math      Also read display formulas into LaTeX: PP-DocLayout-S + PP-FormulaNet+ S (~340 MB
+              download, once)
   --force     Download and verify everything again, models included
-  --remove    Delete the runtime and models; extraction keeps native text and marks image-only pages
+  --remove    Delete the runtime and models (with --math: only the math part)
   -h, --help  display help for command
 
 ### imstudium setup migrate

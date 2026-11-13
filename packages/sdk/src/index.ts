@@ -93,7 +93,30 @@ export { pickCourse, resolveCourseDir, resolveCourseQuery, resolveWorkspaceCours
 export { ensureMigrated, archiveLegacyConfigDir, convertLegacyManifest, legacyPaths, type MigrationResult } from "./migrate.js";
 
 // ── Extraction, viewer and search ────────────────────────────────────────────
-export { Extractor, detectTools, toolHints, extractSlug, shouldRedoForOcr, summarizeOcr, type ExtractTools, type OcrSummary } from "./extract.js";
+export {
+  Extractor,
+  detectTools,
+  toolHints,
+  extractSlug,
+  shouldRedoForOcr,
+  shouldRedoForMath,
+  summarizeOcr,
+  withFormulas,
+  type ExtractTools,
+  type OcrSummary,
+} from "./extract.js";
+export {
+  installMathRuntime,
+  removeMathRuntime,
+  mathRuntimeStatus,
+  recognizeMath,
+  normalizeLatex,
+  MATH_MODEL,
+  LAYOUT_MODEL,
+  type Formula,
+  type MathResult,
+  type MathRuntimeStatus,
+} from "./ingest/math.js";
 export {
   installOcrRuntime,
   removeOcrRuntime,

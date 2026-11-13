@@ -277,6 +277,17 @@ export interface ExtractResult {
   ocrLowConfidencePages?: number[];
   /** Pages still without text. */
   imageOnlyPages?: number[];
+  /** Display formulas read into LaTeX on this machine (set when math ran). */
+  mathFormulas?: number;
+}
+
+export interface ExtractMathInfo {
+  model: string;
+  layoutModel: string;
+  /** Pages (0-based) the layout pass looked at. */
+  pages: number[];
+  formulas: number;
+  ms: number;
 }
 
 export interface ExtractOcrInfo {
@@ -301,6 +312,10 @@ export interface ExtractManifest {
   ocr?: ExtractOcrInfo;
   /** OCR was available but failed; the native text was kept. */
   ocrError?: string;
+  /** Set when on-device math recognition ran (formulas in math.json). */
+  math?: ExtractMathInfo;
+  /** Math was available but failed; the text was kept. */
+  mathError?: string;
 }
 
 export interface FileTreeNode {
