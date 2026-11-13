@@ -115,65 +115,67 @@ function asError(err: unknown, fallback: string): Error {
 }
 
 /**
- * Native extraction plus on-device OCR for the pages pdf-inspector routes.
- * `offline: true` — the engine may never download anything during extraction.
+ * Native extraction for every page, then on-device OCR for exactly the pages
+ * native extraction flags as having no usable text layer (`Force` on those
+ * page numbers, `offline: true`: nothing is ever downloaded here). Born-digital
+ * pages keep pdf-inspector's native markdown unchanged: its OCR entry point
+ * assembles native pages differently (tables lose rows in 1.25.2), so it only
+ * ever sees the pages it has to read.
  */
-async function convertPdfWithOcr(bytes: Uint8Array): Promise<LocalConvertResult> {
+async function convertPdfWithOcr(bytes: Uint8Array, native: LocalConvertOk): Promise<LocalConvertResult> {
+  const targets = native.pages.filter((p) => p.imageOnly).map((p) => p.index);
+  const ocrInfo = { model: OCR_MODEL, onDevice: true, pages: [] as number[], lowConfidencePages: [] as number[], ocrTimeMs: 0 };
+  if (!targets.length) {
+    native.metadata.ocr = ocrInfo;
+    return native;
+  }
   const { processPdfWithOcr } = await loadPdfInspector();
-  const r = await processPdfWithOcr(toNodeBuffer(bytes), { mode: "Auto" as never, offline: true });
-  const pages: LocalPage[] = r.pages.map((p) => {
+  const r = await processPdfWithOcr(toNodeBuffer(bytes), { mode: "Force" as never, pageNumbers: targets.map((i) => i + 1), offline: true });
+  const byIndex = new Map(r.pages.map((p) => [p.pageNumber - 1, p]));
+  const pages: LocalPage[] = native.pages.map((page) => {
+    const p = targets.includes(page.index) ? byIndex.get(page.index) : undefined;
+    if (!p) return page;
     const source = String(p.provenance.source);
     const confidence = typeof p.provenance.ocrConfidence === "number" ? p.provenance.ocrConfidence : null;
     const markdown = (p.markdown ?? "").trim();
     const fromOcr = source === "Ocr" || source === "Fused";
-    const low = fromOcr && (p.provenance.hostedRecommended || (confidence !== null && confidence < LOW_CONFIDENCE));
+    if (!fromOcr) return page;
+    const low = p.provenance.hostedRecommended || (confidence !== null && confidence < LOW_CONFIDENCE);
     return {
-      index: p.pageNumber - 1,
+      index: page.index,
       markdown: !markdown ? IMAGE_ONLY : low ? `${markdown}\n\n${OCR_LOW_CONFIDENCE}` : markdown,
       imageOnly: !markdown,
-      ...(fromOcr ? { ocr: { source: source as "Ocr" | "Fused", confidence, low } } : {}),
+      ocr: { source: source as "Ocr" | "Fused", confidence, low },
     };
   });
-  const pageCount = r.pageCount || pages.length || 1;
-  const ocrPages = pages.filter((p) => p.ocr).map((p) => p.index);
+  ocrInfo.pages = pages.filter((p) => p.ocr).map((p) => p.index);
+  ocrInfo.lowConfidencePages = pages.filter((p) => p.ocr?.low).map((p) => p.index);
+  ocrInfo.ocrTimeMs = r.ocrTimeMs;
   return {
     ok: true,
     markdown: joinPagesFormFeed(pages),
-    pages: pages.length ? pages : [{ index: 0, markdown: IMAGE_ONLY, imageOnly: true }],
-    engine: "pdf-inspector+ocr",
-    pageCount,
+    pages,
+    engine: ocrInfo.pages.length ? "pdf-inspector+ocr" : "pdf-inspector",
+    pageCount: native.pageCount,
     metadata: {
-      engine: "pdf-inspector+ocr",
-      local: true,
-      pageCount,
-      numPages: pageCount,
+      ...native.metadata,
+      engine: ocrInfo.pages.length ? "pdf-inspector+ocr" : "pdf-inspector",
       imageOnlyPages: pages.filter((p) => p.imageOnly).map((p) => p.index),
-      ocr: {
-        model: OCR_MODEL,
-        onDevice: true,
-        pages: ocrPages,
-        lowConfidencePages: pages.filter((p) => p.ocr?.low).map((p) => p.index),
-        ocrTimeMs: r.ocrTimeMs,
-      },
-      pagesWithTables: r.pagesWithTables,
-      pagesWithColumns: r.pagesWithColumns,
-      isComplex: r.isComplex,
+      ocr: ocrInfo,
     },
   };
 }
 
 async function convertPdf(bytes: Uint8Array, options: ConvertOptions = {}): Promise<LocalConvertResult> {
-  if (ocrEnabled(options)) {
-    try {
-      return await convertPdfWithOcr(bytes);
-    } catch (err) {
-      // A broken runtime must not cost the student the native text.
-      const native = await convertPdfNative(bytes);
-      if (native.ok) native.metadata.ocrError = asError(err, "OCR failed").message;
-      return native;
-    }
+  const native = await convertPdfNative(bytes);
+  if (!native.ok || !ocrEnabled(options)) return native;
+  try {
+    return await convertPdfWithOcr(bytes, native);
+  } catch (err) {
+    // A broken runtime must not cost the student the native text.
+    native.metadata.ocrError = asError(err, "OCR failed").message;
+    return native;
   }
-  return convertPdfNative(bytes);
 }
 
 /** OCR an image by wrapping it in a one-page PDF. null: OCR unavailable or the format can't be wrapped. */
