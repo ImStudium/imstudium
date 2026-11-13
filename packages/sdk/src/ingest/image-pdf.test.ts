@@ -1,6 +1,6 @@
 import { deflateSync, inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { IMAGE_PDF_DPI, imageToPdf } from "./image-pdf.js";
+import { IMAGE_PDF_DPI, imagesToPdf, imageToPdf } from "./image-pdf.js";
 
 /**
  * Synthetic images only: tiny PNGs written here (every filter type, every
@@ -184,5 +184,25 @@ describe("imageToPdf: JPEG", () => {
     expect(imageToPdf(Buffer.from("GIF89a\x01\x00\x01\x00", "latin1"))).toBeNull();
     expect(imageToPdf(Buffer.from("RIFF\0\0\0\0WEBPVP8 ", "latin1"))).toBeNull();
     expect(imageToPdf(Buffer.from([0xff, 0xd8, 0x00, 0x00]))).toBeNull();
+  });
+});
+
+describe("imagesToPdf", () => {
+  it("writes one page per image, each with its own size", () => {
+    const a = png({ width: 300, height: 150, colorType: 0, samples: new Array(300 * 150).fill(255) });
+    const b = jpeg(600, 900, 3);
+    const pdf = imagesToPdf([a, b], 300)!.toString("latin1");
+    expect(pdf).toContain("/Count 2");
+    const boxes = [...pdf.matchAll(/\/MediaBox \[([^\]]+)\]/g)].map((m) => m[1]!.trim().split(/\s+/).map(Number));
+    expect(boxes).toEqual([
+      [0, 0, 72, 36],
+      [0, 0, 144, 216],
+    ]);
+    expect(pdf.match(/\/Subtype \/Image/g)).toHaveLength(2);
+  });
+
+  it("is null when one image can't be wrapped or there is none", () => {
+    expect(imagesToPdf([jpeg(10, 10, 1), Buffer.from("GIF89a", "latin1")])).toBeNull();
+    expect(imagesToPdf([])).toBeNull();
   });
 });

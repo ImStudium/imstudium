@@ -14,6 +14,7 @@ EXTRACTION_LIMITS_FOR_AGENTS
 Extractor
 FilesResource
 ForumResource
+IMAGE_PDF_DPI
 ImstudiumError
 LAYOUT_MODEL
 MATH_MODEL
@@ -50,6 +51,7 @@ computeSemesterProgress
 consultationBookingUrl
 contentDeps
 convertLegacyManifest
+convertLocalDocument
 courseActiveInSemester
 coursewareElementUrl
 createSdk
@@ -73,6 +75,8 @@ getDefaultConfig
 groupRoutes
 hhmm
 htmlToText
+imageToPdf
+imagesToPdf
 installMathRuntime
 installOcrRuntime
 isAuthError

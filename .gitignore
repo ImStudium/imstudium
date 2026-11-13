@@ -7,6 +7,7 @@ dist/
 .env.*
 !.env.example
 coverage/
+.bench/
 *.tsbuildinfo
 pnpm-lock.yaml
 

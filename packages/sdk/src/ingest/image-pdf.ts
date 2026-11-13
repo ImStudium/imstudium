@@ -128,20 +128,38 @@ function pngInfo(bytes: Buffer): RasterImage | null {
 }
 
 /** A one-page PDF showing the image at IMAGE_PDF_DPI, or null for formats we can't wrap (GIF, WebP, 16-bit PNG …). */
-export function imageToPdf(bytes: Uint8Array): Buffer | null {
-  const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const img = jpegInfo(buf) ?? pngInfo(buf);
-  if (!img) return null;
-  const w = (img.width * 72) / IMAGE_PDF_DPI;
-  const h = (img.height * 72) / IMAGE_PDF_DPI;
-  const content = `q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} 0 0 cm /Im0 Do Q`;
-  const decode = img.invertCmyk ? " /Decode [1 0 1 0 1 0 1 0]" : "";
-  const imageHeader = `<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace ${img.colorSpace} /BitsPerComponent 8 /Filter ${img.filter}${decode} /Length ${img.data.length} >>\nstream\n`;
-  return buildPdf([
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w.toFixed(2)} ${h.toFixed(2)}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`,
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
-    Buffer.concat([Buffer.from(imageHeader, "latin1"), img.data, Buffer.from("\nendstream", "latin1")]),
-  ]);
+export function imageToPdf(bytes: Uint8Array, dpi = IMAGE_PDF_DPI): Buffer | null {
+  return imagesToPdf([bytes], dpi);
+}
+
+/**
+ * One PDF page per image (a scanned handout, a series of whiteboard photos),
+ * each at `dpi`. Null when any image can't be wrapped.
+ */
+export function imagesToPdf(images: Uint8Array[], dpi = IMAGE_PDF_DPI): Buffer | null {
+  const decoded: RasterImage[] = [];
+  for (const bytes of images) {
+    const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const img = jpegInfo(buf) ?? pngInfo(buf);
+    if (!img) return null;
+    decoded.push(img);
+  }
+  if (!decoded.length) return null;
+  // Objects: 1 catalog, 2 pages, then per page: page, content, image.
+  const kids = decoded.map((_, i) => `${3 + i * 3} 0 R`).join(" ");
+  const objects: Array<string | Buffer> = ["<< /Type /Catalog /Pages 2 0 R >>", `<< /Type /Pages /Kids [${kids}] /Count ${decoded.length} >>`];
+  decoded.forEach((img, i) => {
+    const page = 3 + i * 3;
+    const w = (img.width * 72) / dpi;
+    const h = (img.height * 72) / dpi;
+    const content = `q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} 0 0 cm /Im0 Do Q`;
+    const decode = img.invertCmyk ? " /Decode [1 0 1 0 1 0 1 0]" : "";
+    const imageHeader = `<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace ${img.colorSpace} /BitsPerComponent 8 /Filter ${img.filter}${decode} /Length ${img.data.length} >>\nstream\n`;
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w.toFixed(2)} ${h.toFixed(2)}] /Resources << /XObject << /Im0 ${page + 2} 0 R >> >> /Contents ${page + 1} 0 R >>`,
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+      Buffer.concat([Buffer.from(imageHeader, "latin1"), img.data, Buffer.from("\nendstream", "latin1")]),
+    );
+  });
+  return buildPdf(objects);
 }

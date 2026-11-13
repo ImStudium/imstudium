@@ -105,6 +105,8 @@ export {
   type ExtractTools,
   type OcrSummary,
 } from "./extract.js";
+export { imageToPdf, imagesToPdf, IMAGE_PDF_DPI } from "./ingest/image-pdf.js";
+export { convertLocalDocument, type LocalConvertResult, type LocalPage } from "./ingest/local-docs.js";
 export {
   installMathRuntime,
   removeMathRuntime,
