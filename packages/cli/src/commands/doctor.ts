@@ -297,11 +297,17 @@ export const DOCTOR_CHECKS: CheckDef[] = [
     run: async ({ setup }) => {
       const s = await setup;
       const detected = s.detected.map((a) => a.id);
-      if (!detected.length) return ok("no coding agent detected (skills are optional)", { detected });
-      if (!s.manifest) return warn(`detected ${detected.join(", ")} — skills not installed`, "imstudium setup all -y", { detected });
-      if (s.staleSkills.length) return warn(`stale skills: ${s.staleSkills.join(", ")}`, "imstudium setup all -y", { detected, stale: s.staleSkills });
-      if (!s.upToDate) return warn("setup is from another version or workspace", "imstudium setup all -y", { detected });
-      return ok(`skills current for ${detected.join(", ")}`, { detected });
+      const viaPlugin = s.detected.filter((a) => a.plugin).map((a) => a.id);
+      const rest = detected.filter((id) => !viaPlugin.includes(id));
+      const plugin = viaPlugin.length ? `imstudium plugin in ${viaPlugin.join(", ")}` : "";
+      const data = { detected, plugin: viaPlugin };
+      if (!detected.length) return ok("no coding agent detected (skills are optional)", data);
+      if (!rest.length) return ok(`skills come from the ${plugin}`, data);
+      const also = plugin ? ` (${plugin})` : "";
+      if (!s.manifest) return warn(`detected ${rest.join(", ")}: skills not installed${also}`, "imstudium setup all -y", data);
+      if (s.staleSkills.length) return warn(`stale skills: ${s.staleSkills.join(", ")}${also}`, "imstudium setup all -y", { ...data, stale: s.staleSkills });
+      if (!s.upToDate) return warn(`setup is from another version or workspace${also}`, "imstudium setup all -y", data);
+      return ok(`skills current for ${rest.join(", ")}${also}`, data);
     },
   },
   {

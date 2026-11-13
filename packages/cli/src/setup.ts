@@ -12,8 +12,10 @@ import {
   detectAgents,
   emptyManifest,
   hashContent,
+  installedPlugin,
   resolveAgentProfiles,
   uniqueSkillsDirs,
+  type PluginInstall,
 } from "./agents.js";
 import { convertLegacyManifest, ensureMigrated, legacyPaths } from "@imstudium/sdk";
 
@@ -31,7 +33,7 @@ export interface SetupOptions {
 }
 
 export interface SetupItemResult {
-  action: "installed" | "skipped" | "updated";
+  action: "installed" | "skipped" | "updated" | "removed";
   path: string;
 }
 
@@ -41,6 +43,10 @@ export interface SetupResult {
   mcp: SetupItemResult[];
   workflows: SetupItemResult[];
   project?: SetupItemResult[];
+  /** Harnesses whose skills come from the installed imstudium plugin; setup leaves their skills folder to it. */
+  plugins: PluginInstall[];
+  /** Old copies cleaned up: workflow skills installed under their folder name, standalone skills a plugin now provides. */
+  removed: SetupItemResult[];
   manifest: SetupManifest;
 }
 
@@ -142,6 +148,68 @@ async function listSkillDirs(root: string): Promise<string[]> {
   }
 }
 
+/** The `name:` in a SKILL.md frontmatter, or null. */
+export function skillFrontmatterName(content: string): string | null {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  const m = fm ? /^name:\s*["']?([^"'\r\n]+?)["']?\s*$/m.exec(fm[1]!) : null;
+  return m ? m[1]!.trim() : null;
+}
+
+interface BundledSkill {
+  /** Source folder, e.g. skills/workflows/klausur-prep */
+  src: string;
+  /** Folder in the bundle: klausur-prep */
+  dir: string;
+  /** The name the harness knows it by (frontmatter): imstudium-klausur-prep. Installed under this folder. */
+  name: string;
+  hash: string;
+}
+
+/** Core skills and workflows as shipped, each with its frontmatter name. */
+async function bundledSkills(kind: "core" | "workflows"): Promise<BundledSkill[]> {
+  const root = kind === "core" ? SKILLS_ROOT : WORKFLOWS_ROOT;
+  const out: BundledSkill[] = [];
+  for (const dir of await listSkillDirs(root)) {
+    if (kind === "core" && dir === "workflows") continue;
+    const content = await readFile(join(root, dir, "SKILL.md"), "utf-8").catch(() => null);
+    if (content === null) continue;
+    out.push({ src: join(root, dir), dir, name: skillFrontmatterName(content) ?? dir, hash: hashContent(content) });
+  }
+  return out;
+}
+
+/**
+ * Our skills at their install place; plus folders an older setup created under
+ * the bundle's folder name (klausur-prep) — only when that folder's SKILL.md
+ * carries one of our names, so a student's own skill of that name stays.
+ */
+async function ourSkillFolders(skillsDir: string, skills: BundledSkill[]): Promise<{ current: string[]; legacy: string[] }> {
+  const names = new Set(skills.map((s) => s.name));
+  const current: string[] = [];
+  const legacy: string[] = [];
+  for (const skill of skills) {
+    if (existsSync(join(skillsDir, skill.name, "SKILL.md"))) current.push(skill.name);
+    if (skill.dir === skill.name) continue;
+    const old = await readFile(join(skillsDir, skill.dir, "SKILL.md"), "utf-8").catch(() => null);
+    const name = old === null ? null : skillFrontmatterName(old);
+    if (name && names.has(name)) legacy.push(skill.dir);
+  }
+  return { current, legacy };
+}
+
+async function removeSkillFolders(skillsDir: string, folders: string[], removed: SetupItemResult[]): Promise<void> {
+  for (const f of folders) {
+    await rm(join(skillsDir, f), { recursive: true, force: true });
+    removed.push({ action: "removed", path: join(skillsDir, f) });
+  }
+}
+
+/** Every harness in the group gets imstudium's skills from its installed plugin. */
+function pluginCovers(group: AgentProfile[]): PluginInstall | null {
+  const installs = group.map((a) => installedPlugin(a.id));
+  return installs.every(Boolean) ? installs[0]! : null;
+}
+
 async function cleanupLegacySkills(skillsDir: string): Promise<string[]> {
   const removed: string[] = [];
   for (const name of await listSkillDirs(skillsDir)) {
@@ -222,27 +290,30 @@ async function installSkillsForAgents(
   agents: AgentProfile[],
   manifest: SetupManifest,
   force: boolean,
+  removed: SetupItemResult[],
 ): Promise<SetupItemResult[]> {
   const results: SetupItemResult[] = [];
-  const names = await listSkillDirs(SKILLS_ROOT);
+  const skills = await bundledSkills("core");
+  const all = [...skills, ...(await bundledSkills("workflows"))];
   const byDir = uniqueSkillsDirs(agents);
 
   for (const [skillsDir, group] of byDir) {
+    const plugin = pluginCovers(group);
+    if (plugin) {
+      // The plugin ships the same skills: a second copy here would show every skill twice.
+      const ours = await ourSkillFolders(skillsDir, all);
+      await removeSkillFolders(skillsDir, [...ours.current, ...ours.legacy], removed);
+      for (const a of group) delete manifest.skills[a.id];
+      results.push({ action: "skipped", path: `${skillsDir} (skills come from the ${plugin.key} plugin)` });
+      continue;
+    }
     await mkdir(skillsDir, { recursive: true });
     await cleanupLegacySkills(skillsDir);
-    for (const name of names) {
-      if (name === "workflows") continue;
-      const result = await installSkillIfChanged(
-        join(SKILLS_ROOT, name),
-        join(skillsDir, name),
-        force,
-      );
-      results.push(result);
+    for (const skill of skills) {
+      results.push(await installSkillIfChanged(skill.src, join(skillsDir, skill.name), force));
       for (const a of group) {
         manifest.skills[a.id] ??= {};
-        manifest.skills[a.id][name] = hashContent(
-          await readFile(join(SKILLS_ROOT, name, "SKILL.md"), "utf-8"),
-        );
+        manifest.skills[a.id][skill.name] = skill.hash;
       }
     }
   }
@@ -252,16 +323,20 @@ async function installSkillsForAgents(
 async function installWorkflowsForAgents(
   agents: AgentProfile[],
   force: boolean,
+  removed: SetupItemResult[],
 ): Promise<SetupItemResult[]> {
   const results: SetupItemResult[] = [];
-  const names = await listSkillDirs(WORKFLOWS_ROOT);
+  const workflows = await bundledSkills("workflows");
   const byDir = uniqueSkillsDirs(agents);
 
-  for (const [skillsDir] of byDir) {
-    for (const name of names) {
-      results.push(
-        await installSkillIfChanged(join(WORKFLOWS_ROOT, name), join(skillsDir, name), force),
-      );
+  for (const [skillsDir, group] of byDir) {
+    if (pluginCovers(group)) continue; // handled (and cleaned) with the skills
+    // 0.2.0 installed workflows under their folder name (klausur-prep) while their
+    // frontmatter says imstudium-klausur-prep: move to the frontmatter name.
+    const { legacy } = await ourSkillFolders(skillsDir, workflows);
+    await removeSkillFolders(skillsDir, legacy, removed);
+    for (const wf of workflows) {
+      results.push(await installSkillIfChanged(wf.src, join(skillsDir, wf.name), force));
     }
   }
   return results;
@@ -384,6 +459,8 @@ export async function runSetup(
     skills: [],
     mcp: [],
     workflows: [],
+    plugins: agents.map((a) => installedPlugin(a.id)).filter((p): p is PluginInstall => !!p),
+    removed: [],
     manifest,
   };
 
@@ -397,10 +474,10 @@ export async function runSetup(
   const force = Boolean(opts.force);
 
   if (what === "skills" || what === "all") {
-    result.skills = await installSkillsForAgents(agents, manifest, force);
+    result.skills = await installSkillsForAgents(agents, manifest, force, result.removed);
   }
   if (what === "workflows" || what === "all") {
-    result.workflows = await installWorkflowsForAgents(agents, force);
+    result.workflows = await installWorkflowsForAgents(agents, force, result.removed);
   }
   if (what === "mcp") { // CLI-first: `setup all` = skills only; MCP is opt-in via `setup mcp`
     result.mcp = await installMcpForAgents(agents, workspace, manifest, force);
@@ -414,7 +491,9 @@ export async function runSetup(
 }
 
 export interface SetupStatusReport {
-  detected: Array<{ id: string; label: string; skillsDir: string; mcpFiles: string[] }>;
+  detected: Array<{ id: string; label: string; skillsDir: string; mcpFiles: string[]; plugin: string | null }>;
+  /** Harnesses with the imstudium plugin installed and enabled (their skills come from it). */
+  plugins: PluginInstall[];
   configured: string[];
   manifest: SetupManifest | null;
   upToDate: boolean;
@@ -423,34 +502,17 @@ export interface SetupStatusReport {
   workspace: string;
 }
 
-async function bundledSkillHashes(): Promise<Record<string, string>> {
-  const hashes: Record<string, string> = {};
-  const core = await listSkillDirs(SKILLS_ROOT);
-  for (const name of core) {
-    if (name === "workflows") continue;
-    const content = await readFile(join(SKILLS_ROOT, name, "SKILL.md"), "utf-8");
-    hashes[name] = hashContent(content);
-  }
-  const workflows = await listSkillDirs(WORKFLOWS_ROOT);
-  for (const name of workflows) {
-    const content = await readFile(join(WORKFLOWS_ROOT, name, "SKILL.md"), "utf-8");
-    hashes[name] = hashContent(content);
-  }
-  return hashes;
-}
-
 async function findStaleSkills(agents: AgentProfile[]): Promise<string[]> {
-  const bundled = await bundledSkillHashes();
+  const bundled = [...(await bundledSkills("core")), ...(await bundledSkills("workflows"))];
   const stale = new Set<string>();
-  const byDir = uniqueSkillsDirs(agents);
-
-  for (const [skillsDir] of byDir) {
-    for (const [name, expected] of Object.entries(bundled)) {
+  for (const [skillsDir, group] of uniqueSkillsDirs(agents)) {
+    if (pluginCovers(group)) continue; // the plugin keeps its own skills current
+    for (const skill of bundled) {
       try {
-        const content = await readFile(join(skillsDir, name, "SKILL.md"), "utf-8");
-        if (hashContent(content) !== expected) stale.add(name);
+        const content = await readFile(join(skillsDir, skill.name, "SKILL.md"), "utf-8");
+        if (hashContent(content) !== skill.hash) stale.add(skill.name);
       } catch {
-        stale.add(name);
+        stale.add(skill.name);
       }
     }
   }
@@ -461,11 +523,13 @@ export async function getSetupStatus(workspace?: string): Promise<SetupStatusRep
   const ws = expandPath(workspace ?? homedir() + "/Studium");
   const manifest = await loadManifest();
   const agentProfiles = detectAgents();
+  const plugins = agentProfiles.map((a) => installedPlugin(a.id)).filter((p): p is PluginInstall => !!p);
   const detected = agentProfiles.map((a) => ({
     id: a.id,
     label: a.label,
     skillsDir: a.skillsDir(),
     mcpFiles: a.mcpFiles(),
+    plugin: plugins.find((p) => p.agent === a.id)?.key ?? null,
   }));
   const configured = manifest
     ? Object.keys(manifest.mcp).filter((id) => (manifest.mcp[id]?.length ?? 0) > 0)
@@ -478,10 +542,12 @@ export async function getSetupStatus(workspace?: string): Promise<SetupStatusRep
   const versionOk = manifest?.imstudiumVersion === IMSTUDIUM_SETUP_VERSION;
   const workspaceOk = manifest?.workspace === ws;
   const skillsOk = staleSkills.length === 0;
-  const upToDate = Boolean(manifest && versionOk && workspaceOk && skillsOk);
+  // Every detected harness gets its skills from the plugin: nothing for setup to keep current.
+  const allPlugin = agentProfiles.length > 0 && agentProfiles.every((a) => plugins.some((p) => p.agent === a.id));
+  const upToDate = allPlugin || Boolean(manifest && versionOk && workspaceOk && skillsOk);
   const stale = !upToDate;
 
-  return { detected, configured, manifest, upToDate, stale, staleSkills, workspace: ws };
+  return { detected, plugins, configured, manifest, upToDate, stale, staleSkills, workspace: ws };
 }
 
 /** @deprecated use resolveAgentProfiles */
@@ -506,5 +572,9 @@ export function formatSetupSummary(result: SetupResult): string {
   if (result.workflows.length) {
     parts.push(`Workflows: ${w.installed + w.updated} changed, ${w.skipped} unchanged`);
   }
+  if (result.plugins.length) {
+    parts.push(`Plugin: ${[...new Set(result.plugins.map((p) => `${p.key} (${p.agent})`))].join(", ")} brings the skills there`);
+  }
+  if (result.removed.length) parts.push(`Cleaned up: ${result.removed.length} old skill folder${result.removed.length === 1 ? "" : "s"}`);
   return parts.join(" · ");
 }

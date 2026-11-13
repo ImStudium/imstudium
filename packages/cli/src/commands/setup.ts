@@ -76,7 +76,7 @@ export function registerSetup(program: Command): void {
           `Configured agents: ${status.configured.length ? status.configured.join(", ") : "none"}`,
           "",
           "Detected agents:",
-          ...status.detected.map((a) => `  ${a.label} (${a.id}) — skills: ${a.skillsDir}`),
+          ...status.detected.map((a) => `  ${a.label} (${a.id}): ${a.plugin ? `skills from the ${a.plugin} plugin` : `skills in ${a.skillsDir}`}`),
         ];
         if (status.staleSkills.length) lines.push("", `Stale skills: ${status.staleSkills.join(", ")}`, "Run: imstudium setup all -y");
         const ocr = ocrRuntimeView();
