@@ -39,6 +39,7 @@ export function plainText(markdown: string): string {
     .replace(IMAGE_ONLY, " ")
     .replace(LOW, " ")
     .replace(/^_Formulas on this page[^\n]*$/gm, " ")
+    .replace(/^_\(formula p\d+-\d+ [^\n]*$/gm, " ")
     .replace(/\$\$[^$]*\$\$/g, " ")
     .replace(/<\/?(sub|sup|br)\s*\/?>/gi, "")
     .replace(/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/gm, " ")
@@ -157,6 +158,22 @@ export function mathmlTokens(latex: string): string[] | null {
   return out;
 }
 
+/**
+ * Same symbols in the same structure, while the look may differ: what is
+ * left once operator and cell boundaries go (`\left|x\right|` for `|x|`,
+ * `=&` for `&=` in `aligned`, an `aligned` in a brace for `cases`).
+ * Scripts, fractions, roots, accents, boxes and every symbol still count.
+ * False when either doesn't parse.
+ */
+export function sameSymbols(predicted: string, truth: string): boolean {
+  // Delimiter sizing is look: \left\|x\right\|_2 groups x before the subscript, \|x\|_2 doesn't, and both print ‖x‖₂.
+  const unsized = (latex: string) => latex.replace(/\\(left|right)\s*\./g, "").replace(/\\(left|right|[bB]igg?[lr]?)(?![a-zA-Z])/g, "");
+  const strip = (latex: string) => mathmlTokens(unsized(latex))?.filter((t) => !/^<\/?(mo|mtd|mtext|mrow)>$/.test(t));
+  const a = strip(predicted);
+  const b = strip(truth);
+  return !!a && !!b && a.join(" ") === b.join(" ");
+}
+
 /** Similarity of the rendered formulas (MathML tokens); falls back to the LaTeX tokens when either doesn't parse. */
 export function renderedSimilarity(predicted: string, truth: string): number {
   const a = mathmlTokens(predicted);
@@ -182,7 +199,9 @@ export interface FormulaScore {
    * and the rendered similarity; an unmatched one also gets the closest
    * leftover prediction, if any.
    */
-  pairs: Array<{ truth: string; predicted: string | null; similarity: number; closest?: { latex: string; similarity: number } }>;
+  pairs: Array<{ truth: string; predicted: string | null; index?: number; similarity: number; closest?: { latex: string; similarity: number } }>;
+  /** Indexes of predictions that matched no truth formula. */
+  unmatched: number[];
 }
 
 /** Greedy best-first matching of predicted to truth formulas on one page, by rendered similarity. */
@@ -206,9 +225,10 @@ export function scoreFormulas(predicted: string[], truth: string[]): FormulaScor
     similarity: truth.length ? best.reduce((a, b) => a + b, 0) / truth.length : 1,
     extra: predicted.length - usedP.size,
     pairs: truth.map((t, j) => {
-      if (match[j]! >= 0) return { truth: t, predicted: predicted[match[j]!]!, similarity: best[j]! };
+      if (match[j]! >= 0) return { truth: t, predicted: predicted[match[j]!]!, index: match[j]!, similarity: best[j]! };
       const near = pairs.find((x) => x.t === j && !usedP.has(x.p));
       return { truth: t, predicted: null, similarity: 0, ...(near ? { closest: { latex: predicted[near.p]!, similarity: near.s } } : {}) };
     }),
+    unmatched: predicted.map((_, i) => i).filter((i) => !usedP.has(i)),
   };
 }

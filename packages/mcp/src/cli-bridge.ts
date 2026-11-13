@@ -50,6 +50,8 @@ export const READ_ONLY_PATHS: ReadonlySet<string> = new Set([
   "api",
   "schema",
   "doctor",
+  "formulas list",
+  "formulas check",
 ]);
 
 /**

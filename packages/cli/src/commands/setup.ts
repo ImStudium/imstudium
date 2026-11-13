@@ -137,7 +137,7 @@ export function registerSetup(program: Command): void {
   setup
     .command("ocr")
     .description("Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified PDFium + ONNX Runtime + PP-OCRv6 (~60 MB, once)")
-    .option("--math", "Also read display formulas into LaTeX: PP-DocLayout-S + PP-FormulaNet+ S (~340 MB download, once)")
+    .option("--math", "Also read display formulas into LaTeX and check them against the PDF: PP-DocLayoutV2 + PP-FormulaNet+ L (~1.1 GB download, once)")
     .option("--force", "Download and verify everything again, models included")
     .option("--remove", "Delete the runtime and models (with --math: only the math part)")
     .action(
@@ -191,7 +191,7 @@ export function registerSetup(program: Command): void {
           `  ${runtime.model} · PDFium ${runtime.pins.pdfium} · ONNX Runtime ${runtime.pins.onnxruntime} · ${formatBytes(payload.diskBytes)} in ${runtime.dir}`,
           runtime.math.ready
             ? `  Math: display formulas become $$…$$ LaTeX in content.md (${runtime.math.model}, ${runtime.math.layoutModel})`
-            : "  Math: not installed (optional, ~340 MB): imstudium setup ocr --math",
+            : "  Math: not installed (optional, ~1.1 GB): imstudium setup ocr --math",
           runtime.disabled
             ? "  Switched off by IMSTUDIUM_OCR=off: unset it to use OCR"
             : "  Pages without a text layer and JPEG/PNG photos are read on this machine at the next extract (imstudium extract, or sync --extract)",

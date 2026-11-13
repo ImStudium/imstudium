@@ -19,7 +19,7 @@ Shared flags mean the same everywhere: `-o, --output <dir>` is the Studium works
 - **Today and deadlines:** [`today`](#imstudium-today) · [`week`](#imstudium-week) · [`stundenplan`](#imstudium-stundenplan) · [`holidays`](#imstudium-holidays) · [`tasks`](#imstudium-tasks) · [`klausuren`](#imstudium-klausuren)
 - **What's new:** [`changes`](#imstudium-changes) · [`news`](#imstudium-news) · [`inbox`](#imstudium-inbox) · [`outbox`](#imstudium-outbox) · [`message`](#imstudium-message) · [`forum`](#imstudium-forum) · [`blubber`](#imstudium-blubber) · [`feed`](#imstudium-feed)
 - **Material and courses:** [`search`](#imstudium-search) · [`courseware`](#imstudium-courseware) · [`wiki`](#imstudium-wiki) · [`files`](#imstudium-files) · [`courses`](#imstudium-courses) · [`studium`](#imstudium-studium) · [`people`](#imstudium-people) · [`sprechstunden`](#imstudium-sprechstunden) · [`catalog`](#imstudium-catalog)
-- **Workspace and sync:** [`semester`](#imstudium-semester) · [`sync`](#imstudium-sync) · [`extract`](#imstudium-extract) · [`index`](#imstudium-index) · [`view`](#imstudium-view) · [`watch`](#imstudium-watch) · [`export`](#imstudium-export)
+- **Workspace and sync:** [`semester`](#imstudium-semester) · [`sync`](#imstudium-sync) · [`extract`](#imstudium-extract) · [`formulas`](#imstudium-formulas) · [`index`](#imstudium-index) · [`view`](#imstudium-view) · [`watch`](#imstudium-watch) · [`export`](#imstudium-export)
 - **Stud.IP API and contracts:** [`routes`](#imstudium-routes) · [`api`](#imstudium-api) · [`schema`](#imstudium-schema)
 - **Setup and health:** [`setup`](#imstudium-setup) · [`config`](#imstudium-config) · [`session`](#imstudium-session) · [`doctor`](#imstudium-doctor) · [`update`](#imstudium-update)
 - **Legacy:** [`module`](#imstudium-module) · [`semesters`](#imstudium-semesters) · [`discover`](#imstudium-discover)
@@ -917,6 +917,108 @@ Alias: `ingest`
 | `searchIndex`? | any \| null |  |
 | `schemaVersion` | "1" |  |
 
+### `imstudium formulas`
+
+Formulas read from a file: each with its check against the PDF and its image; check or store a correction
+
+```
+imstudium formulas <command>
+```
+
+#### `imstudium formulas list`
+
+Every display formula of one extracted file, with its check against the PDF and the path of its image
+
+```
+imstudium formulas list <file> [options]
+```
+
+| Argument | |
+|---|---|
+| `<file>` | Extracted folder, its content.md, the original under files/, or a name fragment |
+
+| Option | |
+|---|---|
+| `--needs-look` | Only formulas whose check didn't pass and that aren't corrected yet |
+| `--course <name>` | Search only this course for the name fragment |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema formulas list`
+
+| Key | Type | |
+|---|---|---|
+| `dir` | string | The extracted folder (content.md, math.json, formulas/) |
+| `source` | string | The original file |
+| `model` | string |  |
+| `layoutModel` | string |  |
+| `summary` | object |  |
+| `formulas` | object[] |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium formulas check`
+
+Check a reading of one formula against the PDF without storing it (letters and digits must match what the page has in that box)
+
+```
+imstudium formulas check <file> <id> [options]
+```
+
+| Argument | |
+|---|---|
+| `<file>` | Extracted folder, its content.md, the original, or a name fragment |
+| `<id>` | Formula id, e.g. p3-2 (imstudium formulas list) |
+
+| Option | |
+|---|---|
+| `--latex <latex>` | The LaTeX to check |
+| `--course <name>` | Search only this course for the name fragment |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema formulas check`
+
+| Key | Type | |
+|---|---|---|
+| `id` | string |  |
+| `latex` | string |  |
+| `modelLatex` | string |  |
+| `verdict` | object |  |
+| `why` | string \| null |  |
+| `accepted` | boolean | formulas fix would store it (check is not differs) |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium formulas fix`
+
+Store a correction of one formula, made from its image: refused unless it checks; content.md then shows it, marked as corrected
+
+```
+imstudium formulas fix <file> <id> [options]
+```
+
+| Argument | |
+|---|---|
+| `<file>` | Extracted folder, its content.md, the original, or a name fragment |
+| `<id>` | Formula id, e.g. p3-2 (imstudium formulas list) |
+
+| Option | |
+|---|---|
+| `--latex <latex>` | The corrected LaTeX: only what the image shows |
+| `--by <name>` | Who corrected it (the harness, e.g. claude-code or codex, or student) (default: `agent`) |
+| `--course <name>` | Search only this course for the name fragment |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema formulas fix`
+
+| Key | Type | |
+|---|---|---|
+| `id` | string |  |
+| `latex` | string |  |
+| `modelLatex` | string |  |
+| `verdict` | object |  |
+| `by` | string |  |
+| `dir` | string |  |
+| `contentUpdated` | boolean | content.md now shows the correction |
+| `schemaVersion` | "1" |  |
+
 ### `imstudium index`
 
 Build/rebuild page index (corpus.jsonl) — for agent grep / semantic search, not a custom search engine
@@ -1107,7 +1209,7 @@ imstudium setup ocr [options]
 
 | Option | |
 |---|---|
-| `--math` | Also read display formulas into LaTeX: PP-DocLayout-S + PP-FormulaNet+ S (~340 MB download, once) |
+| `--math` | Also read display formulas into LaTeX and check them against the PDF: PP-DocLayoutV2 + PP-FormulaNet+ L (~1.1 GB download, once) |
 | `--force` | Download and verify everything again, models included |
 | `--remove` | Delete the runtime and models (with --math: only the math part) |
 

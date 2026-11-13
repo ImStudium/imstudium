@@ -54,6 +54,7 @@ export const ERROR_CODES = {
   BAD_ARGS: spec("usage", "An argument or flag is missing, unknown or malformed", "See: imstudium <command> --help", {
     aliases: ["MISSING_ARG", "INVALID_KEY"],
   }),
+  FORMULA_MISMATCH: spec("usage", "The corrected formula doesn't check: it is malformed LaTeX, or it shows letters or digits the PDF doesn't have in that box (or leaves out ones it has)", "Look at the formula's image again and write only what it shows; imstudium formulas check <file> <id> --latex '…' says what differs"),
   NO_CLIENT_ID: spec("usage", "OAuth sign-in was requested without a client id", "Set IMSTUDIUM_OAUTH_CLIENT_ID or oauth.clientId (docs/OAUTH.md), or run imstudium login without --oauth"),
   // ── 3 gated ────────────────────────────────────────────────────────────────
   WRITE_NOT_ALLOWED: spec("gated", "The call would change something in Stud.IP and was not explicitly allowed", "Read-only by default: add --write in a terminal if you really mean it (never over MCP)"),
@@ -80,6 +81,9 @@ export const ERROR_CODES = {
     aliases: ["NO_SEMESTER"],
   }),
   OCR_UNSUPPORTED: spec("not_found", "No pinned on-device OCR runtime for this platform or JavaScript runtime", "Extraction keeps the native text and marks image-only pages; OCR runs on macOS arm64, Linux x64/arm64 and Windows x64 under Node"),
+  FORMULA_NOT_FOUND: spec("not_found", "No recognised formulas in that file, or none with that id", "imstudium formulas list <file> shows the ids; formulas are read at extraction once imstudium setup ocr --math has run", {
+    aliases: ["NO_FORMULAS"],
+  }),
   NO_ENROLMENTS: spec("not_found", "You are not enrolled in any course of that semester on Stud.IP", "Enrol in Stud.IP first and keep working in your current semester folder (imstudium sync), or pass --allow-empty"),
   UNIT_NOT_FOUND: spec("not_found", "No Courseware unit matches", "imstudium courseware <course> lists the units"),
   PAGE_NOT_FOUND: spec("not_found", "No wiki page matches", "imstudium wiki <course> lists the pages"),

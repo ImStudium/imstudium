@@ -13,6 +13,11 @@ import {
   mathDisabledByEnv,
   mathRuntimeStatus,
   normalizeLatex,
+  latexIssues,
+  latexGlyphs,
+  foldGlyph,
+  compareGlyphs,
+  judgeFormula,
 } from "./math.js";
 import { ocrPlatformKey, OCR_RUNTIMES } from "./ocr-runtime.js";
 
@@ -26,7 +31,8 @@ describe("pins", () => {
       expect(a.bytes).toBeGreaterThan(0);
     }
     expect(MATH_ASSETS.find((a) => a.name === "onnxruntime-node")!.url).toContain("1.27.0");
-    expect(MATH_ASSETS.find((a) => a.name === "pp-formulanet_plus-s.onnx")!.sha256).toBe("449d205c8fb2fe0a9b134a5e4a0f2421c2e7812fd902ea67dfda4e9ef4588978");
+    expect(MATH_ASSETS.find((a) => a.name === "pp-formulanet_plus-l.onnx")!.sha256).toBe("b4924d69c731365048de3d11a5d1829f3dfd8b98b4dbfd82437f934c2611934f");
+    expect(MATH_ASSETS.find((a) => a.name === "pp-doclayoutv2.onnx")!.sha256).toBe("a325532df1c7530538ef4e8254695c091adc6afd3366c0851425491f0816d1d1");
   });
 
   it("the binding is unpacked only for this platform", () => {
@@ -82,7 +88,7 @@ describe("mathRuntimeStatus", () => {
     await fakeMath("pp-formulanet-s (old)");
     expect(mathRuntimeStatus().ready).toBe(false);
     await fakeMath();
-    await rm(join(root, "math", "models", "pp-doclayout-s.onnx"));
+    await rm(join(root, "math", "models", "pp-doclayoutv2.onnx"));
     expect(mathRuntimeStatus()).toMatchObject({ ready: false, reason: "incomplete or for older pins" });
   });
 
@@ -124,8 +130,44 @@ describe("normalizeLatex (PaddleOCR post_process)", () => {
     ["\\int _ { - \\infty } ^ { \\infty } e ^ { - x ^ { 2 } } d x = \\sqrt { \\pi } .", "\\int_{-\\infty}^{\\infty}e^{-x^{2}}d x=\\sqrt{\\pi}"],
     ["\\sum x", "\\sum x"],
     ["a \\ b", "a\\ b"],
+    ["\\left\\{ \\begin{cases} x \\end{cases} \\right.", "\\left\\{\\begin{cases}x\\end{cases}\\right."],
   ])("%s → %s", (raw, latex) => {
     expect(normalizeLatex(raw)).toBe(latex);
+  });
+});
+
+describe("latexIssues", () => {
+  it("passes well-formed LaTeX, including escaped braces, \\right. and words in \\text", () => {
+    for (const ok of [
+      "E[X]=\\sum_{i=1}^{n}x_{i}p(x_{i})",
+      "M=\\{x\\in\\mathbb{R}\\mid x^{2}<2\\}",
+      "|x|=\\left\\{\\begin{cases}{x}&{x\\geq0}\\\\ {-x}&{x<0}\\end{cases}\\right.",
+      "\\binom{n}{k}=\\frac{n!}{k!(n-k)!}",
+      "f(x)=x\\quad\\text{for all sum terms}",
+      "a\\equiv b\\pmod{m}",
+      "\\frac12+\\frac\\pi2=\\dfrac{1}{\\frac{1}{x}}",
+      "f(x)=\\begin{cases}1&x\\in\\mathbb{Q}\\\\0&\\text{sonst}\\end{cases}",
+      "\\text{für alle }x\\in\\mathbb{R}",
+    ]) {
+      expect(latexIssues(ok), ok).toEqual([]);
+    }
+  });
+
+  it.each([
+    ["\\frac{1}{2", "unbalanced braces"],
+    ["|x|=\\left\\{\\begin{cases}x\\end{cases}\\right", "\\right without a delimiter"],
+    ["\\left(a+b", "\\left ×1 but \\right ×0"],
+    ["\\begin{aligned}x&=1", "\\begin{aligned} is never closed"],
+    ["\\sum_{k=0}^{n}\\ binom n k k=2^{n}", "a word after an escaped space"],
+    ["\\prod_{j=1}^{n}(bigl1+x_{i}\\bigr)", '"bigl" without its backslash'],
+    ["\\sqrt[[object Object]]{|a_{n}|}<1", "text that is not LaTeX"],
+    ["\\begin{aligned}\\overset{平平}{(a+b)^{2}}&=a^{2}\\end{aligned}", "characters that aren't math: 平"],
+    ["\\frac{P(B_{j}\\mid A)=\\frac{P(A)}{P(B)}}{}", "a fraction with an empty part"],
+    ["\\frac{ }{n}", "a fraction with an empty part"],
+    ["\\boxed{\\int_{-\\infty}^{\\infty}e^{-x^{2}}dx=\\sqrt{\\pi}}", "a box around it: keep \\boxed only if the formula itself is boxed on the page"],
+    ["\\left\\{\\neg(A\\land B)\\equiv\\neg A\\lor\\neg B\\right.", "a one-sided brace around a single line"],
+  ])("%s: %s", (latex, issue) => {
+    expect(latexIssues(latex)).toContain(issue);
   });
 });
 
@@ -166,5 +208,61 @@ describe("isMathCandidate", () => {
     ["Agenda: Einführung, Organisation, Literatur", false],
   ])("%s → %s", (text, expected) => {
     expect(isMathCandidate(text)).toBe(expected);
+  });
+});
+
+describe("glyph check", () => {
+  it.each([
+    ["\\binom{n}{k}=\\frac{n!}{k!(n-k)!}", "nknkn k"],
+    ["\\log_2(n!)\\in\\Theta(n\\log n)", "log2nΘnlogn"],
+    ["M=\\{x\\in\\mathbb{R}\\mid x^{2}<2\\}", "MxRx22"],
+    ["a\\equiv b\\pmod{m}", "abmodm"],
+    ["\\hat{\\theta}=\\arg\\max_{\\theta}\\sum_{i=1}^{n}\\log p(x_{i}\\mid\\theta)", "θargmaxθi1nlogpxiθ"],
+    ["\\left\\{\\begin{array}{l l}{\\vdots}\\\\ \\end{array}\\right.", ""],
+    ["|x|=\\begin{cases}x&x\\geq0\\\\-x&x<0\\end{cases}", "xxx0xx0"],
+    ["\\operatorname{sgn}(\\sigma)\\cdot\\infty", "sgnσ"],
+  ])("latexGlyphs(%s)", (latex, glyphs) => {
+    expect(latexGlyphs(latex).join("")).toBe(glyphs.replace(/ /g, ""));
+  });
+
+  it("foldGlyph: math alphabets, double-struck capitals, Greek variants; not operators", () => {
+    expect(foldGlyph("𝑥")).toBe("x");
+    expect(foldGlyph("𝐀")).toBe("A");
+    expect(foldGlyph("𝟐")).toBe("2");
+    expect(foldGlyph("ℝ")).toBe("R");
+    expect(foldGlyph("ϵ")).toBe("ε");
+    expect(foldGlyph("ﬁ")).toBe("fi");
+    expect(foldGlyph("+")).toBeNull();
+    expect(foldGlyph("∑")).toBeNull();
+  });
+
+  it("compareGlyphs is a multiset difference", () => {
+    expect(compareGlyphs(["x", "p", "x"], ["x", "x", "p"])).toEqual({ missing: [], extra: [] });
+    expect(compareGlyphs(["x", "x"], ["x", "x", "p"])).toEqual({ missing: ["p"], extra: [] });
+    expect(compareGlyphs([..."binomnkk"], [..."nk"])).toEqual({ missing: [], extra: ["b", "i", "k", "m", "n", "o"] });
+  });
+
+  it("compareGlyphs: a glyph cut off by the box but visible in the crop is not extra; one beyond the crop is", () => {
+    // E[X|Y=y] = Σ_x x P(X=x|Y=y), the x under Σ just below the detector's box.
+    const inside = [..."EXYyxPXxYy"];
+    const visible = [...inside, "x"];
+    const latex = [..."EXYyxxPXxYy"];
+    expect(compareGlyphs(latex, inside, visible)).toEqual({ missing: [], extra: [] });
+    expect(compareGlyphs(latex, inside)).toEqual({ missing: [], extra: ["x"] });
+    expect(compareGlyphs([...latex, "n"], inside, visible)).toEqual({ missing: [], extra: ["n"] });
+    // Visible-only glyphs never count as missing: a neighbouring line in the padding is not the formula's.
+    expect(compareGlyphs(inside, inside, [...visible, "a", "b"])).toEqual({ missing: [], extra: [] });
+    expect(judgeFormula("E[X\\mid Y=y]=\\sum_{x}x\\,P(X=x\\mid Y=y)", { inside, visible }).check).toBe("match");
+    expect(judgeFormula("x", { inside: [], visible: [] }).check).toBe("unchecked");
+  });
+
+  it("judgeFormula: a dropped factor or a garbage reading differs; no text layer is unchecked", () => {
+    const pdf = [..."EXi1nxipxi"];
+    expect(judgeFormula("E[X]=\\sum_{i=1}^{n}x_{i}p(x_{i})", pdf).check).toBe("match");
+    const dropped = judgeFormula("E[X]=\\sum_{i=1}^{n}x_{i}(x_{i})", pdf);
+    expect(dropped).toMatchObject({ check: "differs", glyphs: { missing: ["p"], extra: [] } });
+    expect(judgeFormula("\\sum_{k=0}^{n}\\ binom n k k=2^{n}", [..."k0nnk2n"]).check).toBe("differs");
+    expect(judgeFormula("x^{2}", null)).toEqual({ issues: [], glyphs: null, check: "unchecked" });
+    expect(judgeFormula("x^{2", null).check).toBe("differs");
   });
 });

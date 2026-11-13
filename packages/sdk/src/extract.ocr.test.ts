@@ -23,6 +23,7 @@ vi.mock("./ingest/local-docs.js", async (orig) => ({
 
 const { Extractor, shouldRedoForOcr, summarizeOcr } = await import("./extract.js");
 const { IMAGE_ONLY } = await import("./ingest/local-docs.js");
+const { MATH_MODEL, LAYOUT_MODEL } = await import("./ingest/math.js");
 
 const native = (): LocalConvertOk => ({
   ok: true,
@@ -171,13 +172,36 @@ describe("summarizeOcr", () => {
 });
 
 describe("math in the extractor", () => {
-  it("withFormulas appends $$…$$ blocks under a provenance line, top to bottom", async () => {
+  it("withFormulas appends $$…$$ blocks under a provenance line, top to bottom, with a note where a formula needs a look", async () => {
     const { withFormulas, FORMULAS_HEADING } = await import("./extract.js");
+    const glyphs = { missing: [], extra: [], pdf: 6 };
     const text = withFormulas("Page text", [
-      { page: 0, bbox: [0, 10, 5, 20], latex: "a^{2}+b^{2}=c^{2}", score: 0.9 },
-      { page: 0, bbox: [0, 40, 5, 50], latex: "\\sqrt{2}", score: 0.8 },
+      { id: "p1-1", page: 0, bbox: [0, 10, 5, 20], latex: "a^{2}+b^{2}=c^{2}", score: 0.9, issues: [], glyphs, check: "match" },
+      { id: "p1-2", page: 0, bbox: [0, 40, 5, 50], latex: "E=\\sum x_{i}", score: 0.8, issues: [], glyphs: { missing: ["p"], extra: [], pdf: 4 }, check: "differs", crop: "formulas/p1-2.png" },
+      { id: "p1-3", page: 0, bbox: [0, 60, 5, 70], latex: "\\sqrt{2}", score: 0.8, issues: [], glyphs: null, check: "unchecked", crop: "formulas/p1-3.png" },
+      {
+        id: "p1-4", page: 0, bbox: [0, 80, 5, 90], latex: "x_{1}", score: 0.8, issues: [], glyphs: { missing: [], extra: ["1"], pdf: 2 }, check: "differs",
+        corrected: { latex: "x^{2}", by: "claude-code", at: "2026-11-13T00:00:00Z", verdict: { issues: [], glyphs, check: "match" } },
+      },
     ]);
-    expect(text).toBe(`Page text\n\n${FORMULAS_HEADING}\n\n$$a^{2}+b^{2}=c^{2}$$\n\n$$\\sqrt{2}$$`);
+    expect(text).toBe(
+      [
+        "Page text",
+        "",
+        FORMULAS_HEADING,
+        "",
+        "$$a^{2}+b^{2}=c^{2}$$",
+        "",
+        "$$E=\\sum x_{i}$$",
+        "_(formula p1-2 needs a look: the PDF has p here, the LaTeX doesn't. Image: formulas/p1-2.png)_",
+        "",
+        "$$\\sqrt{2}$$",
+        "_(formula p1-3 unchecked: no text on the page to compare with. Image: formulas/p1-3.png)_",
+        "",
+        "$$x^{2}$$",
+        "_(formula p1-4 corrected by claude-code from its image; its letters and digits match the PDF.)_",
+      ].join("\n"),
+    );
     expect(withFormulas("Page text", [])).toBe("Page text");
   });
 
@@ -187,7 +211,8 @@ describe("math in the extractor", () => {
     ["pdf with text-less pages", { kind: "pdf", imageOnlyPages: [0] }, "", true],
     ["plain pdf", { kind: "pdf" }, "Agenda und Organisation", false],
     ["OCR'd photo", { kind: "image", ocr: { model: "m", pages: [0], lowConfidencePages: [] } }, "", true],
-    ["math already ran", { kind: "pdf", math: { model: "m", layoutModel: "l", pages: [0], formulas: 0, ms: 1 } }, "∑", false],
+    ["math already ran with these models", { kind: "pdf", math: { model: MATH_MODEL, layoutModel: LAYOUT_MODEL, pages: [0], formulas: 0, ms: 1 } }, "∑", false],
+    ["math ran with older models", { kind: "pdf", math: { model: "m", layoutModel: "l", pages: [0], formulas: 0, ms: 1 } }, "∑", true],
     ["office document", { kind: "office" }, "∑", false],
   ] as const)("shouldRedoForMath: %s → %s", async (_label, prev, content, expected) => {
     const { shouldRedoForMath } = await import("./extract.js");

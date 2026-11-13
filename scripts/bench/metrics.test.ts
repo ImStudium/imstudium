@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cer, editDistance, latexSimilarity, latexTokens, mathmlTokens, plainText, renderedSimilarity, scoreFormulas, wordRecall } from "./metrics.ts";
+import { cer, editDistance, latexSimilarity, latexTokens, mathmlTokens, plainText, renderedSimilarity, sameSymbols, scoreFormulas, wordRecall } from "./metrics.ts";
 
 describe("bench metrics", () => {
   it("editDistance", () => {
@@ -9,7 +9,7 @@ describe("bench metrics", () => {
   });
 
   it("plainText strips markdown, markers and formula blocks", () => {
-    const md = "# Titel\n\n**Fett** und *kursiv* mit x<sub>i</sub>\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n- Punkt\n\n_Formulas on this page, read on this machine as LaTeX (PP-FormulaNet+ S): check against the original._\n\n$$a^{2}$$\n\n_(image-only page — no text layer)_";
+    const md = "# Titel\n\n**Fett** und *kursiv* mit x<sub>i</sub>\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n- Punkt\n\n_Formulas on this page, read on this machine as LaTeX (PP-FormulaNet+ S): check against the original._\n\n$$a^{2}$$\n_(formula p1-1 needs a look: the PDF has p here, the LaTeX doesn't. Image: formulas/p1-1.png)_\n\n_(image-only page — no text layer)_";
     expect(plainText(md)).toBe("Titel Fett und kursiv mit xi A B 1 2 Punkt");
   });
 
@@ -46,5 +46,20 @@ describe("bench metrics", () => {
     expect(renderedSimilarity("x+1", "x-1")).toBeLessThan(1);
     expect(mathmlTokens("\\frac{")).toBeNull();
     expect(renderedSimilarity("\\frac{", "\\frac{1}{2}")).toBe(latexSimilarity("\\frac{", "\\frac{1}{2}"));
+  });
+
+  it("sameSymbols: a different look of the same formula, never a different formula", () => {
+    expect(sameSymbols("\\left|x\\right|=1", "|x|=1")).toBe(true);
+    expect(sameSymbols("\\begin{aligned}a=&b\\\\=&c\\end{aligned}", "\\begin{aligned}a&=b\\\\&=c\\end{aligned}")).toBe(true);
+    expect(sameSymbols("T=\\left\\{\\begin{aligned}&1&n=1\\\\&2&n>1\\end{aligned}\\right.", "T=\\begin{cases}1&n=1\\\\2&n>1\\end{cases}")).toBe(true);
+    expect(sameSymbols("\\mathrm{e}^{x}", "e^{x}")).toBe(true);
+    expect(sameSymbols("\\left\\|x\\right\\|_2=1", "\\|x\\|_2=1")).toBe(true);
+    expect(sameSymbols("\\mathcal{O}\\big(n\\big)", "\\mathcal{O}(n)")).toBe(true);
+    expect(sameSymbols("x^{2}y", "xy^{2}")).toBe(false);
+    expect(sameSymbols("\\frac{a}{b}", "\\frac{b}{a}")).toBe(false);
+    expect(sameSymbols("\\frac{1}{\\gamma}", "\\frac{1}{y}")).toBe(false);
+    expect(sameSymbols("\\boxed{x=1}", "x=1")).toBe(false);
+    expect(sameSymbols("a<b", "a\\leq b")).toBe(false);
+    expect(sameSymbols("\\frac{", "x")).toBe(false);
   });
 });

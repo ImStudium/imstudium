@@ -102,9 +102,26 @@ export {
   shouldRedoForMath,
   summarizeOcr,
   withFormulas,
+  FORMULAS_HEADING,
   type ExtractTools,
   type OcrSummary,
 } from "./extract.js";
+export {
+  FORMULA_FIXES_FILE,
+  readFormulaFixes,
+  writeFormulaFixes,
+  applyFormulaFixes,
+  describeVerdict,
+  formulaNote,
+  loadExtractedFormulas,
+  findFormula,
+  checkExtractedFormula,
+  fixExtractedFormula,
+  replaceFormulaInContent,
+  type ExtractedFormulas,
+  type FormulaFix,
+  type FormulaEntry,
+} from "./formulas.js";
 export { imageToPdf, imagesToPdf, IMAGE_PDF_DPI } from "./ingest/image-pdf.js";
 export { convertLocalDocument, type LocalConvertResult, type LocalPage } from "./ingest/local-docs.js";
 export {
@@ -112,13 +129,23 @@ export {
   removeMathRuntime,
   mathRuntimeStatus,
   recognizeMath,
+  renderPdfPages,
+  checkFormula,
+  judgeFormula,
+  latexIssues,
+  latexGlyphs,
+  type FormulaVerdict,
+  type FormulaCheck,
+  type GlyphDiff,
   normalizeLatex,
   MATH_MODEL,
   LAYOUT_MODEL,
   type Formula,
   type MathResult,
   type MathRuntimeStatus,
+  type RenderedPage,
 } from "./ingest/math.js";
+export { encodePng } from "./ingest/png.js";
 export {
   installOcrRuntime,
   removeOcrRuntime,

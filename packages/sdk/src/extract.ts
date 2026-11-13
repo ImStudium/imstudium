@@ -1,10 +1,11 @@
-import { cp, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative } from "node:path";
 import { ensureDir, slugify } from "./config.js";
 import { convertImage, convertLocalDocument, IMAGE_ONLY, probeLocalIngest, type LocalConvertOk } from "./ingest/local-docs.js";
 import { imageToPdf } from "./ingest/image-pdf.js";
 import { isMathCandidate, LAYOUT_MODEL, MATH_MODEL, mathRuntimeStatus, recognizeMath, type Formula, type MathRuntimeStatus } from "./ingest/math.js";
 import { ocrRuntimeStatus, type OcrRuntimeStatus } from "./ingest/ocr-runtime.js";
+import { applyFormulaFixes, formulaNote, readFormulaFixes, type FormulaEntry } from "./formulas.js";
 import { buildCourseSearchIndex } from "./search-corpus.js";
 import type { ExtractManifest, ExtractMathInfo, ExtractOcrInfo, ExtractResult, MaterialKind, StudiumCourse } from "./types.js";
 
@@ -137,7 +138,8 @@ export class Extractor {
 
   /** See {@link shouldRedoForMath}. */
   private async mathWouldAdd(prev: ExtractManifest, outDir: string, opts: { ocr?: boolean; math?: boolean }): Promise<boolean> {
-    if (opts.ocr === false || opts.math === false || prev.math) return false;
+    if (opts.ocr === false || opts.math === false) return false;
+    if (prev.math && prev.math.model === MATH_MODEL && prev.math.layoutModel === LAYOUT_MODEL) return false;
     const status = mathRuntimeStatus();
     if (!status.ready || status.disabled) return false;
     const content = prev.kind === "pdf" ? await readFile(join(outDir, "content.md"), "utf-8").catch(() => "") : "";
@@ -149,14 +151,28 @@ export class Extractor {
    * OCR'd or text-less pages) when the math runtime is installed. Returns the
    * formulas per page, or null when math did not run.
    */
-  private async readMath(pdf: Uint8Array, candidates: number[], opts: { ocr?: boolean; math?: boolean }): Promise<Map<number, Formula[]> | null> {
+  private async readMath(pdf: Uint8Array, candidates: number[], opts: { ocr?: boolean; math?: boolean }, outDir: string): Promise<Map<number, FormulaEntry[]> | null> {
     if (opts.ocr === false || opts.math === false) return null;
     const status = mathRuntimeStatus();
     if (!status.ready || status.disabled) return null;
     try {
-      const result = await recognizeMath(pdf, { pages: candidates });
-      const byPage = new Map<number, Formula[]>();
-      for (const f of result.formulas) byPage.set(f.page, [...(byPage.get(f.page) ?? []), f]);
+      const result = await recognizeMath(pdf, { pages: candidates, crops: true });
+      // Each formula's image next to content.md, for the agent's (or the student's) look. Only our
+      // own crops from an earlier reading (p<page>-<n>.png) are replaced; nothing else there is touched.
+      const cropDir = join(outDir, "formulas");
+      for (const name of await readdir(cropDir).catch(() => [] as string[])) {
+        if (/^p\d+-\d+\.png$/.test(name)) await unlink(join(cropDir, name)).catch(() => {});
+      }
+      if (result.formulas.length) await mkdir(cropDir, { recursive: true });
+      const entries: FormulaEntry[] = [];
+      for (const [i, f] of result.formulas.entries()) {
+        const png = result.crops?.[i];
+        if (png) await writeFile(join(cropDir, `${f.id}.png`), png);
+        entries.push(png ? { ...f, crop: `formulas/${f.id}.png` } : f);
+      }
+      const formulas = applyFormulaFixes(entries, await readFormulaFixes(outDir));
+      const byPage = new Map<number, FormulaEntry[]>();
+      for (const f of formulas) byPage.set(f.page, [...(byPage.get(f.page) ?? []), f]);
       this.lastMath = {
         model: MATH_MODEL,
         layoutModel: LAYOUT_MODEL,
@@ -164,7 +180,7 @@ export class Extractor {
         formulas: result.formulas.length,
         ms: result.ms,
       };
-      this.lastFormulas = result.formulas;
+      this.lastFormulas = formulas;
       return byPage;
     } catch (err) {
       this.lastMathError = err instanceof Error ? err.message : String(err);
@@ -172,7 +188,7 @@ export class Extractor {
     }
   }
 
-  private lastFormulas: Formula[] = [];
+  private lastFormulas: FormulaEntry[] = [];
 
   /** math.json next to content.md: every formula with its page and box, for checking against the original. */
   private async writeMathJson(outDir: string): Promise<void> {
@@ -251,7 +267,7 @@ export class Extractor {
     let formulas = 0;
     if (kind === "pdf") {
       const candidates = converted.pages.filter((p) => p.ocr || p.imageOnly || isMathCandidate(p.markdown)).map((p) => p.index);
-      const math = candidates.length ? await this.readMath(bytes, candidates, opts) : null;
+      const math = candidates.length ? await this.readMath(bytes, candidates, opts, outDir) : null;
       if (math) {
         pageTexts = pageTexts.map((text, i) => withFormulas(text, math.get(converted.pages[i]?.index ?? i)));
         formulas = this.lastMath?.formulas ?? 0;
@@ -285,7 +301,7 @@ export class Extractor {
     if (ocr?.ok) {
       this.recordOcr(ocr);
       const wrapped = imageToPdf(bytes);
-      const math = wrapped ? await this.readMath(wrapped, [0], opts) : null;
+      const math = wrapped ? await this.readMath(wrapped, [0], opts, outDir) : null;
       const formulas = math?.get(0)?.length ?? 0;
       if (math) await this.writeMathJson(outDir);
       await writeFile(
@@ -344,7 +360,9 @@ export function shouldRedoForMath(
   status: Pick<MathRuntimeStatus, "ready" | "disabled">,
   opts: { ocr?: boolean; math?: boolean } = {},
 ): boolean {
-  if (opts.ocr === false || opts.math === false || prev.math || !status.ready || status.disabled) return false;
+  if (opts.ocr === false || opts.math === false || !status.ready || status.disabled) return false;
+  // Read before with the same models: nothing new. With older ones: read again (corrections still apply where the reading is unchanged).
+  if (prev.math) return prev.math.model !== MATH_MODEL || prev.math.layoutModel !== LAYOUT_MODEL;
   if (prev.kind === "image") return !!prev.ocr;
   if (prev.kind !== "pdf") return false;
   return !!prev.ocr?.pages.length || !!prev.imageOnlyPages?.length || isMathCandidate(contentMd);
@@ -380,12 +398,17 @@ export function extractSlug(filename: string): string {
 }
 
 /** Heading above the formulas a page got from on-device math recognition. */
-export const FORMULAS_HEADING = "_Formulas on this page, read on this machine as LaTeX (PP-FormulaNet+ S): check against the original._";
+export const FORMULAS_HEADING = "_Formulas on this page, read on this machine as LaTeX (PP-FormulaNet+ L): check against the original._";
 
 /** Page text plus its display formulas as `$$…$$` blocks, top to bottom. */
-export function withFormulas(text: string, formulas: Formula[] | undefined): string {
+export function withFormulas(text: string, formulas: Array<Formula | FormulaEntry> | undefined): string {
   if (!formulas?.length) return text;
-  return [text.trimEnd(), "", FORMULAS_HEADING, "", ...formulas.flatMap((f) => [`$$${f.latex}$$`, ""])].join("\n").trimEnd();
+  const block = (f: Formula | FormulaEntry) => {
+    const e = f as FormulaEntry;
+    const note = e.check ? formulaNote(e) : null;
+    return [`$$${e.corrected?.latex ?? e.latex}$$`, ...(note ? [note] : []), ""];
+  };
+  return [text.trimEnd(), "", FORMULAS_HEADING, "", ...formulas.flatMap(block)].join("\n").trimEnd();
 }
 
 function renderContentMd(

@@ -13,14 +13,17 @@
  * DOM, and the LaTeX source of every formula.
  */
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { buildBeamerDecks, hasBeamer } from "./beamer.ts";
 
 export interface PageTruth {
   text: string;
   formulas: string[];
+  /** Inline formulas on the page (Beamer decks), recorded but not scored as LaTeX. */
+  inline?: string[];
 }
 export interface SetTruth {
   name: string;
@@ -97,7 +100,7 @@ const PAGE_CSS = (w: number, h: number, scan: boolean) => `
   html, body { margin: 0; padding: 0; background: ${scan ? "#f3f1ea" : "#fff"} }
   .page { box-sizing: border-box; width: ${w}px; height: ${h}px; overflow: hidden; page-break-after: always; break-after: page; color: #111;
           font-family: "DejaVu Serif", "Liberation Serif", Georgia, serif; position: relative;
-          ${scan ? "filter: grayscale(1) contrast(1.15) blur(0.45px); transform: rotate(0.35deg);" : ""} }
+          ${scan ? SCAN_FILTER : ""} }
   .prose { padding: 72px 80px; font-size: 16px; line-height: 1.55 }
   .prose h1 { font-size: 26px; margin: 0 0 18px } .prose p { margin: 0 0 12px; text-align: justify }
   .slide { padding: 48px 64px; font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif }
@@ -162,14 +165,25 @@ interface Browser {
 }
 interface Page {
   goto(url: string): Promise<unknown>;
+  setContent(html: string): Promise<unknown>;
   pdf(o: object): Promise<Buffer>;
   screenshot(o: object): Promise<Buffer>;
   evaluate<T>(fn: string): Promise<T>;
   close(): Promise<void>;
 }
 
+export interface FixtureTools {
+  imagesToPdf: (images: Uint8Array[], dpi: number) => Buffer | null;
+  /** With the math runtime: renders PDF pages (used to scan the Beamer decks). */
+  renderPdfPages?: (pdf: Uint8Array, o: { dpi?: number }) => Promise<Array<{ width: number; height: number; rgba: Uint8Array }>>;
+  encodePng?: (data: Uint8Array, w: number, h: number, channels: 1 | 4) => Buffer;
+}
+
+const SCAN_FILTER = "filter: grayscale(1) contrast(1.15) blur(0.45px); transform: rotate(0.35deg);";
+
 /** Generate every set into `dir`; returns the ground truth (also written to truth.json). */
-export async function generateFixtures(root: string, dir: string, imagesToPdf: (images: Uint8Array[], dpi: number) => Buffer | null, log: (s: string) => void = () => {}): Promise<Truth> {
+export async function generateFixtures(root: string, dir: string, tools: FixtureTools, log: (s: string) => void = () => {}): Promise<Truth> {
+  const { imagesToPdf } = tools;
   await mkdir(dir, { recursive: true });
   const req = createRequire(join(root, "packages", "sdk", "package.json"));
   const { chromium } = req("playwright") as { chromium: { launch(o?: object): Promise<unknown> } };
@@ -214,6 +228,28 @@ export async function generateFixtures(root: string, dir: string, imagesToPdf: (
       if (!scanPdf) throw new Error(`could not wrap the ${set.name} scans`);
       await writeFile(join(dir, `${set.name}-scan.pdf`), scanPdf);
       truth.sets.push({ name: set.name, kind: set.kind, pages: texts.map((text, i) => ({ text, formulas: set.formulas[i] ?? [] })) });
+    }
+
+    // Hard slides: pdflatex Beamer decks, scanned by rendering each page at 200 dpi and degrading it like the others.
+    if (!hasBeamer()) log("fixtures: no pdflatex/beamer, skipping the Beamer decks");
+    else if (!tools.renderPdfPages || !tools.encodePng) log("fixtures: no math runtime to render pages, skipping the Beamer decks");
+    else {
+      const SCAN_DPI = 200;
+      for (const deck of await buildBeamerDecks(dir, log)) {
+        const pages = await tools.renderPdfPages(new Uint8Array(await readFile(deck.pdf)), { dpi: SCAN_DPI });
+        const shots: Uint8Array[] = [];
+        for (const p of pages) {
+          const png = tools.encodePng(p.rgba, p.width, p.height, 4).toString("base64");
+          const tab = await browser.newPage({ viewport: { width: p.width, height: p.height } });
+          await tab.setContent(`<html><body style="margin:0;background:#f3f1ea;overflow:hidden"><img style="display:block;${SCAN_FILTER}" src="data:image/png;base64,${png}"></body></html>`);
+          shots.push(await tab.screenshot({ type: "jpeg", quality: 72 }));
+          await tab.close();
+        }
+        const scanPdf = imagesToPdf(shots, SCAN_DPI);
+        if (!scanPdf) throw new Error(`could not wrap the ${deck.name} scans`);
+        await writeFile(join(dir, `${deck.name}-scan.pdf`), scanPdf);
+        truth.sets.push({ name: deck.name, kind: "formulas", pages: deck.formulas.map((formulas, i) => ({ text: "", formulas, inline: deck.inline[i] ?? [] })) });
+      }
     }
   } finally {
     await browser.close();
