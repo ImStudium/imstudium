@@ -5,6 +5,7 @@ import type { SessionData } from "./types.js";
 import { getDefaultConfig, paths } from "./config.js";
 import { assertSameOrigin, originOf } from "./client.js";
 import { ImstudiumError } from "./errors.js";
+import { loadKeytar, type Keytar } from "./keytar.js";
 import {
   type BrowserProfileMode,
   isChromeMissingError,
@@ -63,13 +64,9 @@ function fileStoreOnly(): boolean {
   return process.env.IMSTUDIUM_SESSION_STORE === "file";
 }
 
-async function getKeytar() {
+async function getKeytar(): Promise<Keytar | null> {
   if (fileStoreOnly()) return null;
-  try {
-    return await import("keytar");
-  } catch {
-    return null;
-  }
+  return loadKeytar();
 }
 
 type SecureContext = {
@@ -172,6 +169,34 @@ const store = {
     await writeFile(join(paths.configDir, "session.json"), JSON.stringify(session), { mode: 0o600 });
   },
 
+  /**
+   * Moves a session out of the plain file once ImSicheren or the keychain can
+   * hold it (0.2.0 never reached the keychain, see keytar.ts). Null when
+   * neither can, and the file stays.
+   */
+  async promote(account: string, session: SessionData): Promise<"imsicheren" | "keychain" | null> {
+    const secure = await getSecureContext();
+    if (secure) {
+      try {
+        await secure.set("generic_json", account, session as unknown as Record<string, unknown>);
+        await removePlainSessionFile();
+        return "imsicheren";
+      } catch {
+        // try the keychain
+      }
+    }
+    const keytar = await getKeytar();
+    if (!keytar) return null;
+    try {
+      await keytar.setPassword(KEYTAR_SERVICE, account, JSON.stringify(session));
+      if ((await keytar.getPassword(KEYTAR_SERVICE, account)) == null) return null;
+      await removePlainSessionFile();
+      return "keychain";
+    } catch {
+      return null;
+    }
+  },
+
   async delete(account: string): Promise<void> {
     const secure = await getSecureContext();
     if (secure) {
@@ -227,6 +252,7 @@ export class AuthManager {
     if (!found) return null;
     const session = found.value as SessionData;
     if (!session.origin || originOf(session.origin) !== this.instanceOrigin) return null;
+    if (found.where === "file") await store.promote(sessionAccount(this.instanceOrigin), session);
     this.session = session;
     return session;
   }
@@ -254,6 +280,11 @@ export class AuthManager {
   async clearSession(): Promise<void> {
     this.session = null;
     await store.delete(sessionAccount(this.instanceOrigin));
+  }
+
+  /** Whether the system keychain module loads here (false under IMSTUDIUM_SESSION_STORE=file). */
+  async keychainAvailable(): Promise<boolean> {
+    return (await getKeytar()) !== null;
   }
 
   /** Where the session lives right now — for status output, never the value. */

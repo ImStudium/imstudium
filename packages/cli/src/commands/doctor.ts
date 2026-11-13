@@ -166,15 +166,26 @@ export const DOCTOR_CHECKS: CheckDef[] = [
     id: "session.store",
     title: "Session",
     run: async ({ sdk }) => {
-      const store = await sdk.auth.sessionStore();
+      // Loading first: it moves a session out of the plain file when a keychain can take it.
       const session = await sdk.auth.loadSession();
+      const store = await sdk.auth.sessionStore();
       if (!session || store === "none") return failed("not signed in", "imstudium login", { store: "none" });
       const tier = store === "file" ? "a plain 0600 file (weakest tier)" : store === "keychain" ? "the system keychain" : "ImSicheren";
       const expired = session.expiresAt && Date.parse(session.expiresAt) < Date.now() && !session.refreshToken;
       if (expired) return warn(`${session.type} session in ${tier} expired ${berlinDateTime(session.expiresAt)}`, "imstudium login", { store, type: session.type });
-      return store === "file"
-        ? warn(`${session.type} session stored in ${tier}`, "Install keychain support (npm i -g keytar) or ImSicheren, then: imstudium login", { store, type: session.type })
-        : ok(`${session.type} session in ${tier}`, { store, type: session.type });
+      if (store !== "file") return ok(`${session.type} session in ${tier}`, { store, type: session.type });
+      if (process.env.IMSTUDIUM_SESSION_STORE === "file") return warn(`${session.type} session stored in ${tier} (IMSTUDIUM_SESSION_STORE=file)`, null, { store, type: session.type });
+      return (await sdk.auth.keychainAvailable())
+        ? warn(
+            `${session.type} session stored in ${tier}: the system keychain refused it`,
+            "Unlock the keychain (Linux: start a Secret Service such as gnome-keyring), then run any imstudium command to move it there",
+            { store, type: session.type, keychain: "refused" },
+          )
+        : warn(
+            `${session.type} session stored in ${tier}: the keychain module (keytar) does not load`,
+            "npm i -g @imstudium/cli rebuilds it, or install ImSicheren; the session moves out of the file on the next command",
+            { store, type: session.type, keychain: "missing" },
+          );
     },
   },
   {
