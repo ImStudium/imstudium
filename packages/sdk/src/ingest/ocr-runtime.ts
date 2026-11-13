@@ -13,8 +13,8 @@
  * may not download anything, so documents are only ever read locally.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
+import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { paths } from "../config.js";
@@ -203,6 +203,90 @@ export async function downloadVerified(url: string, sha256: string, fetchImpl: t
     });
   }
   return bytes;
+}
+
+/** sha256 of a file on disk, streamed (a model is too big to hold twice), hex. */
+export async function sha256File(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+  return hash.digest("hex");
+}
+
+/**
+ * Fetch a pinned file to `dest` through `dest.part`, which survives a broken
+ * run: a partial file is resumed with an HTTP Range request (from scratch when
+ * the server ignores it), and a connection that breaks off mid-file
+ * ("terminated") is retried from where it stopped, up to `retries` times. The
+ * finished file must match `sha256`, else it is deleted and nothing is
+ * installed. Returns the bytes fetched by this call.
+ */
+export async function downloadToFile(
+  url: string,
+  sha256: string,
+  dest: string,
+  options: { fetchImpl?: typeof fetch; retries?: number; onProgress?: (msg: string) => void; waitMs?: number; startedOver?: boolean } = {},
+): Promise<number> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const retries = options.retries ?? 5;
+  const name = url.split("/").pop()!;
+  const part = `${dest}.part`;
+  await mkdir(dirname(dest), { recursive: true });
+  const size = async () => (await stat(part).catch(() => null))?.size ?? 0;
+  let fetched = 0;
+  // A resumed file that doesn't match (a partial file left by an older pin of the same name) is fetched once more from scratch.
+  let resumed = false;
+  for (let attempt = 0; ; attempt++) {
+    const have = await size();
+    let failure: unknown;
+    try {
+      const res = await fetchImpl(url, { redirect: "follow", ...(have ? { headers: { Range: `bytes=${have}-` } } : {}) });
+      if (res.status === 416 && have) break; // the partial file is already whole: verify it below
+      if (!res.ok) {
+        if (res.status < 500) throw new ImstudiumError(`Download failed (${res.status}): ${url}`, "OCR_INSTALL_FAILED", res.status, undefined, { url });
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const append = have > 0 && res.status === 206;
+      resumed ||= append;
+      if (have && !append) options.onProgress?.(`${name}: the server can't resume, starting over`);
+      else if (have) options.onProgress?.(`${name}: resuming at ${Math.round(have / 1e6)} MB`);
+      // Each chunk is on disk before the next is read, so a break keeps everything received.
+      const out = await open(part, append ? "a" : "w");
+      try {
+        for await (const chunk of (res.body ?? []) as AsyncIterable<Uint8Array>) {
+          await out.write(chunk);
+          fetched += chunk.length;
+        }
+      } finally {
+        await out.close();
+      }
+      break;
+    } catch (err) {
+      if (err instanceof ImstudiumError) throw err;
+      failure = err;
+    }
+    const why = failure instanceof Error ? failure.message : String(failure);
+    if (attempt >= retries) {
+      throw new ImstudiumError(`Could not download ${name}: ${why}`, "OCR_INSTALL_FAILED", undefined, `Run the same command again: it resumes at ${Math.round((await size()) / 1e6)} MB`, { url });
+    }
+    options.onProgress?.(`${name}: connection broke off at ${Math.round((await size()) / 1e6)} MB (${why}), retrying`);
+    await new Promise((r) => setTimeout(r, (options.waitMs ?? 2000) * (attempt + 1)));
+  }
+  const got = await sha256File(part);
+  if (got !== sha256 && resumed && !options.startedOver) {
+    await rm(part, { force: true });
+    options.onProgress?.(`${name}: the resumed file doesn't match its pin, starting over`);
+    return fetched + (await downloadToFile(url, sha256, dest, { ...options, startedOver: true }));
+  }
+  if (got !== sha256) {
+    await rm(part, { force: true });
+    throw new ImstudiumError(`Checksum mismatch for ${name}; nothing was installed`, "OCR_INSTALL_FAILED", undefined, "The download was not the pinned file. Try again later; if it persists, open an issue", {
+      url,
+      expected: sha256,
+      got,
+    });
+  }
+  await rename(part, dest);
+  return fetched;
 }
 
 /**

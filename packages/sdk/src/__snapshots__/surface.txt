@@ -7,6 +7,8 @@ CatalogResource
 ConsultationsResource
 CoursesResource
 CoursewareResource
+DECISION_FLAG_BELOW
+DECISION_WEIGHTS
 DiscoveryResource
 ERROR_CODES
 EXIT_CODES
@@ -19,6 +21,7 @@ ForumResource
 IMAGE_PDF_DPI
 ImstudiumError
 LAYOUT_MODEL
+MATH_DECISION
 MATH_MODEL
 MessagesResource
 NewsResource
@@ -29,6 +32,7 @@ OnboardUI
 PDFIUM_VERSION
 PeopleResource
 PlanningResource
+READING_FACTORS
 SDK_VERSION
 ScheduleResource
 SemestersResource
@@ -62,6 +66,7 @@ coursewareElementUrl
 createSdk
 dateKey
 dayLabel
+decideReading
 describeVerdict
 detectTools
 displayName
@@ -126,6 +131,7 @@ probeOAuthServer
 readFormulaFixes
 readRouteCatalog
 readSavedNews
+readingFeatures
 rebuildSearchIndexes
 recognizeMath
 removeMathRuntime
@@ -138,6 +144,7 @@ resolveCourseQuery
 resolveSemesterByLabel
 resolveWorkspaceCourse
 rhythmLabel
+sameMeaning
 saveConfig
 searchRoutes
 searchWorkspace

@@ -73,6 +73,8 @@ function item(x: ExtractedFormulas, f: FormulaEntry): FormulasListOutput["formul
     verdict,
     why: describeVerdict(verdict),
     crop: f.crop ? join(x.dir, f.crop) : null,
+    confidence: f.confidence ?? null,
+    otherReadings: f.otherReadings ?? [],
     corrected: f.corrected ? { by: f.corrected.by, at: f.corrected.at } : null,
   };
 }

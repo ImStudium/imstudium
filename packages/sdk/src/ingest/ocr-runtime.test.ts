@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activateOcrRuntime,
   dirBytes,
+  downloadToFile,
   downloadVerified,
   ocrDisabledByEnv,
   OCR_MODEL,
@@ -167,6 +168,85 @@ describe("downloadVerified", () => {
       throw new TypeError("fetch failed");
     }) as unknown as typeof fetch;
     await expect(downloadVerified("https://example.invalid/a.tgz", sha256Hex(body), offline)).rejects.toMatchObject({ code: "OCR_INSTALL_FAILED" });
+  });
+});
+
+describe("downloadToFile", () => {
+  const body = Buffer.from("0123456789".repeat(1000));
+  const sum = sha256Hex(body);
+  /**
+   * A server for `body`: honours Range unless `ranges` is false; the first `breaks` responses
+   * stop after `cut` bytes with the error undici gives when a connection closes ("terminated").
+   */
+  const server = (o: { ranges?: boolean; breaks?: number; cut?: number; bytes?: Buffer } = {}) => {
+    const calls: Array<string | null> = [];
+    let breaks = o.breaks ?? 0;
+    const bytes = o.bytes ?? body;
+    const fetchImpl = (async (_url: string, init?: { headers?: Record<string, string> }) => {
+      const range = init?.headers?.Range ?? null;
+      calls.push(range);
+      const from = range && o.ranges !== false ? Number(/bytes=(\d+)-/.exec(range)![1]) : 0;
+      if (from >= bytes.length) return new Response(null, { status: 416 });
+      const rest = bytes.subarray(from);
+      const broken = breaks-- > 0;
+      // Chunks first, the error on a later pull: erroring a stream drops what it still queues.
+      let sent = false;
+      const stream = new ReadableStream({
+        pull(c) {
+          if (sent) return broken ? c.error(new TypeError("terminated")) : c.close();
+          sent = true;
+          c.enqueue(new Uint8Array(broken ? rest.subarray(0, o.cut ?? 3000) : rest));
+        },
+      });
+      return new Response(stream, { status: from ? 206 : 200 });
+    }) as unknown as typeof fetch;
+    return { fetchImpl, calls };
+  };
+
+  it("resumes where a broken-off connection stopped, then verifies the whole file", async () => {
+    const dest = join(root, "m", "model.onnx");
+    const s = server({ breaks: 2, cut: 3000 });
+    const notes: string[] = [];
+    const fetched = await downloadToFile("https://example.invalid/model.onnx", sum, dest, { fetchImpl: s.fetchImpl, waitMs: 0, onProgress: (m) => notes.push(m) });
+    expect(await readFile(dest)).toEqual(body);
+    expect(s.calls).toEqual([null, "bytes=3000-", "bytes=6000-"]);
+    expect(fetched).toBe(body.length);
+    expect(notes.some((n) => /broke off at .*terminated.*retrying/.test(n))).toBe(true);
+  });
+
+  it("a later run resumes the partial file a failed run left", async () => {
+    const dest = join(root, "model.onnx");
+    const err = await downloadToFile("https://example.invalid/model.onnx", sum, dest, { fetchImpl: server({ breaks: 9, cut: 4000 }).fetchImpl, retries: 0, waitMs: 0 }).catch((e) => e);
+    expect(err).toMatchObject({ code: "OCR_INSTALL_FAILED", hint: expect.stringMatching(/resumes/) });
+    expect((await readFile(`${dest}.part`)).length).toBe(4000);
+    const s = server();
+    expect(await downloadToFile("https://example.invalid/model.onnx", sum, dest, { fetchImpl: s.fetchImpl, waitMs: 0 })).toBe(body.length - 4000);
+    expect(s.calls).toEqual(["bytes=4000-"]);
+    expect(await readFile(dest)).toEqual(body);
+  });
+
+  it("starts over when the server ignores Range, and once more when a resumed file doesn't match its pin", async () => {
+    const dest = join(root, "model.onnx");
+    await writeFile(`${dest}.part`, body.subarray(0, 500));
+    await downloadToFile("https://example.invalid/model.onnx", sum, dest, { fetchImpl: server({ ranges: false }).fetchImpl, waitMs: 0 });
+    expect(await readFile(dest)).toEqual(body);
+    // A partial file of an older pin under the same name.
+    await writeFile(`${dest}.part`, Buffer.from("x".repeat(500)));
+    const s = server();
+    await downloadToFile("https://example.invalid/model.onnx", sum, join(root, "model.onnx"), { fetchImpl: s.fetchImpl, waitMs: 0 });
+    expect(s.calls).toEqual(["bytes=500-", null]);
+    expect(await readFile(dest)).toEqual(body);
+  });
+
+  it("refuses a file that doesn't match and leaves nothing behind; client errors are not retried", async () => {
+    const dest = join(root, "model.onnx");
+    const err = await downloadToFile("https://example.invalid/model.onnx", "0".repeat(64), dest, { fetchImpl: server().fetchImpl, waitMs: 0 }).catch((e) => e);
+    expect(err).toMatchObject({ code: "OCR_INSTALL_FAILED", details: { expected: "0".repeat(64), got: sum } });
+    expect(existsSync(dest) || existsSync(`${dest}.part`)).toBe(false);
+    let calls = 0;
+    const missing = (async () => (calls++, new Response("no", { status: 404 }))) as unknown as typeof fetch;
+    await expect(downloadToFile("https://example.invalid/model.onnx", sum, dest, { fetchImpl: missing, waitMs: 0 })).rejects.toMatchObject({ status: 404 });
+    expect(calls).toBe(1);
   });
 });
 

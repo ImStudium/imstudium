@@ -25,7 +25,7 @@ import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
 import { basename, join } from "node:path";
 import { ImstudiumError } from "../errors.js";
-import { buildPdf, dirBytes, downloadVerified, ocrPlatformKey, ocrRoot, OCR_RUNTIMES } from "./ocr-runtime.js";
+import { buildPdf, dirBytes, downloadToFile, ocrPlatformKey, ocrRoot, OCR_RUNTIMES } from "./ocr-runtime.js";
 import { encodePng } from "./png.js";
 
 export const MATH_MODEL = "pp-formulanet_plus-l (oar-ocr v0.3.0)";
@@ -114,6 +114,10 @@ export const mathDir = () => join(ocrRoot(), "math");
 const modulesDir = () => join(mathDir(), "node_modules");
 const modelsDir = () => join(mathDir(), "models");
 const mathMarker = () => join(mathDir(), "math.json");
+/** Each asset's SHA-256 once it was verified and put in place, written as the install goes (a broken run keeps what it finished). */
+const verifiedFile = () => join(mathDir(), "verified.json");
+/** Partial downloads, kept across runs so the next one resumes. */
+const downloadsDir = () => join(mathDir(), "downloads");
 
 function assetPath(a: MathAsset): string {
   return a.kind === "npm" ? join(modulesDir(), a.name, "package.json") : join(modelsDir(), a.name);
@@ -197,8 +201,33 @@ export interface MathInstallResult {
   diskBytes: number;
 }
 
-/** Download, verify and unpack the math pieces, then prove one formula reads. Idempotent; `force` refetches. */
-export async function installMathRuntime(options: { force?: boolean; onProgress?: (msg: string) => void } = {}): Promise<MathInstallResult> {
+async function readVerified(): Promise<Record<string, string>> {
+  try {
+    return JSON.parse(await readFile(verifiedFile(), "utf-8")) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Whether `a` is in place as pinned: its SHA-256 was recorded when it was
+ * verified. An install from before the record existed only put a file in place
+ * after verifying it, so a file without a record counts when the old marker
+ * names the same SHA-256 or names none (a run that broke off before the marker).
+ */
+export function assetUpToDate(a: Pick<MathAsset, "name" | "sha256">, present: boolean, verified: Record<string, string>, legacy: Record<string, string> | undefined): boolean {
+  if (!present) return false;
+  if (verified[a.name]) return verified[a.name] === a.sha256;
+  return !legacy?.[a.name] || legacy[a.name] === a.sha256;
+}
+
+/**
+ * Download, verify and unpack the math pieces, then prove one formula reads.
+ * Idempotent and incremental: pieces already verified are kept, a download
+ * that broke off resumes where it stopped (also in the next run), and a piece
+ * whose pin changed is fetched again. `force` refetches everything.
+ */
+export async function installMathRuntime(options: { force?: boolean; onProgress?: (msg: string) => void; fetchImpl?: typeof fetch } = {}): Promise<MathInstallResult> {
   const key = ocrPlatformKey();
   if (!OCR_RUNTIMES[key] || !ORT_PLATFORM_DIR[key]) {
     throw new ImstudiumError(`No local math runtime for ${key}`, "OCR_UNSUPPORTED", undefined, undefined, { platform: key });
@@ -208,35 +237,33 @@ export async function installMathRuntime(options: { force?: boolean; onProgress?
   let downloadedBytes = 0;
   if (options.force) await rm(mathDir(), { recursive: true, force: true });
   await mkdir(modelsDir(), { recursive: true });
+  const verified = await readVerified();
+  const legacy = (readMathMarker() as { sha256?: Record<string, string> } | null)?.sha256;
   for (const a of MATH_ASSETS) {
-    if (existsSync(assetPath(a))) {
+    if (assetUpToDate(a, existsSync(assetPath(a)), verified, legacy)) {
       skipped.push(a.label);
       continue;
     }
     options.onProgress?.(`downloading ${a.url.split("/").pop()} (${Math.round(a.bytes / 1e6)} MB)`);
-    const bytes = await downloadVerified(a.url, a.sha256);
-    downloadedBytes += bytes.length;
+    const target = a.kind === "file" ? assetPath(a) : join(downloadsDir(), basename(a.url));
+    if (a.kind === "file") await rm(target, { force: true });
+    downloadedBytes += await downloadToFile(a.url, a.sha256, target, { onProgress: options.onProgress, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl, waitMs: 0 } : {}) });
     options.onProgress?.(`verified ${a.url.split("/").pop()} (sha256 ${a.sha256.slice(0, 12)}…)`);
-    if (a.kind === "file") {
-      const tmp = `${assetPath(a)}.part`;
-      await writeFile(tmp, bytes);
-      await rename(tmp, assetPath(a));
-    } else {
+    if (a.kind === "npm") {
       const dest = join(modulesDir(), a.name);
       const staging = `${dest}.staging`;
       await rm(staging, { recursive: true, force: true });
-      await mkdir(staging, { recursive: true });
-      const archive = join(staging, "package.tgz");
-      await writeFile(archive, bytes);
-      const out = join(staging, "x");
-      await unpackMembers(archive, out, a.members!(key));
+      await unpackMembers(target, staging, a.members!(key));
       await rm(dest, { recursive: true, force: true });
       await mkdir(join(dest, ".."), { recursive: true });
-      await rename(out, dest);
-      await rm(staging, { recursive: true, force: true });
+      await rename(staging, dest);
+      await rm(target, { force: true });
     }
+    verified[a.name] = a.sha256;
+    await writeFile(verifiedFile(), `${JSON.stringify(verified, null, 2)}\n`);
     installed.push(a.label);
   }
+  await rm(downloadsDir(), { recursive: true, force: true });
   // Models an earlier version pinned (e.g. the small ones before 0.3) are no longer used: free their space.
   const pinned = new Set(MATH_ASSETS.filter((a) => a.kind === "file").map((a) => a.name));
   for (const name of await readdir(modelsDir()).catch(() => [] as string[])) {
@@ -763,6 +790,40 @@ function katex() {
   return katexModule;
 }
 
+/**
+ * The formula's symbols in their structure, as KaTeX lays it out (MathML
+ * tokens without attributes, fonts, spacing, operator or cell boundaries, or
+ * delimiter sizing); null when KaTeX can't parse it. Two readings with the same
+ * symbols print the same formula however their LaTeX is spelled.
+ */
+function symbolTokens(latex: string): string | null {
+  const k = katex();
+  if (!k) return null;
+  let mml: string;
+  try {
+    const unsized = latex.replace(/\\(left|right)\s*\./g, "").replace(/\\(left|right|[bB]igg?[lr]?)(?![a-zA-Z])/g, "");
+    mml = k.renderToString(unsized, { output: "mathml", throwOnError: true, displayMode: true, strict: "ignore", trust: false, maxExpand: 200 });
+  } catch {
+    return null;
+  }
+  const body = mml
+    .replace(/<annotation[\s\S]*?<\/annotation>/g, "")
+    .replace(/<(\/?)(\w+)[^>]*>/g, "<$1$2>")
+    .replace(/<\/?(mrow|semantics|math|mstyle|span)>/g, "");
+  const variants: Record<string, string> = { "ϵ": "ε", "∣": "|", "‾": "ˉ", "ϕ": "φ" };
+  return (body.match(/<\/?\w+>|[^<]/gu) ?? [])
+    .filter((t) => !/^[⁡-⁤\s  -​ ]$/u.test(t) && !/^<\/?(mi|mn|mo|mtd|mtext|mrow)>$/.test(t))
+    .map((t) => variants[t] ?? t)
+    .join(" ");
+}
+
+/** Same symbols in the same structure (see symbolTokens); false when either doesn't parse. */
+export function sameMeaning(a: string, b: string): boolean {
+  if (a.replace(/\s+/g, "") === b.replace(/\s+/g, "")) return true;
+  const x = symbolTokens(a);
+  return x !== null && x === symbolTokens(b);
+}
+
 /** Why KaTeX can't typeset `latex` (display mode), or null when it can (or KaTeX isn't there). */
 export function katexError(latex: string): string | null {
   const k = katex();
@@ -971,6 +1032,85 @@ export interface Formula extends FormulaVerdict {
   latex: string;
   /** Layout detector confidence. */
   score: number;
+  /** How likely the reading is exactly right, from decideReading (0–1). */
+  confidence?: number;
+  /** The other readings of the same box at lower resolutions, where they differ from `latex`. */
+  otherReadings?: string[];
+  /** With `readings: true` (benchmark): every reading of the box, at each resolution factor, with its check. */
+  readings?: Reading[];
+}
+
+/** One reading of a formula box at `factor` times the page's render scale. */
+export interface Reading extends FormulaVerdict {
+  latex: string;
+  factor: number;
+}
+
+/**
+ * Every formula box is read at the page's render scale and again at 3/4 and
+ * 1/2 of it (288, 216 and 144 dpi on slides): the model makes different
+ * mistakes at each, and where it is right the readings tend to agree.
+ * IMSTUDIUM_MATH_READINGS=1 reads once (benchmark only).
+ */
+export const READING_FACTORS = [1, 0.75, 0.5] as const;
+
+/**
+ * The decision model: logistic weights over a reading's signals, fitted on the
+ * synthetic formula benchmark (scripts/bench, leave-one-deck-out; see
+ * docs/BENCHMARKS.md; the weights barely move between folds). Raw feature
+ * scale, bias first. Features in order:
+ * check passes (no issues, letters and digits agree or nothing to compare),
+ * letters and digits match the PDF, has issues, letters the PDF doesn't have
+ * (up to 3), share of the other readings with the same LaTeX, share with the
+ * same symbols, read at the full scale, read at 3/4, log(1 + length).
+ */
+export const DECISION_WEIGHTS = [1.571, 2.981, 1.184, -2.723, -0.964, 1.678, 2.423, -0.316, -0.44, -1.36];
+/** How a box's readings become one, kept in the manifest: 1 = READING_FACTORS and the decision model (before: one reading). */
+export const MATH_DECISION = 1;
+/** Below this, a reading whose check passed is still marked for a look. */
+export const DECISION_FLAG_BELOW = 0.8;
+
+/** The decision model's inputs for `readings[i]` (see DECISION_WEIGHTS). */
+export function readingFeatures(readings: readonly Reading[], i: number): number[] {
+  const r = readings[i]!;
+  const others = readings.filter((_, j) => j !== i);
+  const flat = (s: string) => s.replace(/\s+/g, "");
+  const share = (f: (o: Reading) => boolean) => (others.length ? others.filter(f).length / others.length : 1);
+  return [
+    r.check !== "differs" ? 1 : 0,
+    r.check === "match" ? 1 : 0,
+    r.issues.length ? 1 : 0,
+    Math.min(3, r.glyphs?.extra.length ?? 0),
+    share((o) => flat(o.latex) === flat(r.latex)),
+    share((o) => sameMeaning(o.latex, r.latex)),
+    r.factor === 1 ? 1 : 0,
+    r.factor === 0.75 ? 1 : 0,
+    Math.log(1 + r.latex.length),
+  ];
+}
+
+/** The reading the decision model trusts most, and how likely it is exactly right; ties go to the higher resolution. */
+export function decideReading(readings: readonly Reading[], weights: readonly number[] = DECISION_WEIGHTS): { index: number; confidence: number } {
+  let best = { index: 0, confidence: -1 };
+  readings.forEach((_, i) => {
+    const z = readingFeatures(readings, i).reduce((s, v, j) => s + v * weights[j + 1]!, weights[0]!);
+    const p = 1 / (1 + Math.exp(-z));
+    if (p > best.confidence + 1e-9) best = { index: i, confidence: p };
+  });
+  return best;
+}
+
+/**
+ * The chosen reading's verdict, marked for a look when the decision model is
+ * unsure although the check passed, naming what the other readings saw.
+ */
+export function decidedVerdict(readings: readonly Reading[], index: number, confidence: number): FormulaVerdict {
+  const r = readings[index]!;
+  const verdict: FormulaVerdict = { issues: r.issues, glyphs: r.glyphs, check: r.check };
+  if (confidence >= DECISION_FLAG_BELOW || r.check === "differs") return verdict;
+  const others = [...new Set(readings.filter((o, j) => j !== index && !sameMeaning(o.latex, r.latex)).map((o) => o.latex))];
+  const why = others.length ? `read differently at lower resolution: ${others.map((o) => `\`${o}\``).join(", ")}` : "the model is unsure of this reading";
+  return { ...verdict, issues: [...r.issues, why], check: "differs" };
 }
 
 export interface MathResult {
@@ -1041,14 +1181,40 @@ async function readCrops(e: Engine, inputs: Float32Array[]): Promise<string[]> {
   return out;
 }
 
-/** Display formulas on the given pages (0-based; all pages when omitted), read into LaTeX on this machine. */
-export async function recognizeMath(pdf: Uint8Array, options: { pages?: number[]; crops?: boolean } = {}): Promise<MathResult> {
+/** The gray crop of `box` (render pixels) from an RGBA render, padded by `pad` pixels; null when too small. */
+function grayCrop(r: { data: Uint8Array | Uint8ClampedArray; width: number; height: number }, box: readonly number[], pad: number) {
+  const X0 = Math.max(0, Math.floor(box[0]!) - pad);
+  const Y0 = Math.max(0, Math.floor(box[1]!) - pad);
+  const X1 = Math.min(r.width, Math.ceil(box[2]!) + pad);
+  const Y1 = Math.min(r.height, Math.ceil(box[3]!) + pad);
+  const w = X1 - X0;
+  const h = Y1 - Y0;
+  if (w < 4 || h < 4) return null;
+  const gray = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = ((Y0 + y) * r.width + X0 + x) * 4;
+      gray[y * w + x] = Math.round(0.299 * r.data[i]! + 0.587 * r.data[i + 1]! + 0.114 * r.data[i + 2]!);
+    }
+  }
+  return { gray, w, h, box: [X0, Y0, X1, Y1] };
+}
+
+/**
+ * Display formulas on the given pages (0-based; all pages when omitted), read
+ * into LaTeX on this machine. Each box is read at READING_FACTORS of the
+ * page's render scale and decideReading keeps the reading it trusts most.
+ * `readings: true` keeps every reading on the formula (benchmark).
+ */
+export async function recognizeMath(pdf: Uint8Array, options: { pages?: number[]; crops?: boolean; readings?: boolean } = {}): Promise<MathResult> {
   const started = Date.now();
   const e = await getEngine();
   const doc = await e.pdfium.loadDocument(pdf);
   const formulas: Formula[] = [];
   const pngs: Uint8Array[] = [];
   const pages = options.pages ?? Array.from({ length: doc.getPageCount() }, (_, i) => i);
+  // Benchmark only: IMSTUDIUM_MATH_READINGS=1 reads each box once, as before the decision model.
+  const factors = process.env.IMSTUDIUM_MATH_READINGS === "1" ? [1] : [...READING_FACTORS];
   try {
     for (const index of pages) {
       if (index < 0 || index >= doc.getPageCount()) continue;
@@ -1084,39 +1250,58 @@ export async function recognizeMath(pdf: Uint8Array, options: { pages?: number[]
         for (const f of displayLikeInline(inline, text)) {
           if (!boxes.some((b) => iou(b.box, f.box) > 0.3)) boxes.push(f);
         }
+        if (!boxes.length) continue;
         boxes.sort((a, b) => a.box[1]! - b.box[1]! || a.box[0]! - b.box[0]!);
-        const crops: Array<{ input: Float32Array; box: number[]; score: number; png?: Uint8Array }> = [];
+        // The same page at the lower reading scales; the boxes are scaled to it.
+        const renders = [r];
+        for (const f of factors.slice(1)) renders.push(await page.render({ scale: scale * f, render: "bitmap", colorSpace: "RGBA" }));
+        const crops: Array<{ box: number[]; score: number; inputs: Array<Float32Array | null>; png?: Uint8Array }> = [];
         for (const { box, score } of boxes) {
-          const pad = Math.round(CROP_PAD_PT * (r.width / originalWidth));
-          const X0 = Math.max(0, Math.floor(box[0]!) - pad);
-          const Y0 = Math.max(0, Math.floor(box[1]!) - pad);
-          const X1 = Math.min(r.width, Math.ceil(box[2]!) + pad);
-          const Y1 = Math.min(r.height, Math.ceil(box[3]!) + pad);
-          const w = X1 - X0;
-          const h = Y1 - Y0;
-          if (w < 4 || h < 4) continue;
-          const gray = new Uint8Array(w * h);
-          for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-              const i = ((Y0 + y) * r.width + X0 + x) * 4;
-              gray[y * w + x] = Math.round(0.299 * r.data[i]! + 0.587 * r.data[i + 1]! + 0.114 * r.data[i + 2]!);
-            }
-          }
-          const input = formulaInput(gray, w, h, e.formulaInputSize);
-          if (input) crops.push({ input, box: [X0, Y0, X1, Y1], score, ...(options.crops ? { png: encodePng(gray, w, h, 1) } : {}) });
+          const base = grayCrop(r, box, Math.round(CROP_PAD_PT * (r.width / originalWidth)));
+          if (!base) continue;
+          const inputs = factors.map((f, k) => {
+            if (k === 0) return formulaInput(base.gray, base.w, base.h, e.formulaInputSize);
+            const rk = renders[k]!;
+            const c = grayCrop(rk, box.map((v) => v * (rk.width / r.width)), Math.round(CROP_PAD_PT * (rk.width / originalWidth)));
+            return c ? formulaInput(c.gray, c.w, c.h, e.formulaInputSize) : null;
+          });
+          if (!inputs[0]) continue;
+          crops.push({ box: base.box, score, inputs, ...(options.crops ? { png: encodePng(base.gray, base.w, base.h, 1) } : {}) });
         }
         const k = originalWidth / r.width;
-        const latex = await readCrops(e, crops.map((c) => c.input));
+        const flat = crops.flatMap((c) => c.inputs.filter((x): x is Float32Array => !!x));
+        const read = await readCrops(e, flat);
         const glyphs = crops.length ? pageGlyphs(page) : [];
         let n = 0;
-        crops.forEach((c, i) => {
-          if (!latex[i]) return;
-          n++;
+        let at = 0;
+        for (const c of crops) {
           const bbox = c.box.map((v) => Math.round(v * k * 10) / 10) as [number, number, number, number];
           // From the stored box, so `imstudium formulas check` later judges exactly the same way.
-          formulas.push({ id: `p${index + 1}-${n}`, page: index, bbox, latex: latex[i]!, score: Math.round(c.score * 100) / 100, ...judgeFormula(latex[i]!, glyphsFor(glyphs, bbox)) });
+          const pdfGlyphs = glyphsFor(glyphs, bbox);
+          const readings: Reading[] = [];
+          c.inputs.forEach((input, j) => {
+            if (!input) return;
+            const latex = read[at++]!;
+            if (latex) readings.push({ latex, factor: factors[j]!, ...judgeFormula(latex, pdfGlyphs) });
+          });
+          if (!readings.length) continue;
+          n++;
+          const { index: chosen, confidence } = readings.length > 1 ? decideReading(readings) : { index: 0, confidence: 1 };
+          const r0 = readings[chosen]!;
+          const others = [...new Set(readings.filter((x) => x.latex !== r0.latex).map((x) => x.latex))];
+          formulas.push({
+            id: `p${index + 1}-${n}`,
+            page: index,
+            bbox,
+            latex: r0.latex,
+            score: Math.round(c.score * 100) / 100,
+            ...decidedVerdict(readings, chosen, confidence),
+            ...(readings.length > 1 ? { confidence: Math.round(confidence * 100) / 100 } : {}),
+            ...(others.length ? { otherReadings: others } : {}),
+            ...(options.readings ? { readings } : {}),
+          });
           if (c.png) pngs.push(c.png);
-        });
+        }
       } finally {
         page.close();
       }

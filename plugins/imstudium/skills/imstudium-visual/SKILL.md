@@ -34,7 +34,7 @@ The `$$…$$` blocks are model output. On hard lecture slides about four in five
 | Note under the formula | Meaning |
 |---|---|
 | none | Well-formed, and every letter and digit is one the PDF has in that box. Positions (exponent or index, numerator or denominator) are not compared |
-| `_(formula p3-2 needs a look: …)_` | Malformed, or letters/digits differ from the PDF: the note says which |
+| `_(formula p3-2 needs a look: …)_` | Malformed, letters/digits differ from the PDF, or the model read the box differently at lower resolution: the note says which, and names the other reading |
 | `_(formula p3-2 unchecked: …)_` | Scanned page or picture: nothing to compare with, only the image can tell |
 | `_(formula p3-2 corrected by … from its image …)_` | An agent or the student corrected it from the image, and the correction checks |
 
@@ -55,7 +55,7 @@ Use the `$$…$$` LaTeX as a draft to check against the page, and say when the p
 
 When you write formulas down for the student (notes, a summary, exam prep) or they ask you to fix the extraction:
 
-1. **List them.** `imstudium formulas list <file> --json` gives each formula's `id`, `page`, `latex`, `verdict.check` and the absolute path of its image (`crop`). `--needs-look` lists only the ones whose check didn't pass. `<file>` is the extracted folder, its `content.md`, the original under `files/`, or a name fragment.
+1. **List them.** `imstudium formulas list <file> --json` gives each formula's `id`, `page`, `latex`, `verdict.check`, the absolute path of its image (`crop`), and `otherReadings`: what the model read in the same box at lower resolutions where that differs. Another reading is a hint where to look, not an answer: only the image decides. `--needs-look` lists only the ones whose check didn't pass. `<file>` is the extracted folder, its `content.md`, the original under `files/`, or a name fragment.
 2. **Look at the image of every formula you write down**, those whose check is `differs` or `unchecked` first. A `match` proves the letters and digits, not where they sit: exponents, indices, limits, numerator and denominator, brackets and line breaks need your eyes. Open its `crop` image with your image reader and compare it symbol by symbol with `latex`.
 3. **Transcribe only what the image shows.**
    - Don't complete, simplify, normalise or "improve" the math. Keep the lecturer's names, indices and notation. A typo on the slide stays a typo; say that it looks like one.

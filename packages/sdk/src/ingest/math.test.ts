@@ -20,6 +20,13 @@ import {
   judgeFormula,
   displayLikeInline,
   katexError,
+  assetUpToDate,
+  sameMeaning,
+  decideReading,
+  decidedVerdict,
+  readingFeatures,
+  DECISION_FLAG_BELOW,
+  type Reading,
 } from "./math.js";
 import { ocrPlatformKey, OCR_RUNTIMES } from "./ocr-runtime.js";
 
@@ -325,5 +332,51 @@ describe("displayLikeInline", () => {
     const frac = f([10, 40, 80, 70]);
     expect(displayLikeInline([...small, frac], [])).toEqual([frac]);
     expect(displayLikeInline([], text)).toEqual([]);
+  });
+});
+
+describe("assetUpToDate", () => {
+  const a = { name: "pp-formulanet_plus-l.onnx", sha256: "new" };
+  it.each([
+    ["missing file", false, {}, undefined, false],
+    ["verified with this pin", true, { [a.name]: "new" }, undefined, true],
+    ["verified with an older pin of the same name", true, { [a.name]: "old" }, undefined, false],
+    ["installed before records, the old marker names this pin", true, {}, { [a.name]: "new" }, true],
+    ["installed before records, the old marker names another pin", true, {}, { [a.name]: "old" }, false],
+    ["a run that broke off before any record or marker (files were only put in place once verified)", true, {}, undefined, true],
+  ] as const)("%s → %s", (_label, present, verified, legacy, expected) => {
+    expect(assetUpToDate(a, present, verified as Record<string, string>, legacy as Record<string, string> | undefined)).toBe(expected);
+  });
+});
+
+describe("the decision over several readings", () => {
+  const reading = (latex: string, factor: number, extra: Partial<Reading> = {}): Reading => ({ latex, factor, issues: [], glyphs: { missing: [], extra: [], pdf: 3 }, check: "match", ...extra });
+
+  it("sameMeaning ignores spelling and sizing, not symbols or structure", () => {
+    expect(sameMeaning("\\left( x \\right)^{2}", "(x)^2")).toBe(true);
+    expect(sameMeaning("\\frac{a}{b}", "\\frac{b}{a}")).toBe(false);
+    expect(sameMeaning("x_{i}", "x^{i}")).toBe(false);
+    expect(sameMeaning("\\gamma", "y")).toBe(false);
+  });
+
+  it("features: check, agreement with the other readings, scale, length", () => {
+    const rs = [reading("x^{2}", 1), reading("x^{2}", 0.75), reading("x_{2}", 0.5, { check: "differs", issues: ["x"] })];
+    const f = readingFeatures(rs, 0);
+    expect(f.slice(0, 8)).toEqual([1, 1, 0, 0, 0.5, 0.5, 1, 0]);
+    expect(readingFeatures(rs, 2).slice(0, 8)).toEqual([0, 0, 1, 0, 0, 0, 0, 0]);
+  });
+
+  it("keeps the reading the weights trust most; ties go to the full scale", () => {
+    // Weights that only count agreement in meaning.
+    const w = [0, 0, 0, 0, 0, 0, 5, 0, 0, 0];
+    const rs = [reading("\\gamma", 1), reading("y", 0.75), reading("y", 0.5)];
+    expect(decideReading(rs, w).index).toBe(1);
+    expect(decideReading([reading("a", 1), reading("a", 0.5)], w).index).toBe(0);
+  });
+
+  it("an unsure reading whose check passed is marked, naming what the other readings saw", () => {
+    const rs = [reading("\\gamma", 1, { check: "unchecked", glyphs: null }), reading("y", 0.5, { check: "unchecked", glyphs: null })];
+    expect(decidedVerdict(rs, 0, DECISION_FLAG_BELOW + 0.01)).toEqual({ issues: [], glyphs: null, check: "unchecked" });
+    expect(decidedVerdict(rs, 0, DECISION_FLAG_BELOW - 0.01)).toEqual({ issues: ["read differently at lower resolution: `y`"], glyphs: null, check: "differs" });
   });
 });

@@ -3,7 +3,7 @@ import { basename, extname, join, relative } from "node:path";
 import { ensureDir, slugify } from "./config.js";
 import { convertImage, convertLocalDocument, IMAGE_ONLY, NATIVE_RULE, OCR_MERGE, probeLocalIngest, type LocalConvertOk } from "./ingest/local-docs.js";
 import { imageToPdf } from "./ingest/image-pdf.js";
-import { isMathCandidate, LAYOUT_MODEL, MATH_MODEL, mathRuntimeStatus, recognizeMath, type Formula, type MathRuntimeStatus } from "./ingest/math.js";
+import { isMathCandidate, LAYOUT_MODEL, MATH_DECISION, MATH_MODEL, mathRuntimeStatus, recognizeMath, type Formula, type MathRuntimeStatus } from "./ingest/math.js";
 import { ocrRuntimeStatus, type OcrRuntimeStatus } from "./ingest/ocr-runtime.js";
 import { applyFormulaFixes, formulaNote, readFormulaFixes, type FormulaEntry } from "./formulas.js";
 import { buildCourseSearchIndex } from "./search-corpus.js";
@@ -180,6 +180,7 @@ export class Extractor {
         pages: result.pages,
         formulas: result.formulas.length,
         ms: result.ms,
+        decision: MATH_DECISION,
       };
       this.lastFormulas = formulas;
       return byPage;
@@ -387,8 +388,8 @@ export function shouldRedoForMath(
   opts: { ocr?: boolean; math?: boolean } = {},
 ): boolean {
   if (opts.ocr === false || opts.math === false || !status.ready || status.disabled) return false;
-  // Read before with the same models: nothing new. With older ones: read again (corrections still apply where the reading is unchanged).
-  if (prev.math) return prev.math.model !== MATH_MODEL || prev.math.layoutModel !== LAYOUT_MODEL;
+  // Read before with the same models and decision rule: nothing new. Otherwise read again (corrections still apply where the reading is unchanged).
+  if (prev.math) return prev.math.model !== MATH_MODEL || prev.math.layoutModel !== LAYOUT_MODEL || (prev.math.decision ?? 0) < MATH_DECISION;
   if (prev.kind === "image") return !!prev.ocr;
   if (prev.kind !== "pdf") return false;
   return !!prev.ocr?.pages.length || !!prev.imageOnlyPages?.length || isMathCandidate(contentMd);

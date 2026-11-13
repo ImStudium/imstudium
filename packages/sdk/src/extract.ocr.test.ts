@@ -292,7 +292,8 @@ describe("math in the extractor", () => {
     ["pdf with text-less pages", { kind: "pdf", imageOnlyPages: [0] }, "", true],
     ["plain pdf", { kind: "pdf" }, "Agenda und Organisation", false],
     ["OCR'd photo", { kind: "image", ocr: { model: "m", pages: [0], lowConfidencePages: [] } }, "", true],
-    ["math already ran with these models", { kind: "pdf", math: { model: MATH_MODEL, layoutModel: LAYOUT_MODEL, pages: [0], formulas: 0, ms: 1 } }, "∑", false],
+    ["math already ran with these models and the decision model", { kind: "pdf", math: { model: MATH_MODEL, layoutModel: LAYOUT_MODEL, pages: [0], formulas: 0, ms: 1, decision: 1 } }, "∑", false],
+    ["math ran with these models, one reading per box", { kind: "pdf", math: { model: MATH_MODEL, layoutModel: LAYOUT_MODEL, pages: [0], formulas: 0, ms: 1 } }, "∑", true],
     ["math ran with older models", { kind: "pdf", math: { model: "m", layoutModel: "l", pages: [0], formulas: 0, ms: 1 } }, "∑", true],
     ["office document", { kind: "office" }, "∑", false],
   ] as const)("shouldRedoForMath: %s → %s", async (_label, prev, content, expected) => {

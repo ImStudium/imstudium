@@ -22,6 +22,8 @@ export const FormulaItem = z.object({
   verdict: FormulaVerdict.describe("The check of `latex`"),
   why: z.string().nullable().describe("Why it needs a look, in one line; null when the check passed"),
   crop: z.string().nullable().describe("Absolute path of the formula's image"),
+  confidence: z.number().nullable().describe("How likely the model's reading is exactly right (0–1), from the readings at three resolutions; null for files read before"),
+  otherReadings: z.array(z.string()).describe("What the model read in the same box at lower resolutions, where it differs from modelLatex"),
   corrected: z.object({ by: z.string(), at: z.string() }).nullable(),
 });
 

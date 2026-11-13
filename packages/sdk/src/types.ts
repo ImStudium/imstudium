@@ -290,6 +290,8 @@ export interface ExtractMathInfo {
   pages: number[];
   formulas: number;
   ms: number;
+  /** MATH_DECISION the file was read under; absent: one reading per box. */
+  decision?: number;
 }
 
 export interface ExtractOcrInfo {
