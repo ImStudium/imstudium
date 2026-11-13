@@ -28,11 +28,11 @@ beforeEach(async () => {
   await writeFile(join(dir, "manifest.json"), JSON.stringify({ source: join(fx.workspace, "WS2026-27", "statistik-i", "files", "tafel.png"), kind: "image" }));
   await writeFile(
     join(dir, "math.json"),
-    JSON.stringify({ model: "pp-formulanet_plus-l (oar-ocr v0.3.0)", layoutModel: "pp-doclayoutv2 (oar-ocr v0.3.0)", formulas: [formula("p1-1", "a^{2}+b^{2}", "unchecked"), formula("p1-2", "|x|=\\left\\{x\\right", "differs")] }),
+    JSON.stringify({ model: "unirec-0.1b (topdu/unirec_0_1b_onnx e8f55f7)", layoutModel: "pp-doclayoutv2 (oar-ocr v0.3.0)", formulas: [formula("p1-1", "a^{2}+b^{2}", "unchecked"), formula("p1-2", "|x|=\\left\\{x\\right", "differs")] }),
   );
   await writeFile(
     join(dir, "content.md"),
-    "# tafel.png\n\n> image · 1 page(s)\n\nTafel\n\n_Formulas on this page, read on this machine as LaTeX (PP-FormulaNet+ L): check against the original._\n\n$$a^{2}+b^{2}$$\n_(formula p1-1 unchecked: no text on the page to compare with. Image: formulas/p1-1.png)_\n\n$$|x|=\\left\\{x\\right$$\n_(formula p1-2 needs a look: \\right without a delimiter. Image: formulas/p1-2.png)_\n",
+    "# tafel.png\n\n> image · 1 page(s)\n\nTafel\n\n_Formulas on this page, read on this machine as LaTeX (UniRec-0.1B): check against the original._\n\n$$a^{2}+b^{2}$$\n_(formula p1-1 unchecked: no text on the page to compare with. Image: formulas/p1-1.png)_\n\n$$|x|=\\left\\{x\\right$$\n_(formula p1-2 needs a look: \\right without a delimiter. Image: formulas/p1-2.png)_\n",
   );
 });
 

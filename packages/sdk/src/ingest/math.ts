@@ -3,16 +3,19 @@
  *
  *   PDFium (WASM, @hyzyla/pdfium)  renders the page, and reads its text layer for the check
  *   PP-DocLayoutV2                 finds display formulas (layout class "display_formula")
- *   PP-FormulaNet+ L               reads each crop into LaTeX tokens
- *   unimernet_tokenizer.json       turns the tokens into text (byte-level BPE)
+ *   UniRec-0.1B                    reads each crop into LaTeX (encoder + decoder with a KV cache)
+ *   unirec_tokenizer_mapping.json  turns its tokens into text (byte-level BPE)
  *
- * Both models come from oar-ocr's GitHub release v0.3.0 and run on ONNX
- * Runtime 1.27.0 through the onnxruntime-node binding. Everything is a pinned,
- * SHA-256-verified download that `imstudium setup ocr --math` puts under
- * <ocr>/math/; nothing here is an npm dependency, and nothing leaves the
- * machine. They were chosen on the hard Beamer slides of the benchmark
- * (docs/BENCHMARKS.md): the small models found 17–22 of 28 formulas there,
- * these find all of them and read most exactly.
+ * The layout model comes from oar-ocr's GitHub release v0.3.0, UniRec-0.1B
+ * from its authors' ONNX export (huggingface.co/topdu/unirec_0_1b_onnx,
+ * Apache-2.0), both run on ONNX Runtime 1.27.0 through the onnxruntime-node
+ * binding. Everything is a pinned, SHA-256-verified download that `imstudium
+ * setup ocr --math` puts under <ocr>/math/; nothing here is an npm dependency,
+ * and nothing leaves the machine. They were chosen on the hard Beamer slides
+ * of the benchmark (docs/BENCHMARKS.md): the layout model finds every formula
+ * there, and UniRec-0.1B read more of them exactly than PP-FormulaNet+ L,
+ * GLM-OCR, TexTeller 3 and pix2text-mfr, and as many as PaddleOCR-VL-1.6 at
+ * about a seventeenth of its time: about a second per formula.
  *
  * Every reading is checked (judgeFormula): its LaTeX must be well-formed and,
  * on a born-digital page, show exactly the letters and digits the PDF has in
@@ -28,9 +31,10 @@ import { ImstudiumError } from "../errors.js";
 import { buildPdf, dirBytes, downloadToFile, ocrPlatformKey, ocrRoot, OCR_RUNTIMES } from "./ocr-runtime.js";
 import { encodePng } from "./png.js";
 
-export const MATH_MODEL = "pp-formulanet_plus-l (oar-ocr v0.3.0)";
+export const MATH_MODEL = "unirec-0.1b (topdu/unirec_0_1b_onnx e8f55f7)";
 export const LAYOUT_MODEL = "pp-doclayoutv2 (oar-ocr v0.3.0)";
 const OAR = "https://github.com/GreatV/oar-ocr/releases/download/v0.3.0";
+const UNIREC = "https://huggingface.co/topdu/unirec_0_1b_onnx/resolve/e8f55f72013d544cbd6c27c576946ac63da247ed";
 const NPM = "https://registry.npmjs.org";
 
 interface MathAsset {
@@ -81,20 +85,28 @@ export const MATH_ASSETS: MathAsset[] = [
     members: () => ["package.json", "LICENSE.md", "dist/index.cjs", "dist/pdfium.wasm"],
   },
   {
-    label: "formula model",
+    label: "formula encoder",
     kind: "file",
-    name: "pp-formulanet_plus-l.onnx",
-    url: `${OAR}/pp-formulanet_plus-l.onnx`,
-    sha256: "b4924d69c731365048de3d11a5d1829f3dfd8b98b4dbfd82437f934c2611934f",
-    bytes: 733_525_676,
+    name: "unirec_encoder.onnx",
+    url: `${UNIREC}/unirec_encoder.onnx`,
+    sha256: "eb6b5d38f16c4f1abc39bab47e8d4ec83103b3246f642bde599edf6634289392",
+    bytes: 164_645_880,
   },
   {
-    label: "formula tokenizer",
+    label: "formula decoder",
     kind: "file",
-    name: "unimernet_tokenizer.json",
-    url: `${OAR}/unimernet_tokenizer.json`,
-    sha256: "2811d82701ec97c192fa256aa2b4516929373870ae660326cc5b1dc879b95ff2",
-    bytes: 2_140_014,
+    name: "unirec_decoder.onnx",
+    url: `${UNIREC}/unirec_decoder.onnx`,
+    sha256: "334326c877856d7595614424f1e15d6b1aab6ba24c26c769f09ab38901d5021c",
+    bytes: 554_415_797,
+  },
+  {
+    label: "formula tokens",
+    kind: "file",
+    name: "unirec_tokenizer_mapping.json",
+    url: `${UNIREC}/unirec_tokenizer_mapping.json`,
+    sha256: "769c66284765415c022ec213ea7b5e5266824aef5c5ea61d72b9ef087da525cc",
+    bytes: 9_843_868,
   },
   {
     label: "layout model",
@@ -108,7 +120,9 @@ export const MATH_ASSETS: MathAsset[] = [
 
 /** The pinned models, by file name (the engine loads these unless the benchmark points elsewhere). */
 const LAYOUT_FILE = "pp-doclayoutv2.onnx";
-const FORMULA_FILE = "pp-formulanet_plus-l.onnx";
+const ENCODER_FILE = "unirec_encoder.onnx";
+const DECODER_FILE = "unirec_decoder.onnx";
+const TOKENS_FILE = "unirec_tokenizer_mapping.json";
 
 export const mathDir = () => join(ocrRoot(), "math");
 const modulesDir = () => join(mathDir(), "node_modules");
@@ -299,12 +313,13 @@ interface OrtTensor {
 }
 interface OrtSession {
   inputNames: readonly string[];
+  outputNames: readonly string[];
   inputMetadata?: ReadonlyArray<{ name: string; shape?: ReadonlyArray<number | string> }>;
   run(feeds: Record<string, unknown>): Promise<Record<string, OrtTensor>>;
 }
 interface Ort {
   InferenceSession: { create(path: string, options?: Record<string, unknown>): Promise<OrtSession> };
-  Tensor: new (type: string, data: Float32Array, dims: number[]) => unknown;
+  Tensor: new (type: string, data: Float32Array | BigInt64Array, dims: number[]) => unknown;
 }
 /** The raw PDFium calls the glyph check needs (exported by @hyzyla/pdfium 3.0.0's WASM module). */
 interface PdfiumModule {
@@ -339,8 +354,13 @@ interface Engine {
   ort: Ort;
   pdfium: PdfiumLibrary;
   layout: OrtSession;
-  formula: OrtSession;
-  vocab: string[];
+  encoder: OrtSession;
+  decoder: OrtSession;
+  /** UniRec's tokens by id, and its special ids. */
+  tokens: string[];
+  special: { bos: number; eos: number; pad: number };
+  /** Decoder cache: layers, heads and head size, from the model's inputs. */
+  kv: { layers: number; heads: number; dim: number };
   /** Square input side of the layout model (800 for PP-DocLayoutV2). */
   layoutInput: number;
   /** Layout classes that are display formulas. */
@@ -348,8 +368,6 @@ interface Engine {
   /** Layout classes for inline formulas and for running text (see displayLikeInline); empty when unknown. */
   inlineClasses: number[];
   textClasses: number[];
-  /** Square input side of the formula model (768 for PP-FormulaNet+ L). */
-  formulaInputSize: number;
 }
 
 /** Display-formula class ids per layout model (PP-DocLayoutV2 has its own label list). */
@@ -393,25 +411,36 @@ async function loadEngine(): Promise<Engine> {
   const ort = req("onnxruntime-node") as Ort;
   const pdfium = await getPdfium();
   const threads = Math.max(1, Math.min(4, availableParallelism()));
-  // Benchmark only: IMSTUDIUM_MATH_LAYOUT / IMSTUDIUM_MATH_FORMULA point at other model files to compare them.
+  // Benchmark only: IMSTUDIUM_MATH_LAYOUT points at another layout model file to compare it.
   const layoutFile = process.env.IMSTUDIUM_MATH_LAYOUT || join(modelsDir(), LAYOUT_FILE);
-  const formulaFile = process.env.IMSTUDIUM_MATH_FORMULA || join(modelsDir(), FORMULA_FILE);
+  const options = { intraOpNumThreads: threads, interOpNumThreads: 1, graphOptimizationLevel: "all" };
   const layout = await ort.InferenceSession.create(layoutFile, { intraOpNumThreads: threads });
-  const formula = await ort.InferenceSession.create(formulaFile, { intraOpNumThreads: threads });
-  const tok = JSON.parse(await readFile(join(modelsDir(), "unimernet_tokenizer.json"), "utf-8")) as { model: { vocab: Record<string, number> } };
-  const vocab: string[] = [];
-  for (const [t, id] of Object.entries(tok.model.vocab)) vocab[id] = t;
+  const encoder = await ort.InferenceSession.create(join(modelsDir(), ENCODER_FILE), options);
+  const decoder = await ort.InferenceSession.create(join(modelsDir(), DECODER_FILE), options);
+  const map = JSON.parse(await readFile(join(modelsDir(), TOKENS_FILE), "utf-8")) as {
+    id_to_token: Record<string, string>;
+    special_tokens: { bos_token_id: number; eos_token_id: number; pad_token_id: number };
+  };
+  const tokens: string[] = [];
+  for (const [id, t] of Object.entries(map.id_to_token)) tokens[Number(id)] = t;
+  const past = decoder.inputMetadata?.find((m) => m.name === "past_key_0")?.shape;
   return {
     ort,
     pdfium,
     layout,
-    formula,
-    vocab,
+    encoder,
+    decoder,
+    tokens,
+    special: { bos: map.special_tokens.bos_token_id, eos: map.special_tokens.eos_token_id, pad: map.special_tokens.pad_token_id },
+    kv: {
+      layers: decoder.inputNames.filter((n) => n.startsWith("past_key_")).length,
+      heads: typeof past?.[1] === "number" ? past[1] : 6,
+      dim: typeof past?.[3] === "number" ? past[3] : 128,
+    },
     layoutInput: inputSide(layout, "image", LAYOUT_INPUT),
     formulaClasses: FORMULA_CLASSES[basename(layoutFile)] ?? [FORMULA_CLASS],
     inlineClasses: INLINE_CLASSES[basename(layoutFile)] ?? [],
     textClasses: TEXT_CLASSES[basename(layoutFile)] ?? [],
-    formulaInputSize: inputSide(formula, formula.inputNames[0]!, FORMULA_INPUT),
   };
 }
 
@@ -442,24 +471,73 @@ const BYTE_OF_CHAR: Map<string, number> = (() => {
   return new Map(cs.map((c, i) => [String.fromCodePoint(c), bs[i]!]));
 })();
 
-const BOS = 0;
-const EOS = 2;
-const VOCAB_SIZE = 50_000;
-
-/** Token ids → text: stop at </s> or a sentinel id, drop <s>, undo the byte-level encoding. */
-export function decodeFormulaTokens(ids: Iterable<number>, vocab: string[]): string {
-  const pieces: string[] = [];
-  for (const id of ids) {
-    if (id === EOS || id >= VOCAB_SIZE) break;
-    if (id < 0 || id === BOS || id === 1) continue;
-    pieces.push(vocab[id] ?? "");
-  }
+/**
+ * UniRec token ids → text: stop at the end token, drop the other special
+ * tokens (`<|…|>`; `<|sn|>` is a line break in text, a space here), undo the
+ * byte-level encoding (Ġ is a space, Ċ a newline, multi-byte UTF-8 rejoins).
+ */
+export function decodeUnirecTokens(ids: Iterable<number>, tokens: readonly string[], eos: number): string {
+  let text = "";
   const bytes: number[] = [];
-  for (const ch of pieces.join("")) {
-    const b = BYTE_OF_CHAR.get(ch);
-    if (b !== undefined) bytes.push(b);
+  const flush = () => {
+    text += Buffer.from(bytes).toString("utf-8");
+    bytes.length = 0;
+  };
+  for (const id of ids) {
+    if (id === eos) break;
+    const t = tokens[id];
+    if (t === undefined) continue;
+    if (/^<\|.*\|>$/.test(t)) {
+      flush();
+      if (t === "<|sn|>") text += " ";
+      continue;
+    }
+    for (const ch of t) {
+      const b = BYTE_OF_CHAR.get(ch);
+      if (b !== undefined) bytes.push(b);
+    }
   }
-  return Buffer.from(bytes).toString("utf-8");
+  flush();
+  return text;
+}
+
+/** A relation that starts a continuation line of a derivation (`= …`, `\le …`). */
+const LEADING_RELATION = /^(=|<|>|\\(?:leq?|geq?|approx|equiv|sim|neq?|Rightarrow|Leftrightarrow|iff|to|subseteq?)(?![a-zA-Z]))/;
+
+/**
+ * UniRec writes a formula the way a document shows it: inside `\[ … \]` or
+ * `$$ … $$`, now and then with an equation number after it (`\[ … \](1)`),
+ * and a multi-line derivation as one display per line (`a = b \]\[ = c`).
+ * This gives the bare formula: the wrapper and a trailing equation number go
+ * (the number is not part of the formula), and lines become an `aligned`
+ * block aligned at their leading relation, or `gathered` when they have none.
+ * Nothing inside a line is changed.
+ */
+export function unirecLatex(raw: string): string {
+  let s = raw.trim().replace(/^\$\$([\s\S]*)\$\$$/, "$1").trim();
+  s = s.replace(/\\\]\s*\(\s*\d+(?:\.\d+)*\s*\)\s*$/, "\\]");
+  if (s.startsWith("\\[") && s.endsWith("\\]")) s = s.slice(2, -2).trim();
+  else if (s.startsWith("\\(") && s.endsWith("\\)")) s = s.slice(2, -2).trim();
+  const lines = s.split(/\\\]\s*\\\[/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2) return lines[0] ?? "";
+  if (!lines.slice(1).every((l) => LEADING_RELATION.test(l))) return `\\begin{gathered}${lines.join("\\\\")}\\end{gathered}`;
+  return `\\begin{aligned}${[alignAtRelation(lines[0]!), ...lines.slice(1).map((l) => `&${l}`)].join("\\\\")}\\end{aligned}`;
+}
+
+/** `&` before the first relation outside braces (`\\sum_{i=1}` keeps its `=`), or at the end when there is none. */
+function alignAtRelation(line: string): string {
+  let depth = 0;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (ch === "\\" && (line[i + 1] === "{" || line[i + 1] === "}")) {
+      i++;
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    else if (depth === 0 && (ch === "\\" || "=<>".includes(ch)) && LEADING_RELATION.test(line.slice(i)) && !(ch === "\\" && /^\\(to|sim)/.test(line.slice(i)))) return `${line.slice(0, i)}&${line.slice(i)}`;
+  }
+  return `${line}&`;
 }
 
 /**
@@ -638,6 +716,65 @@ interface PageGlyph {
   g: string;
   /** The character's own box [left, top, right, bottom]. */
   box: [number, number, number, number];
+  /** Set in a bold face (by its font's name: Bold, Black, CM's bx/mib/bsy, …); null when the name doesn't tell (a Type 3 font named F59). */
+  bold: boolean | null;
+}
+
+/** A font name that says nothing about the face: empty, or a resource name like F59 (pdfTeX's Type 3 bitmap fonts). */
+const FACELESS_FONT = /^([A-Z]{6}\+)?([A-Z]{1,2}\d+(\.\d+)?)?$/;
+
+/** A bold face by its PDF font name (subset prefix and all): Bold/Black/Heavy/Semibold, CM's bx, mib and bsy. */
+const BOLD_FONT = /bold|black|heavy|semibold|demi|(^|[+_-]|\b)(cm|lm|cmss|lmss)?(bx|mib|bsy)\d*(\b|$)/i;
+
+/**
+ * Whether a PDF font name says bold (true), regular (false) or nothing
+ * (null): pdfTeX's Type 3 bitmap fonts carry only a resource name like F59,
+ * and Beamer's sans-serif math sets its letters in them.
+ */
+export function fontIsBold(font: string): boolean | null {
+  const name = font.trim();
+  return FACELESS_FONT.test(name) ? null : BOLD_FONT.test(name);
+}
+
+/**
+ * The letters a LaTeX formula shows in bold: inside `\mathbf`, `\boldsymbol`,
+ * `\bm`, `\mathbfit`, `\pmb`, `\textbf`, or a `{\bf …}` group.
+ */
+export function latexBoldLetters(latex: string): string[] {
+  const out: string[] = [];
+  const re = /\\(mathbf|boldsymbol|bm|mathbfit|pmb|textbf)\s*\{|\{\s*\\bf(?![a-zA-Z])/g;
+  for (let m = re.exec(latex); m; m = re.exec(latex)) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    const start = i;
+    for (; i < latex.length && depth > 0; i++) {
+      if (latex[i] === "\\") i++;
+      else if (latex[i] === "{") depth++;
+      else if (latex[i] === "}") depth--;
+    }
+    out.push(...latexGlyphs(latex.slice(start, i - 1)).filter(isLetter));
+  }
+  return out;
+}
+
+const isLetter = (g: string) => /^[a-zA-Z\u0370-\u03ff]$/.test(g);
+
+/**
+ * Bold that the LaTeX and the PDF don't share, letter by letter: bold in the
+ * LaTeX where the PDF sets that letter in regular type only (an invented
+ * vector), or bold in the PDF where the LaTeX writes it plain (a dropped one).
+ */
+export function boldIssues(latex: string, pdf: { bold: string[]; regular: string[] }): string[] {
+  const latexBold = new Set(latexBoldLetters(latex));
+  const plainInLatex = new Set(latexGlyphs(latex).filter(isLetter));
+  const pdfBold = new Set(pdf.bold.filter(isLetter));
+  const pdfRegular = new Set(pdf.regular.filter(isLetter));
+  const invented = [...latexBold].filter((g) => !pdfBold.has(g) && pdfRegular.has(g));
+  const dropped = [...pdfBold].filter((g) => !latexBold.has(g) && plainInLatex.has(g));
+  const issues: string[] = [];
+  if (invented.length) issues.push(`the LaTeX sets ${invented.join(" ")} in bold, the PDF in regular type`);
+  if (dropped.length) issues.push(`the PDF sets ${dropped.join(" ")} in bold, the LaTeX doesn't`);
+  return issues;
 }
 
 /**
@@ -669,11 +806,10 @@ function pageGlyphs(page: PdfiumPage): PageGlyph[] {
   try {
     const n = m._FPDFText_CountChars(tp);
     for (let i = 0; i < n; i++) {
-      if (m._FPDFText_HasUnicodeMapError(tp, i)) {
-        const len = m._FPDFText_GetFontInfo(tp, i, fontBuf, 240, buf + 40);
-        const font = len > 1 ? new TextDecoder().decode(new Uint8Array(m.HEAPU8.buffer, fontBuf, len - 1)) : "";
-        if (EXTENSION_FONT.test(font)) continue;
-      }
+      const len = m._FPDFText_GetFontInfo(tp, i, fontBuf, 240, buf + 40);
+      const font = len > 1 ? new TextDecoder().decode(new Uint8Array(m.HEAPU8.buffer, fontBuf, len - 1)) : "";
+      if (m._FPDFText_HasUnicodeMapError(tp, i) && EXTENSION_FONT.test(font)) continue;
+      const bold = fontIsBold(font);
       const code = m._FPDFText_GetUnicode(tp, i);
       if (!code) continue;
       const folded = foldGlyph(String.fromCodePoint(code));
@@ -689,7 +825,7 @@ function pageGlyphs(page: PdfiumPage): PageGlyph[] {
       const [ax, ay] = toDevice(left, top);
       const [bx, by] = toDevice(right, bottom);
       const box: PageGlyph["box"] = [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
-      for (const g of folded) out.push({ x, y, g, box });
+      for (const g of folded) out.push({ x, y, g, box, bold });
     }
   } finally {
     m.wasmExports.free(buf);
@@ -707,13 +843,13 @@ const CROP_PAD_PT = 4;
  * padded crop): `inside` have their centre in the detector's own box (bbox
  * less the padding), `visible` overlap the crop at all.
  */
-function glyphsFor(glyphs: PageGlyph[], bbox: readonly number[]): { inside: string[]; visible: string[] } {
+function glyphsFor(glyphs: PageGlyph[], bbox: readonly number[]): { inside: string[]; visible: string[]; bold: string[]; regular: string[] } {
   const [x0, y0, x1, y1] = bbox as [number, number, number, number];
   const pad = Math.min(CROP_PAD_PT, (x1 - x0) / 4, (y1 - y0) / 4);
   const tol = 0.5;
   const inside = glyphs.filter((p) => p.x >= x0 + pad - tol && p.x <= x1 - pad + tol && p.y >= y0 + pad - tol && p.y <= y1 - pad + tol);
   const visible = glyphs.filter((p) => p.box[0] < x1 && p.box[2] > x0 && p.box[1] < y1 && p.box[3] > y0);
-  return { inside: inside.map((p) => p.g), visible: visible.map((p) => p.g) };
+  return { inside: inside.map((p) => p.g), visible: visible.map((p) => p.g), bold: inside.filter((p) => p.bold === true).map((p) => p.g), regular: inside.filter((p) => p.bold === false).map((p) => p.g) };
 }
 
 export type FormulaCheck = "match" | "differs" | "unchecked";
@@ -737,9 +873,11 @@ export interface FormulaVerdict {
  * inside and visible; `{ inside, visible }` as glyphsFor gives them. Null or
  * nothing visible: unchecked.
  */
-export function judgeFormula(latex: string, pdf: string[] | { inside: string[]; visible: string[] } | null): FormulaVerdict {
+export function judgeFormula(latex: string, pdf: string[] | { inside: string[]; visible: string[]; bold?: string[]; regular?: string[] } | null): FormulaVerdict {
   const issues = latexIssues(latex);
   const { inside, visible } = Array.isArray(pdf) ? { inside: pdf, visible: pdf } : (pdf ?? { inside: [], visible: [] });
+  // Bold is compared where the PDF says which face each letter is in (glyphsFor gives it).
+  if (pdf && !Array.isArray(pdf) && pdf.bold && pdf.regular && !issues.length) issues.push(...boldIssues(latex, { bold: pdf.bold, regular: pdf.regular }));
   const glyphs = visible.length ? { ...compareGlyphs(latexGlyphs(latex), inside, visible, latexOptionalGlyphs(latex)), pdf: inside.length } : null;
   const differs = issues.length > 0 || (glyphs !== null && (glyphs.missing.length > 0 || glyphs.extra.length > 0));
   return { issues, glyphs, check: differs ? "differs" : glyphs ? "match" : "unchecked" };
@@ -881,6 +1019,8 @@ export function latexIssues(latex: string): string[] {
   if (hasEmptyFraction(latex)) issues.push("a fraction with an empty part");
   // Models box a formula when its crop catches a frame (a Beamer block, a table rule).
   if (/\\(boxed|fbox|framebox)\b/.test(latex)) issues.push("a box around it: keep \\boxed only if the formula itself is boxed on the page");
+  // The same frame's top edge, read as a line over the whole formula: an overline spanning a relation is no mathematical overline.
+  if (overlinesWholeEquation(latex)) issues.push("a line over the whole formula: keep \\overline only if the page draws one (a Beamer block's frame reads as one)");
   // On slides a • in a formula is nearly always the item markers the box caught, read as math.
   if (/\\bullet(?![a-zA-Z])/.test(latex)) issues.push("a list bullet (•): the box may have caught the slide's item markers");
   // One-sided brace around one line: cases with a single row, usually an invented \left\{.
@@ -894,6 +1034,26 @@ export function latexIssues(latex: string): string[] {
 }
 
 /** A `\frac` whose numerator or denominator group is empty or missing, nested groups included. */
+/** `\\overline{…}` around the whole formula, with a relation (`=`, `\\le`, …) inside it at its top level. */
+function overlinesWholeEquation(latex: string): boolean {
+  const m = /^\s*\\overline\s*\{/.exec(latex);
+  if (!m) return false;
+  let depth = 1;
+  let i = m[0].length;
+  let relation = false;
+  for (; i < latex.length && depth > 0; i++) {
+    const ch = latex[i]!;
+    if (ch === "\\" && (latex[i + 1] === "{" || latex[i + 1] === "}")) {
+      i++;
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    else if (depth === 1 && LEADING_RELATION.test(latex.slice(i))) relation = true;
+  }
+  return depth === 0 && relation && latex.slice(i).trim() === "";
+}
+
 function hasEmptyFraction(latex: string): boolean {
   for (const m of latex.matchAll(/\\[dt]?frac(?![a-zA-Z])/g)) {
     let i = m.index + m[0].length;
@@ -961,16 +1121,52 @@ function resizeToChw(src: Uint8Array, w: number, h: number, W: number, H: number
   return out;
 }
 
-export const FORMULA_INPUT = 384;
-const FORMULA_MEAN = 0.7931;
-const FORMULA_STD = 0.1738;
+/** UniRec's input limits: both sides a multiple of 64, at most 960 wide and 1408 high. */
+const UNIREC_MAX_W = 960;
+const UNIREC_MAX_H = 1408;
+
+/** Catmull-Rom cubic weight (a = -0.5), as Pillow's and libvips' bicubic. */
+function cubic(x: number): number {
+  const t = Math.abs(x);
+  if (t < 1) return 1.5 * t ** 3 - 2.5 * t ** 2 + 1;
+  if (t < 2) return -0.5 * t ** 3 + 2.5 * t ** 2 - 4 * t + 2;
+  return 0;
+}
+
+/** One axis of a bicubic resample, widened when shrinking so every source pixel counts (antialiased). */
+function resampleAxis(src: Float32Array, w: number, h: number, size: number, horizontal: boolean): Float32Array {
+  const n = horizontal ? w : h;
+  const scale = n / size;
+  const support = 2 * Math.max(1, scale);
+  const out = new Float32Array(horizontal ? size * h : w * size);
+  for (let o = 0; o < size; o++) {
+    const centre = (o + 0.5) * scale;
+    const lo = Math.max(0, Math.floor(centre - support));
+    const hi = Math.min(n - 1, Math.ceil(centre + support));
+    const ws: number[] = [];
+    let sum = 0;
+    for (let i = lo; i <= hi; i++) {
+      const v = cubic((i + 0.5 - centre) / Math.max(1, scale));
+      ws.push(v);
+      sum += v;
+    }
+    const lines = horizontal ? h : w;
+    for (let l = 0; l < lines; l++) {
+      let acc = 0;
+      for (let i = lo; i <= hi; i++) acc += ws[i - lo]! * src[horizontal ? l * w + i : i * w + l]!;
+      out[horizontal ? l * size + o : o * w + l] = acc / sum;
+    }
+  }
+  return out;
+}
 
 /**
- * PP-FormulaNet input for one gray crop: trim the margin (ink = below 200 after
- * a min–max stretch), fit inside 384×384 keeping the aspect ratio, centre on
- * black, normalise. Returns null when the crop has no ink.
+ * UniRec input for one gray crop, as its authors' ONNX pipeline prepares it:
+ * shrink to fit 960×1408 when larger, round both sides down to a multiple of
+ * 64 (at least 64), bicubic resample, three equal channels scaled to −1…1.
+ * Null when the crop has no ink.
  */
-export function formulaInput(gray: Uint8Array, w: number, h: number, size = FORMULA_INPUT): Float32Array | null {
+export function unirecInput(gray: Uint8Array, w: number, h: number): { data: Float32Array; width: number; height: number } | null {
   let mn = 255;
   let mx = 0;
   for (let i = 0; i < w * h; i++) {
@@ -979,45 +1175,26 @@ export function formulaInput(gray: Uint8Array, w: number, h: number, size = FORM
     if (v > mx) mx = v;
   }
   if (mx === mn) return null;
-  let x0 = w;
-  let y0 = h;
-  let x1 = -1;
-  let y1 = -1;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (Math.floor(((gray[y * w + x]! - mn) / (mx - mn)) * 255) < 200) {
-        if (x < x0) x0 = x;
-        if (y < y0) y0 = y;
-        if (x > x1) x1 = x;
-        if (y > y1) y1 = y;
-      }
-    }
+  let W = w;
+  let H = h;
+  if (w > UNIREC_MAX_W || h > UNIREC_MAX_H) {
+    const ar = w / h;
+    if (UNIREC_MAX_W / UNIREC_MAX_H >= ar) [W, H] = [Math.trunc(UNIREC_MAX_H * ar), UNIREC_MAX_H];
+    else [W, H] = [UNIREC_MAX_W, Math.trunc(UNIREC_MAX_W / ar)];
   }
-  if (x1 <= x0 || y1 <= y0) return null;
-  const cw = x1 - x0 + 1;
-  const ch = y1 - y0 + 1;
-  const scale = size / Math.max(cw, ch);
-  const nw = Math.max(1, Math.min(size, Math.floor(cw * scale)));
-  const nh = Math.max(1, Math.min(size, Math.floor(ch * scale)));
-  const out = new Float32Array(size * size).fill((0 - FORMULA_MEAN) / FORMULA_STD);
-  const left = Math.floor((size - nw) / 2);
-  const top = Math.floor((size - nh) / 2);
-  const at = (xx: number, yy: number) => gray[(y0 + yy) * w + x0 + xx]!;
-  for (let y = 0; y < nh; y++) {
-    const sy = Math.min(ch - 1, Math.max(0, (y + 0.5) / scale - 0.5));
-    const ya = Math.floor(sy);
-    const yb = Math.min(ch - 1, ya + 1);
-    const fy = sy - ya;
-    for (let x = 0; x < nw; x++) {
-      const sx = Math.min(cw - 1, Math.max(0, (x + 0.5) / scale - 0.5));
-      const xa = Math.floor(sx);
-      const xb = Math.min(cw - 1, xa + 1);
-      const fx = sx - xa;
-      const v = (at(xa, ya) * (1 - fx) + at(xb, ya) * fx) * (1 - fy) + (at(xa, yb) * (1 - fx) + at(xb, yb) * fx) * fy;
-      out[(top + y) * size + left + x] = (v / 255 - FORMULA_MEAN) / FORMULA_STD;
-    }
+  W = Math.max(64, Math.floor(W / 64) * 64);
+  H = Math.max(64, Math.floor(H / 64) * 64);
+  const src = Float32Array.from(gray);
+  const resized = resampleAxis(resampleAxis(src, w, h, W, true), W, h, H, false);
+  const plane = W * H;
+  const data = new Float32Array(3 * plane);
+  for (let i = 0; i < plane; i++) {
+    const v = (Math.min(255, Math.max(0, Math.round(resized[i]!))) / 255 - 0.5) / 0.5;
+    data[i] = v;
+    data[plane + i] = v;
+    data[2 * plane + i] = v;
   }
-  return out;
+  return { data, width: W, height: H };
 }
 
 // ── Recognition ──────────────────────────────────────────────────────────────
@@ -1055,16 +1232,16 @@ export interface Reading extends FormulaVerdict {
 export const READING_FACTORS = [1, 0.75, 0.5] as const;
 
 /**
- * The decision model: logistic weights over a reading's signals, fitted on the
- * synthetic formula benchmark (scripts/bench, leave-one-deck-out; see
- * docs/BENCHMARKS.md; the weights barely move between folds). Raw feature
- * scale, bias first. Features in order:
+ * The decision model: logistic weights over a reading's signals, fitted on
+ * UniRec-0.1B's readings of the synthetic formula benchmark (scripts/bench),
+ * scored leave-one-deck-out in docs/BENCHMARKS.md. Raw feature scale, bias
+ * first. Features in order:
  * check passes (no issues, letters and digits agree or nothing to compare),
  * letters and digits match the PDF, has issues, letters the PDF doesn't have
  * (up to 3), share of the other readings with the same LaTeX, share with the
  * same symbols, read at the full scale, read at 3/4, log(1 + length).
  */
-export const DECISION_WEIGHTS = [1.571, 2.981, 1.184, -2.723, -0.964, 1.678, 2.423, -0.316, -0.44, -1.36];
+export const DECISION_WEIGHTS = [-2.338, 2.141, 0.382, -0.948, -3.351, 1.145, 4.652, 0.905, 0.883, -0.21];
 /** How a box's readings become one, kept in the manifest: 1 = READING_FACTORS and the decision model (before: one reading). */
 export const MATH_DECISION = 1;
 /** Below this, a reading whose check passed is still marked for a look. */
@@ -1089,15 +1266,23 @@ export function readingFeatures(readings: readonly Reading[], i: number): number
   ];
 }
 
-/** The reading the decision model trusts most, and how likely it is exactly right; ties go to the higher resolution. */
+/**
+ * The reading the decision model trusts most, and how likely it is exactly
+ * right; ties go to the higher resolution. When some readings pass their
+ * check, only those are chosen from: two readings that agree on a bar the
+ * page doesn't draw lose to the one that doesn't, and its low likelihood
+ * still marks it for a look. Agreement counts all readings either way.
+ */
 export function decideReading(readings: readonly Reading[], weights: readonly number[] = DECISION_WEIGHTS): { index: number; confidence: number } {
-  let best = { index: 0, confidence: -1 };
-  readings.forEach((_, i) => {
+  const anyPasses = readings.some((r) => r.check !== "differs");
+  let best = { index: -1, confidence: -1 };
+  readings.forEach((r, i) => {
+    if (anyPasses && r.check === "differs") return;
     const z = readingFeatures(readings, i).reduce((s, v, j) => s + v * weights[j + 1]!, weights[0]!);
     const p = 1 / (1 + Math.exp(-z));
     if (p > best.confidence + 1e-9) best = { index: i, confidence: p };
   });
-  return best;
+  return best.index < 0 ? { index: 0, confidence: 0 } : best;
 }
 
 /**
@@ -1129,7 +1314,6 @@ const MIN_SCORE = 0.5;
 const RENDER_LONG_SIDE = 2400;
 /** Page render scale for layout and crops (4 = 288 dpi), at most RENDER_LONG_SIDE pixels on the long side. */
 const RENDER_SCALE = 4;
-const BATCH = 8;
 
 /**
  * Inline formulas that are display formulas in all but name, the way lecture
@@ -1162,21 +1346,43 @@ const iou = (a: number[], b: number[]) => {
   return inter / Math.max(1e-6, area(a) + area(b) - inter);
 };
 
-/** PP-FormulaNet over prepared crops, in batches; one normalised LaTeX string per crop ("" when nothing was read). */
-async function readCrops(e: Engine, inputs: Float32Array[]): Promise<string[]> {
+/** Decoder steps per formula; a reading that runs longer is cut there (a looping model). */
+const MAX_TOKENS = 1024;
+
+/** UniRec over prepared crops, one at a time (greedy decoding with a KV cache); one bare, normalised LaTeX string per crop ("" when nothing was read). */
+async function readCrops(e: Engine, inputs: Array<{ data: Float32Array; width: number; height: number }>): Promise<string[]> {
   const out: string[] = [];
-  for (let b = 0; b < inputs.length; b += BATCH) {
-    const batch = inputs.slice(b, b + BATCH);
-    const side = e.formulaInputSize;
-    const data = new Float32Array(batch.length * side * side);
-    batch.forEach((input, i) => data.set(input, i * side * side));
-    const res = await e.formula.run({ [e.formula.inputNames[0]!]: new e.ort.Tensor("float32", data, [batch.length, 1, side, side]) });
-    const ids = Object.values(res).find((t) => t.dims.length === 2 && t.type === "int64");
-    const len = ids?.dims[1] ?? 0;
-    batch.forEach((_, i) => {
-      const row = ids ? Array.from({ length: len }, (_, k) => Number(ids.data[i * len + k])) : [];
-      out.push(normalizeLatex(decodeFormulaTokens(row, e.vocab)));
-    });
+  const { layers, heads, dim } = e.kv;
+  for (const input of inputs) {
+    const enc = await e.encoder.run({ [e.encoder.inputNames[0]!]: new e.ort.Tensor("float32", input.data, [1, 3, input.height, input.width]) });
+    const crossK = enc.cross_k ?? enc[e.encoder.outputNames[1]!];
+    const crossV = enc.cross_v ?? enc[e.encoder.outputNames[2]!];
+    let past: unknown[] = [];
+    for (let i = 0; i < 2 * layers; i++) past.push(new e.ort.Tensor("float32", new Float32Array(0), [1, heads, 0, dim]));
+    const ids = [e.special.bos];
+    for (let step = 0; step < MAX_TOKENS; step++) {
+      const feeds: Record<string, unknown> = {
+        input_ids: new e.ort.Tensor("int64", BigInt64Array.from([BigInt(ids[ids.length - 1]!)]), [1, 1]),
+        position_ids: new e.ort.Tensor("int64", BigInt64Array.from([BigInt(e.special.pad + 1 + step)]), [1, 1]),
+        cross_k: crossK,
+        cross_v: crossV,
+      };
+      for (let i = 0; i < layers; i++) {
+        feeds[`past_key_${i}`] = past[2 * i];
+        feeds[`past_value_${i}`] = past[2 * i + 1];
+      }
+      const res = await e.decoder.run(feeds);
+      const logits = res[e.decoder.outputNames[0]!]!;
+      const V = logits.dims[logits.dims.length - 1]!;
+      const off = logits.data.length - V;
+      let best = 0;
+      for (let j = 1; j < V; j++) if ((logits.data[off + j] as number) > (logits.data[off + best] as number)) best = j;
+      past = [];
+      for (let i = 0; i < layers; i++) past.push(res[`present_key_${i}`] ?? res[e.decoder.outputNames[1 + 2 * i]!], res[`present_value_${i}`] ?? res[e.decoder.outputNames[2 + 2 * i]!]);
+      ids.push(best);
+      if (best === e.special.eos) break;
+    }
+    out.push(normalizeLatex(unirecLatex(decodeUnirecTokens(ids, e.tokens, e.special.eos))));
   }
   return out;
 }
@@ -1255,21 +1461,22 @@ export async function recognizeMath(pdf: Uint8Array, options: { pages?: number[]
         // The same page at the lower reading scales; the boxes are scaled to it.
         const renders = [r];
         for (const f of factors.slice(1)) renders.push(await page.render({ scale: scale * f, render: "bitmap", colorSpace: "RGBA" }));
-        const crops: Array<{ box: number[]; score: number; inputs: Array<Float32Array | null>; png?: Uint8Array }> = [];
+        type Input = NonNullable<ReturnType<typeof unirecInput>>;
+        const crops: Array<{ box: number[]; score: number; inputs: Array<Input | null>; png?: Uint8Array }> = [];
         for (const { box, score } of boxes) {
           const base = grayCrop(r, box, Math.round(CROP_PAD_PT * (r.width / originalWidth)));
           if (!base) continue;
           const inputs = factors.map((f, k) => {
-            if (k === 0) return formulaInput(base.gray, base.w, base.h, e.formulaInputSize);
+            if (k === 0) return unirecInput(base.gray, base.w, base.h);
             const rk = renders[k]!;
             const c = grayCrop(rk, box.map((v) => v * (rk.width / r.width)), Math.round(CROP_PAD_PT * (rk.width / originalWidth)));
-            return c ? formulaInput(c.gray, c.w, c.h, e.formulaInputSize) : null;
+            return c ? unirecInput(c.gray, c.w, c.h) : null;
           });
           if (!inputs[0]) continue;
           crops.push({ box: base.box, score, inputs, ...(options.crops ? { png: encodePng(base.gray, base.w, base.h, 1) } : {}) });
         }
         const k = originalWidth / r.width;
-        const flat = crops.flatMap((c) => c.inputs.filter((x): x is Float32Array => !!x));
+        const flat = crops.flatMap((c) => c.inputs.filter((x): x is Input => !!x));
         const read = await readCrops(e, flat);
         const glyphs = crops.length ? pageGlyphs(page) : [];
         let n = 0;
@@ -1364,7 +1571,7 @@ export async function probeMathRuntime(): Promise<string> {
     await e.layout.run(feeds);
     const gray = new Uint8Array(r.width * r.height);
     for (let i = 0; i < gray.length; i++) gray[i] = Math.round(0.299 * r.data[i * 4]! + 0.587 * r.data[i * 4 + 1]! + 0.114 * r.data[i * 4 + 2]!);
-    const input = formulaInput(gray, r.width, r.height, e.formulaInputSize);
+    const input = unirecInput(gray, r.width, r.height);
     return input ? ((await readCrops(e, [input]))[0] ?? "") : "";
   } finally {
     doc.destroy();

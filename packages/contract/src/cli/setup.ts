@@ -28,7 +28,7 @@ export const OcrRuntime = z.object({
       downloadBytes: z.number().int().describe("What setup ocr --math downloads"),
       reason: z.string().nullable(),
     })
-    .describe("Optional on-device math recognition (PP-DocLayoutV2 + PP-FormulaNet+ L)"),
+    .describe("Optional on-device math recognition (PP-DocLayoutV2 + UniRec-0.1B)"),
 });
 export type OcrRuntime = z.infer<typeof OcrRuntime>;
 

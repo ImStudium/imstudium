@@ -239,10 +239,14 @@ if (mathRows.length) {
     "",
     "### Every formula that did not render as its source",
     "",
-    "Look only = the same symbols in the same structure; meaning = a symbol, script, fraction or box differs. Rendered similarity says how far apart they are.",
-    "",
-    "| Fixture | Page | Source | Read as | Rendered similarity | Differs in | Check |",
-    "| --- | ---: | --- | --- | ---: | --- | --- |",
+    ...(mathRows.some((r) => r.misses.length)
+      ? [
+          "Look only = the same symbols in the same structure; meaning = a symbol, script, fraction or box differs. Rendered similarity says how far apart they are.",
+          "",
+          "| Fixture | Page | Source | Read as | Rendered similarity | Differs in | Check |",
+          "| --- | ---: | --- | --- | ---: | --- | --- |",
+        ]
+      : ["None: every formula rendered as its source."]),
     ...mathRows.flatMap((r) => r.misses.map((x) => `| ${r.set} · ${r.variant} | ${x.page} | ${code(x.truth)} | ${x.predicted !== null ? code(x.predicted) : x.closest ? `${code(x.closest.latex)} (too far off to count as found)` : "(not found)"} | ${pct(x.predicted !== null ? x.similarity : (x.closest?.similarity ?? 0))} | ${x.lookOnly ? "look only" : "meaning"} | ${x.check ?? "–"} |`)),
   );
 }

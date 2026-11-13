@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  decodeFormulaTokens,
-  formulaInput,
-  FORMULA_INPUT,
+  decodeUnirecTokens,
+  unirecInput,
+  unirecLatex,
   isMathCandidate,
   LAYOUT_MODEL,
   MATH_ASSETS,
@@ -21,6 +21,9 @@ import {
   displayLikeInline,
   katexError,
   assetUpToDate,
+  boldIssues,
+  fontIsBold,
+  latexBoldLetters,
   sameMeaning,
   decideReading,
   decidedVerdict,
@@ -33,14 +36,15 @@ import { ocrPlatformKey, OCR_RUNTIMES } from "./ocr-runtime.js";
 /** No models, no native code: the pure steps around the two networks, and the install bookkeeping. */
 
 describe("pins", () => {
-  it("every math artifact is an HTTPS release or npm tarball with a SHA-256 and a size", () => {
+  it("every math artifact is an HTTPS release, a revision-pinned model file or an npm tarball, with a SHA-256 and a size", () => {
     for (const a of MATH_ASSETS) {
-      expect(a.url).toMatch(/^https:\/\/(github\.com\/GreatV\/oar-ocr\/releases\/download\/v0\.3\.0\/|registry\.npmjs\.org\/)/);
+      expect(a.url).toMatch(/^https:\/\/(github\.com\/GreatV\/oar-ocr\/releases\/download\/v0\.3\.0\/|huggingface\.co\/topdu\/unirec_0_1b_onnx\/resolve\/[0-9a-f]{40}\/|registry\.npmjs\.org\/)/);
       expect(a.sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(a.bytes).toBeGreaterThan(0);
     }
     expect(MATH_ASSETS.find((a) => a.name === "onnxruntime-node")!.url).toContain("1.27.0");
-    expect(MATH_ASSETS.find((a) => a.name === "pp-formulanet_plus-l.onnx")!.sha256).toBe("b4924d69c731365048de3d11a5d1829f3dfd8b98b4dbfd82437f934c2611934f");
+    expect(MATH_ASSETS.find((a) => a.name === "unirec_encoder.onnx")!.sha256).toBe("eb6b5d38f16c4f1abc39bab47e8d4ec83103b3246f642bde599edf6634289392");
+    expect(MATH_ASSETS.find((a) => a.name === "unirec_decoder.onnx")!.sha256).toBe("334326c877856d7595614424f1e15d6b1aab6ba24c26c769f09ab38901d5021c");
     expect(MATH_ASSETS.find((a) => a.name === "pp-doclayoutv2.onnx")!.sha256).toBe("a325532df1c7530538ef4e8254695c091adc6afd3366c0851425491f0816d1d1");
   });
 
@@ -117,18 +121,29 @@ describe("mathRuntimeStatus", () => {
   });
 });
 
-describe("decodeFormulaTokens", () => {
+describe("decodeUnirecTokens", () => {
   // A tiny byte-level vocabulary: Ġ is the space byte, as in GPT-2 style BPE.
-  const vocab = ["<s>", "<pad>", "</s>", "<unk>", "E", "Ġ=", "Ġ\\", "sum", "Ġ_", "Ġ{", "Ġi", "Ġ}", "Ã¤"];
-  it("stops at </s>, drops <s> and <pad>, undoes the byte-level encoding", () => {
-    expect(decodeFormulaTokens([0, 4, 5, 6, 7, 8, 9, 10, 11, 2, 4, 4], vocab)).toBe("E = \\sum _ { i }");
-    expect(decodeFormulaTokens([0, 1, 4, 1], vocab)).toBe("E");
-  });
-  it("stops at sentinel ids beyond the vocabulary", () => {
-    expect(decodeFormulaTokens([4, 50_000, 4], vocab)).toBe("E");
+  const tokens = ["<|bos|>", "<|pad|>", "<|eos|>", "<|unk|>", "E", "Ġ=", "Ġ\\", "sum", "_{", "i", "}", "Ã¤", "<|sn|>"];
+  it("stops at the end token, drops the other special tokens, undoes the byte-level encoding", () => {
+    expect(decodeUnirecTokens([0, 4, 5, 6, 7, 8, 9, 10, 2, 4, 4], tokens, 2)).toBe("E = \\sum_{i}");
+    expect(decodeUnirecTokens([0, 1, 4, 3], tokens, 2)).toBe("E");
+    expect(decodeUnirecTokens([4, 12, 4], tokens, 2)).toBe("E E");
   });
   it("decodes multi-byte UTF-8", () => {
-    expect(decodeFormulaTokens([12], vocab)).toBe("ä");
+    expect(decodeUnirecTokens([11], tokens, 2)).toBe("ä");
+  });
+});
+
+describe("unirecLatex", () => {
+  it("drops the display wrapper and an equation number after it", () => {
+    expect(unirecLatex("\\[\\sigma(z)=\\frac{1}{1+\\mathrm{e}^{-z}}\\](1)")).toBe("\\sigma(z)=\\frac{1}{1+\\mathrm{e}^{-z}}");
+    expect(unirecLatex("$$\nE=mc^{2}\n$$")).toBe("E=mc^{2}");
+    expect(unirecLatex("x_{(1)}")).toBe("x_{(1)}");
+  });
+  it("one display per line becomes an aligned derivation, aligned at the leading relation outside braces", () => {
+    expect(unirecLatex("(a+b)^{2}=(a+b)(a+b)\\]\\[=a^{2}+2ab+b^{2}")).toBe("\\begin{aligned}(a+b)^{2}&=(a+b)(a+b)\\\\&=a^{2}+2ab+b^{2}\\end{aligned}");
+    expect(unirecLatex("\\sum_{i=1}^{n}x_{i}\\]\\[\\le n")).toBe("\\begin{aligned}\\sum_{i=1}^{n}x_{i}&\\\\&\\le n\\end{aligned}");
+    expect(unirecLatex("a+b\\]\\[c+d")).toBe("\\begin{gathered}a+b\\\\c+d\\end{gathered}");
   });
 });
 
@@ -192,31 +207,76 @@ describe("latexIssues", () => {
   });
 });
 
-describe("formulaInput", () => {
-  it("trims the margin, fits the ink into 384×384 on black and normalises", () => {
-    // 40×20 white crop; ink is an L: row 8 for x 5..14 and column 5 for rows 8..11.
-    const w = 40;
-    const h = 20;
-    const gray = new Uint8Array(w * h).fill(255);
-    for (let x = 5; x < 15; x++) gray[8 * w + x] = 0;
-    for (let y = 8; y < 12; y++) gray[y * w + 5] = 0;
-    const input = formulaInput(gray, w, h)!;
-    const N = FORMULA_INPUT;
-    expect(input).toHaveLength(N * N);
-    const black = (0 - 0.7931) / 0.1738;
-    const white = (1 - 0.7931) / 0.1738;
-    // The 10×4 ink box is scaled to the full width: 384 × 153, centred vertically from row 115.
-    expect(input[0]).toBeCloseTo(black, 4); // padding above
-    expect(input[114 * N + 200]).toBeCloseTo(black, 4); // still padding
-    expect(input[115 * N + 200]).toBeCloseTo(black, 1); // the L's top stroke
-    expect(input[267 * N + 383]).toBeCloseTo(white, 4); // inside the box, right of the stem: paper
-    let max = -Infinity;
-    for (const v of input) max = Math.max(max, v);
-    expect(max).toBeCloseTo(white, 4);
+describe("bold against the PDF's faces", () => {
+  it("collects the letters a formula sets in bold", () => {
+    expect(latexBoldLetters("\\mathbf{w}^{\\top}\\boldsymbol{x}+{\\bf b}+\\bm{\\mu}+y")).toEqual(["w", "x", "b", "μ"]);
+    expect(latexBoldLetters("\\|x\\|_{2}")).toEqual([]);
   });
 
-  it("returns null for a blank crop", () => {
-    expect(formulaInput(new Uint8Array(100).fill(255), 10, 10)).toBeNull();
+  it("reads the face from the font name, and nothing from a Type 3 resource name", () => {
+    expect(fontIsBold("VVXXKS+CMMIB10")).toBe(true);
+    expect(fontIsBold("ABCDEF+CMBX12")).toBe(true);
+    expect(fontIsBold("Arial-BoldMT")).toBe(true);
+    expect(fontIsBold("YEBDBI+CMMI10")).toBe(false);
+    expect(fontIsBold("DMIHVY+CMSS10")).toBe(false);
+    expect(fontIsBold("KaTeX_Math-Italic")).toBe(false);
+    // pdfTeX's bitmap fonts: Beamer's sans math, bold or not, says nothing.
+    expect(fontIsBold("F59")).toBeNull();
+    expect(fontIsBold("T3")).toBeNull();
+    expect(fontIsBold("")).toBeNull();
+  });
+
+  it("marks bold the PDF doesn't have and bold the LaTeX dropped, not a match", () => {
+    // Sans-serif x read as \mathbf{x}; the PDF sets x in regular type.
+    expect(boldIssues("\\|\\mathbf{x}\\|_{1}=\\sum_{i=1}^{n}|\\mathbf{x}_{i}|", { bold: [], regular: ["x", "1", "i", "n", "x", "i"] })).toEqual(["the LaTeX sets x in bold, the PDF in regular type"]);
+    // Bold vectors read plain.
+    expect(boldIssues("w^{\\top}x+b=0", { bold: ["w", "x"], regular: ["b", "0"] })).toEqual(["the PDF sets w x in bold, the LaTeX doesn't"]);
+    expect(boldIssues("\\mathbf{w}^{\\top}\\mathbf{x}+b=0", { bold: ["w", "x"], regular: ["b", "0"] })).toEqual([]);
+    // A letter both bold and plain on the page (x and \mathbf{x}) is no conflict.
+    expect(boldIssues("\\mathbf{x}=x", { bold: ["x"], regular: ["x"] })).toEqual([]);
+  });
+
+  it("judgeFormula compares bold only where the PDF names the faces", () => {
+    const pdf = { inside: ["x", "2"], visible: ["x", "2"], bold: [], regular: ["x", "2"] };
+    expect(judgeFormula("\\mathbf{x}^{2}", pdf)).toMatchObject({ check: "differs", issues: ["the LaTeX sets x in bold, the PDF in regular type"] });
+    expect(judgeFormula("\\mathbf{x}^{2}", ["x", "2"]).check).toBe("match");
+    expect(judgeFormula("x^{2}", pdf).check).toBe("match");
+  });
+});
+
+describe("a line over the whole formula", () => {
+  it("is marked when it spans a relation, as a block frame read as an overline", () => {
+    expect(latexIssues("\\overline{\\int_{-\\infty}^{\\infty}e^{-x^{2}}dx=\\sqrt{\\pi}}")).toEqual([expect.stringMatching(/^a line over the whole formula/)]);
+    expect(latexIssues("\\overline{A\\cup B}")).toEqual([]);
+    expect(latexIssues("\\overline{A\\cup B}=\\bar{A}\\cap\\bar{B}")).toEqual([]);
+    expect(latexIssues("\\overline{x_{i=1}}")).toEqual([]);
+  });
+});
+
+describe("unirecInput", () => {
+  it("keeps the crop's size rounded down to multiples of 64, three equal channels in -1…1", () => {
+    const w = 200;
+    const h = 70;
+    const gray = new Uint8Array(w * h).fill(255);
+    for (let x = 20; x < 180; x++) gray[35 * w + x] = 0;
+    const input = unirecInput(gray, w, h)!;
+    expect([input.width, input.height]).toEqual([192, 64]);
+    expect(input.data).toHaveLength(3 * 192 * 64);
+    expect(input.data[0]).toBeCloseTo(1, 5); // paper
+    const plane = 192 * 64;
+    let min = Infinity;
+    for (let i = 0; i < plane; i++) min = Math.min(min, input.data[i]!);
+    expect(min).toBeLessThan(-0.5); // the stroke survives
+    expect(input.data[plane + 100]).toBe(input.data[100]);
+    expect(input.data[2 * plane + 100]).toBe(input.data[100]);
+  });
+
+  it("shrinks a crop wider than 960 to fit, keeping its aspect, and refuses a blank one", () => {
+    const gray = new Uint8Array(2000 * 100).fill(255);
+    gray[50 * 2000 + 1000] = 0;
+    const input = unirecInput(gray, 2000, 100)!;
+    expect([input.width, input.height]).toEqual([960, 64]);
+    expect(unirecInput(new Uint8Array(100).fill(255), 10, 10)).toBeNull();
   });
 });
 
@@ -372,6 +432,22 @@ describe("the decision over several readings", () => {
     const rs = [reading("\\gamma", 1), reading("y", 0.75), reading("y", 0.5)];
     expect(decideReading(rs, w).index).toBe(1);
     expect(decideReading([reading("a", 1), reading("a", 0.5)], w).index).toBe(0);
+  });
+
+  it("chooses among the readings that pass their check, when any does, and marks it when the others agree against it", () => {
+    const bar = "a line over the whole formula: keep \\overline only if the page draws one";
+    const rs = [
+      reading("\\overline{\\int f=1}", 1, { check: "differs", issues: [bar] }),
+      reading("\\overline{\\int f=1}", 0.75, { check: "differs", issues: [bar] }),
+      reading("\\int f=1", 0.5),
+    ];
+    const d = decideReading(rs);
+    expect(d.index).toBe(2);
+    expect(d.confidence).toBeLessThan(DECISION_FLAG_BELOW);
+    expect(decidedVerdict(rs, d.index, d.confidence).check).toBe("differs");
+    // None passes: the model chooses among all of them.
+    const none = rs.slice(0, 2);
+    expect(decideReading(none).index).toBe(0);
   });
 
   it("an unsure reading whose check passed is marked, naming what the other readings saw", () => {

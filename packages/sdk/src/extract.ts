@@ -428,7 +428,7 @@ export function extractSlug(filename: string): string {
 }
 
 /** Heading above the formulas a page got from on-device math recognition. */
-export const FORMULAS_HEADING = "_Formulas on this page, read on this machine as LaTeX (PP-FormulaNet+ L): check against the original._";
+export const FORMULAS_HEADING = "_Formulas on this page, read on this machine as LaTeX (UniRec-0.1B): check against the original._";
 
 /** Page text plus its display formulas as `$$…$$` blocks, top to bottom. */
 export function withFormulas(text: string, formulas: Array<Formula | FormulaEntry> | undefined): string {

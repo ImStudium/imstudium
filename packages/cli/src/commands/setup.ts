@@ -140,7 +140,7 @@ export function registerSetup(program: Command): void {
   setup
     .command("ocr")
     .description("Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified PDFium + ONNX Runtime + PP-OCRv6 (~60 MB, once)")
-    .option("--math", "Opt in to reading display formulas as LaTeX (PP-DocLayoutV2 + PP-FormulaNet+ L, ~1.1 GB once). Model readings: about four in five exact on lecture slides, each checked against the PDF and marked when it needs a look")
+    .option("--math", "Opt in to reading display formulas as LaTeX (PP-DocLayoutV2 + UniRec-0.1B, ~1 GB once). Model readings: nearly all exact on the benchmark's lecture slides, each checked against the PDF and marked when it needs a look")
     .option("--force", "Download and verify everything again, models included")
     .option("--remove", "Delete the runtime and models (with --math: only the math part)")
     .action(
@@ -193,8 +193,8 @@ export function registerSetup(program: Command): void {
             : "On-device OCR already installed and verified",
           `  ${runtime.model} · PDFium ${runtime.pins.pdfium} · ONNX Runtime ${runtime.pins.onnxruntime} · ${formatBytes(payload.diskBytes)} in ${runtime.dir}`,
           runtime.math.ready
-            ? `  Math: display formulas become $$…$$ LaTeX in content.md (${runtime.math.model}, ${runtime.math.layoutModel}). They are model readings: about four in five exact on lecture slides; the ones that need a look are marked (imstudium formulas list <file> --needs-look)`
-            : "  Math: not installed (opt-in, ~1.1 GB): imstudium setup ocr --math. Formulas become LaTeX model readings, about four in five exact on lecture slides",
+            ? `  Math: display formulas become $$…$$ LaTeX in content.md (${runtime.math.model}, ${runtime.math.layoutModel}). They are model readings: nearly all exact on the benchmark's lecture slides; the ones that need a look are marked (imstudium formulas list <file> --needs-look)`
+            : "  Math: not installed (opt-in, ~1 GB): imstudium setup ocr --math. Formulas become LaTeX model readings, nearly all exact on the benchmark's lecture slides",
           runtime.disabled
             ? "  Switched off by IMSTUDIUM_OCR=off: unset it to use OCR"
             : "  Pages without a text layer and JPEG/PNG photos are read on this machine at the next extract (imstudium extract, or sync --extract)",

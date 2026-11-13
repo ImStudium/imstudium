@@ -37,7 +37,7 @@ const CONTENT = [
   "",
   "Formeln",
   "",
-  "_Formulas on this page, read on this machine as LaTeX (PP-FormulaNet+ L): check against the original._",
+  "_Formulas on this page, read on this machine as LaTeX (UniRec-0.1B): check against the original._",
   "",
   "$$a+b$$",
   "",

@@ -308,7 +308,7 @@ export const DOCTOR_CHECKS: CheckDef[] = [
       const math = m.ready
         ? m.disabled
           ? " · math off (IMSTUDIUM_MATH=off)"
-          : " · math: formulas as LaTeX model readings, about four in five exact on lecture slides; marked ones need a look (imstudium formulas list <file> --needs-look)"
+          : " · math: formulas as LaTeX model readings, checked against the PDF; marked ones need a look (imstudium formulas list <file> --needs-look)"
         : " · math not installed (opt-in: imstudium setup ocr --math)";
       if (s.ready) return ok(`${s.model} · PDFium ${s.installed?.pdfium} · ONNX Runtime ${s.installed?.onnxruntime} (offline, on this machine)${math}`, data);
       return warn(`${s.reason ?? "not ready"}: scanned pages and photos stay unread`, s.reason?.startsWith("runs under Node") ? "Run imstudium with Node: npm i -g @imstudium/cli" : "imstudium setup ocr", data);
