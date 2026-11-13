@@ -34,6 +34,10 @@ describe("bench metrics", () => {
     expect(s).toMatchObject({ found: 2, exactLatex: 1, sameRendering: 1, extra: 1 });
     expect(s.similarity).toBeGreaterThan(0.5);
     expect(s.similarity).toBeLessThan(1);
+    expect(s.pairs.map((x) => x.predicted)).toEqual(["\\sqrt{2}", "a+b", null]);
+    expect(s.pairs[0]!.similarity).toBe(1);
+    expect(s.pairs[2]!.closest).toMatchObject({ latex: "zzz" });
+    expect(s.pairs[2]!.closest!.similarity).toBeLessThan(0.5);
   });
 
   it("rendered similarity treats spellings of the same formula as equal", () => {

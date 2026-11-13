@@ -4,7 +4,7 @@
  *   node scripts/bench/run.ts [--regen] [--write] [--no-ocr]
  *
  * --regen   rebuild the fixtures (.bench/fixtures) even when present
- * --write   put the results table into docs/BENCHMARKS.md
+ * --write   put the results (scorecard, details, formula misses) into docs/BENCHMARKS.md
  * --no-ocr  native text only
  *
  * Runs under Node (the OCR runtime is pointed at through process.env, which
@@ -58,7 +58,7 @@ interface TextRow {
   pages: number;
   cer: number;
   wordRecall: number;
-  pagesPerSecond: number;
+  msPerPage: number;
   ocrPages: number;
 }
 interface MathRow {
@@ -71,6 +71,7 @@ interface MathRow {
   similarity: number;
   extra: number;
   secondsPerPage: number;
+  misses: Array<{ page: number; truth: string; predicted: string | null; similarity: number; closest?: { latex: string; similarity: number } }>;
 }
 
 const textRows: TextRow[] = [];
@@ -114,7 +115,7 @@ for (const set of truth.sets) {
           pages: set.pages.length,
           cer: edits / chars,
           wordRecall: recall / set.pages.length,
-          pagesPerSecond: set.pages.length / (ms / 1000),
+          msPerPage: ms / set.pages.length,
           ocrPages: r.pages.filter((p) => p.ocr).length,
         });
       }
@@ -129,8 +130,10 @@ for (const set of truth.sets) {
       let sim = 0;
       let extra = 0;
       let n = 0;
+      const misses: MathRow["misses"] = [];
       set.pages.forEach((p, i) => {
         const s = scoreFormulas(m.formulas.filter((f) => f.page === i).map((f) => f.latex), p.formulas);
+        for (const pair of s.pairs) if (pair.similarity < 1) misses.push({ page: i + 1, ...pair });
         found += s.found;
         exactLatex += s.exactLatex;
         sameRendering += s.sameRendering;
@@ -138,29 +141,73 @@ for (const set of truth.sets) {
         extra += s.extra;
         n += p.formulas.length;
       });
-      mathRows.push({ set: set.name, variant, formulas: n, found, exactLatex, sameRendering, similarity: sim / n, extra, secondsPerPage: ms / 1000 / set.pages.length });
+      mathRows.push({ set: set.name, variant, formulas: n, found, exactLatex, sameRendering, similarity: sim / n, extra, secondsPerPage: ms / 1000 / set.pages.length, misses });
       await writeFile(join(OUT, `math-${variant === "scan" ? "scan" : "text"}.json`), JSON.stringify(m.formulas, null, 2));
     }
   }
 }
 
 const pct = (x: number) => `${(x * 100).toFixed(1)} %`;
+const time = (ms: number) => (ms >= 100 ? `${(ms / 1000).toFixed(2)} s` : `${ms < 10 ? ms.toFixed(1) : ms.toFixed(0)} ms`);
+const code = (latex: string) => `\`${latex.replace(/\|/g, "\\|")}\``;
 const machine = `${cpus()[0]?.model.trim() ?? "?"} · ${availableParallelism()} threads · ${platform()}-${arch()} · Node ${process.versions.node}`;
+const row = (set: string, variant: string, engine: TextRow["engine"]) => textRows.find((r) => r.set === set && r.variant === variant && r.engine === engine);
+const reads = (r: TextRow | undefined) => (!r ? "not measured" : r.wordRecall === 0 ? "nothing (image-only page marker)" : `${pct(r.wordRecall)} of words · ${pct(r.cer)} CER`);
+const mathRow = (variant: string) => mathRows.find((r) => r.variant === variant);
+const CASES = [
+  { label: "Born-digital lecture notes", set: "prose", variant: "text layer" },
+  { label: "Born-digital slides", set: "slides", variant: "text layer" },
+  { label: "Scanned lecture notes", set: "prose", variant: "scan" },
+  { label: "Scanned slides", set: "slides", variant: "scan" },
+] as const;
+
 const lines = [
-  `Synthetic fixtures (seed ${truth.seed}, Chromium ${truth.chromium}), ${machine}. CER = character error rate against the laid-out text (lower is better); word recall = share of the page's words found, order ignored.`,
+  `Run on ${machine}, synthetic fixtures (seed ${truth.seed}, Chromium ${truth.chromium})${useOcr ? "" : ", without the OCR runtime"}${useMath || !truth.sets.some((x) => x.kind === "formulas") ? "" : ", without the math runtime"}.`,
   "",
-  "| Fixture | Pages | Engine | CER | Word recall | Pages/s | Pages via OCR |",
+  "### Scorecard",
+  "",
+  "What a student gets from each kind of document, without and with the on-device runtime (`imstudium setup ocr --math`). Time is per page with the runtime installed.",
+  "",
+  "| Document | Pages | Without OCR | With on-device OCR and math | Time per page |",
+  "| --- | ---: | --- | --- | ---: |",
+  ...CASES.map((c) => {
+    const native = row(c.set, c.variant, "native");
+    const withOcr = row(c.set, c.variant, "native + OCR") ?? native;
+    return `| ${c.label} | ${native?.pages ?? "?"} | ${reads(native)} | ${useOcr ? reads(withOcr) : "not measured"} | ${withOcr ? time(withOcr.msPerPage) : "?"} |`;
+  }),
+  ...(["text layer", "scan"] as const).map((v) => {
+    const m = mathRow(v);
+    const label = v === "scan" ? "Scanned display formulas" : "Born-digital display formulas";
+    const pages = truth.sets.find((x) => x.kind === "formulas")?.pages.length ?? "?";
+    return m
+      ? `| ${label} | ${pages} | not read as LaTeX | ${m.sameRendering} of ${m.formulas} formulas render exactly as the source · ${m.found} found | ${time(m.secondsPerPage * 1000)} |`
+      : `| ${label} | ${pages} | not read as LaTeX | not measured | ? |`;
+  }),
+  "",
+  "Words = share of the page's words found, order ignored (higher is better). CER = character error rate against the laid-out text (lower is better). A formula renders exactly as the source when KaTeX turns both into the same MathML.",
+  "",
+  "### Text, every engine",
+  "",
+  "| Fixture | Pages | Engine | CER | Word recall | Time per page | Pages via OCR |",
   "| --- | ---: | --- | ---: | ---: | ---: | ---: |",
-  ...textRows.map((r) => `| ${r.set} · ${r.variant} | ${r.pages} | ${r.engine} | ${pct(r.cer)} | ${pct(r.wordRecall)} | ${r.pagesPerSecond.toFixed(1)} | ${r.ocrPages} |`),
+  ...textRows.map((r) => `| ${r.set} · ${r.variant} | ${r.pages} | ${r.engine} | ${pct(r.cer)} | ${pct(r.wordRecall)} | ${time(r.msPerPage)} | ${r.ocrPages} |`),
 ];
 if (mathRows.length) {
   lines.push(
     "",
-    "Display formulas (PP-DocLayout-S finds them, PP-FormulaNet+ S reads them). Both sides are rendered with KaTeX to MathML and compared token by token, so different spellings of the same formula count as equal. Found = matched to a true formula at ≥ 50 % rendered similarity; same rendering = identical MathML; exact LaTeX = identical source after normalising spacing, `\\left`/`\\right` and script braces; similarity = mean rendered similarity over all true formulas (missed ones count 0).",
+    "### Display formulas",
     "",
-    "| Fixture | Formulas | Found | Same rendering | Exact LaTeX | Similarity | Extra boxes | s/page |",
+    "| Fixture | Formulas | Found | Same rendering | Exact LaTeX | Similarity | Extra boxes | Time per page |",
     "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ...mathRows.map((r) => `| ${r.set} · ${r.variant} | ${r.formulas} | ${r.found} | ${r.sameRendering} | ${r.exactLatex} | ${pct(r.similarity)} | ${r.extra} | ${r.secondsPerPage.toFixed(2)} |`),
+    ...mathRows.map((r) => `| ${r.set} · ${r.variant} | ${r.formulas} | ${r.found} | ${r.sameRendering} | ${r.exactLatex} | ${pct(r.similarity)} | ${r.extra} | ${time(r.secondsPerPage * 1000)} |`),
+    "",
+    "### Every formula that did not render as its source",
+    "",
+    "Some only change the look (`\\overline` for `\\bar`, a dropped thin space); others change the meaning. Rendered similarity says how far apart they are, not which kind they are.",
+    "",
+    "| Fixture | Page | Source | Read as | Rendered similarity |",
+    "| --- | ---: | --- | --- | ---: |",
+    ...mathRows.flatMap((r) => r.misses.map((x) => `| ${r.set} · ${r.variant} | ${x.page} | ${code(x.truth)} | ${x.predicted !== null ? code(x.predicted) : x.closest ? `${code(x.closest.latex)} (too far off to count as found)` : "(not found)"} | ${pct(x.predicted !== null ? x.similarity : (x.closest?.similarity ?? 0))} |`)),
   );
 }
 const table = lines.join("\n");

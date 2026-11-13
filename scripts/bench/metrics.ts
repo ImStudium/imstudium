@@ -177,6 +177,12 @@ export interface FormulaScore {
   similarity: number;
   /** Predictions that matched no truth formula. */
   extra: number;
+  /**
+   * Each truth formula with what it was matched to (null: nothing at ≥ 50 %)
+   * and the rendered similarity; an unmatched one also gets the closest
+   * leftover prediction, if any.
+   */
+  pairs: Array<{ truth: string; predicted: string | null; similarity: number; closest?: { latex: string; similarity: number } }>;
 }
 
 /** Greedy best-first matching of predicted to truth formulas on one page, by rendered similarity. */
@@ -199,5 +205,10 @@ export function scoreFormulas(predicted: string[], truth: string[]): FormulaScor
     sameRendering: best.filter((s) => s === 1).length,
     similarity: truth.length ? best.reduce((a, b) => a + b, 0) / truth.length : 1,
     extra: predicted.length - usedP.size,
+    pairs: truth.map((t, j) => {
+      if (match[j]! >= 0) return { truth: t, predicted: predicted[match[j]!]!, similarity: best[j]! };
+      const near = pairs.find((x) => x.t === j && !usedP.has(x.p));
+      return { truth: t, predicted: null, similarity: 0, ...(near ? { closest: { latex: predicted[near.p]!, similarity: near.s } } : {}) };
+    }),
   };
 }
