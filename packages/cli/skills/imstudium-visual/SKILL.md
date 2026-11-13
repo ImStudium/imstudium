@@ -37,7 +37,7 @@ The `$$…$$` blocks are model output. On hard lecture slides about four in five
 | `_(formula p3-2 unchecked: …)_` | Scanned page or picture: nothing to compare with, only the image can tell |
 | `_(formula p3-2 corrected by … from its image …)_` | An agent or the student corrected it from the image, and the correction checks |
 
-Handwriting and inline math are not read as LaTeX.
+Handwriting and math inside a sentence are not read as LaTeX; a formula alone in a bullet, or set large there (`$\displaystyle …$`), is.
 
 **corpus.jsonl** is for finding pages by keyword, not for answering math from OCR text alone.
 

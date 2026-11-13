@@ -6,8 +6,8 @@ The one measure of how well ImStudium reads documents on the student's machine, 
 
 - **Born-digital PDFs lose no words**, with or without OCR installed. Prose comes out character-perfect; slides keep every word, in a different reading order. Installing OCR never touches pages that have a text layer.
 - **Scans go from nothing to readable.** Without OCR a scanned page is an image-only marker. With on-device OCR, synthetic scans come back nearly character-perfect for prose and with almost all words for slides, at about half a second per page.
-- **Display formulas come back as LaTeX, and every reading is checked.** On clean pages all 24 render exactly as the source. On hard Beamer slides, typeset by pdflatex the way maths lecturers make them, all 112 are found and about four in five render exactly. On born-digital pages, every reading whose meaning is wrong fails the check and is marked in content.md. Scans have no text to check against, so their formulas are marked unchecked.
-- **After the agent's look, nothing is wrong and nothing is invented.** A coding agent with the `imstudium-visual` skill and the CLI, and no ground truth, looked at every formula's image on the four hard decks. It corrected the notes so that 108 of 112 render exactly and the other 4 differ only in look; none has a wrong meaning. It invented no formula and no symbol, and all 25 corrections it stored are right.
+- **Display formulas come back as LaTeX, and every reading is checked.** On clean pages all 24 render exactly as the source. On Beamer slides typeset by pdflatex, the way maths lecturers make them, 143 of 144 are found, formulas inside bullets included, and 115 render exactly: about four in five. On born-digital pages the check marks all but one of the readings whose meaning is wrong. That one is `\arg\max_c` with the `c` under "arg max" instead of "max". Scans have no text to check against, so their formulas are marked unchecked.
+- **After the agent's look, nothing is wrong and nothing is invented.** A coding agent with the `imstudium-visual` skill and the CLI, and no ground truth, looked at every formula's image on the six Beamer decks. Its answers render exactly for 140 of 144 formulas; the other 4 differ only in look, and none has a wrong meaning. It invented no formula and no symbol, and all 36 corrections it stored are right.
 
 ## Results
 
@@ -20,16 +20,18 @@ What a student gets from each kind of document, without and with the on-device r
 
 | Document | Pages | Without OCR | With on-device OCR and math | Time per page |
 | --- | ---: | --- | --- | ---: |
-| Born-digital lecture notes | 8 | 100.0 % of words · 0.0 % CER | 100.0 % of words · 0.0 % CER | 1.8 ms |
-| Born-digital slides | 8 | 100.0 % of words · 18.0 % CER | 100.0 % of words · 18.0 % CER | 1.2 ms |
-| Scanned lecture notes | 8 | nothing (image-only page marker) | 100.0 % of words · 0.0 % CER | 0.53 s |
-| Scanned slides | 8 | nothing (image-only page marker) | 97.6 % of words · 13.8 % CER | 0.49 s |
-| Display formulas on A4 pages, born-digital | 6 | not read as LaTeX | 24 of 24 formulas render exactly as the source · 24 found | 9.37 s |
-| Display formulas on A4 pages, scanned | 6 | not read as LaTeX | 24 of 24 formulas render exactly as the source · 24 found | 8.48 s |
-| Beamer slides, sans-serif math (hard), born-digital | 10 | not read as LaTeX | 21 of 28 formulas render exactly as the source · 28 found | 6.33 s |
-| Beamer slides, sans-serif math (hard), scanned | 10 | not read as LaTeX | 25 of 28 formulas render exactly as the source · 28 found | 6.19 s |
-| Beamer slides, serif math (hard), born-digital | 10 | not read as LaTeX | 22 of 28 formulas render exactly as the source · 28 found | 6.44 s |
-| Beamer slides, serif math (hard), scanned | 10 | not read as LaTeX | 22 of 28 formulas render exactly as the source · 28 found | 6.60 s |
+| Born-digital lecture notes | 8 | 100.0 % of words · 0.0 % CER | 100.0 % of words · 0.0 % CER | 2.1 ms |
+| Born-digital slides | 8 | 100.0 % of words · 18.0 % CER | 100.0 % of words · 18.0 % CER | 1.3 ms |
+| Scanned lecture notes | 8 | nothing (image-only page marker) | 100.0 % of words · 0.0 % CER | 0.52 s |
+| Scanned slides | 8 | nothing (image-only page marker) | 97.6 % of words · 13.8 % CER | 0.48 s |
+| Display formulas on A4 pages, born-digital | 6 | not read as LaTeX | 24 of 24 formulas render exactly as the source · 24 found | 9.92 s |
+| Display formulas on A4 pages, scanned | 6 | not read as LaTeX | 24 of 24 formulas render exactly as the source · 24 found | 8.73 s |
+| Beamer slides, sans-serif math (hard), born-digital | 10 | not read as LaTeX | 21 of 28 formulas render exactly as the source · 28 found | 6.51 s |
+| Beamer slides, sans-serif math (hard), scanned | 10 | not read as LaTeX | 25 of 28 formulas render exactly as the source · 28 found | 6.21 s |
+| Beamer slides, serif math (hard), born-digital | 10 | not read as LaTeX | 22 of 28 formulas render exactly as the source · 28 found | 6.36 s |
+| Beamer slides, serif math (hard), scanned | 10 | not read as LaTeX | 22 of 28 formulas render exactly as the source · 28 found | 6.45 s |
+| Beamer slides 4:3, formulas in bullets, sans-serif math, born-digital | 8 | not read as LaTeX | 10 of 16 formulas render exactly as the source · 15 found | 4.67 s |
+| Beamer slides 4:3, formulas in bullets, sans-serif math, scanned | 8 | not read as LaTeX | 15 of 16 formulas render exactly as the source · 16 found | 4.37 s |
 
 Words = share of the page's words found, order ignored (higher is better). CER = character error rate against the laid-out text (lower is better). A formula renders exactly as the source when KaTeX turns both into the same MathML.
 
@@ -37,25 +39,27 @@ Words = share of the page's words found, order ignored (higher is better). CER =
 
 | Fixture | Pages | Engine | CER | Word recall | Time per page | Pages via OCR |
 | --- | ---: | --- | ---: | ---: | ---: | ---: |
-| prose · text layer | 8 | native | 0.0 % | 100.0 % | 1.8 ms | 0 |
-| prose · text layer | 8 | native + OCR | 0.0 % | 100.0 % | 1.8 ms | 0 |
+| prose · text layer | 8 | native | 0.0 % | 100.0 % | 1.9 ms | 0 |
+| prose · text layer | 8 | native + OCR | 0.0 % | 100.0 % | 2.1 ms | 0 |
 | prose · scan | 8 | native | 100.0 % | 0.0 % | 0.3 ms | 0 |
-| prose · scan | 8 | native + OCR | 0.0 % | 100.0 % | 0.53 s | 8 |
-| slides · text layer | 8 | native | 18.0 % | 100.0 % | 1.3 ms | 0 |
-| slides · text layer | 8 | native + OCR | 18.0 % | 100.0 % | 1.2 ms | 0 |
+| prose · scan | 8 | native + OCR | 0.0 % | 100.0 % | 0.52 s | 8 |
+| slides · text layer | 8 | native | 18.0 % | 100.0 % | 1.1 ms | 0 |
+| slides · text layer | 8 | native + OCR | 18.0 % | 100.0 % | 1.3 ms | 0 |
 | slides · scan | 8 | native | 100.0 % | 0.0 % | 0.1 ms | 0 |
-| slides · scan | 8 | native + OCR | 13.8 % | 97.6 % | 0.49 s | 8 |
+| slides · scan | 8 | native + OCR | 13.8 % | 97.6 % | 0.48 s | 8 |
 
 ### Display formulas
 
 | Fixture | Formulas | Found | Same rendering | Exact LaTeX | Similarity | Extra boxes | Time per page |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| formulas · text layer | 24 | 24 | 24 | 13 | 100.0 % | 0 | 9.37 s |
-| formulas · scan | 24 | 24 | 24 | 23 | 100.0 % | 0 | 8.48 s |
-| beamer-sans · text layer | 28 | 28 | 21 | 17 | 97.5 % | 0 | 6.33 s |
-| beamer-sans · scan | 28 | 28 | 25 | 24 | 98.9 % | 0 | 6.19 s |
-| beamer-serif · text layer | 28 | 28 | 22 | 15 | 98.4 % | 0 | 6.44 s |
-| beamer-serif · scan | 28 | 28 | 22 | 19 | 96.5 % | 0 | 6.60 s |
+| formulas · text layer | 24 | 24 | 24 | 13 | 100.0 % | 0 | 9.92 s |
+| formulas · scan | 24 | 24 | 24 | 23 | 100.0 % | 0 | 8.73 s |
+| beamer-sans · text layer | 28 | 28 | 21 | 17 | 97.5 % | 0 | 6.51 s |
+| beamer-sans · scan | 28 | 28 | 25 | 24 | 98.9 % | 0 | 6.21 s |
+| beamer-serif · text layer | 28 | 28 | 22 | 15 | 98.4 % | 0 | 6.36 s |
+| beamer-serif · scan | 28 | 28 | 22 | 19 | 96.5 % | 0 | 6.45 s |
+| beamer-bullets · text layer | 16 | 15 | 10 | 7 | 88.7 % | 1 | 4.67 s |
+| beamer-bullets · scan | 16 | 16 | 15 | 14 | 99.5 % | 0 | 4.37 s |
 
 ### Does the check catch the wrong ones?
 
@@ -69,6 +73,8 @@ Every recognised formula is checked on the machine: its LaTeX must be well-forme
 | beamer-sans · scan | 0 | 0 | 25 | 0 | **0** | 0 | 3 |
 | beamer-serif · text layer | 22 | 0 | 0 | 1 | **0** | 5 | 0 |
 | beamer-serif · scan | 0 | 0 | 22 | 0 | **0** | 3 | 3 |
+| beamer-bullets · text layer | 10 | 0 | 0 | 0 | **1** | 5 | 0 |
+| beamer-bullets · scan | 0 | 0 | 15 | 0 | **0** | 0 | 1 |
 
 ### Every formula that did not render as its source
 
@@ -98,6 +104,13 @@ Look only = the same symbols in the same structure; meaning = a symbol, script, 
 | beamer-serif · scan | 4 | `\forall \varepsilon > 0 \; \exists \delta > 0 : \|x - x_0\| < \delta \Rightarrow \|f(x) - f(x_0)\| < \varepsilon` | `\forall\varepsilon>0\;\exists\delta>0:\|x-x_{0}\|<\delta\Rightarrow\|\bar{f}(x)-\bar{f}(x_{0})\|<\varepsilon` | 87.8 % | meaning | unchecked |
 | beamer-serif · scan | 5 | `\prod_{i=1}^{n} (1 + x_i) \ge 1 + \sum_{i=1}^{n} x_i` | `\begin{aligned}{}&{{}\overline{{(-1)}}}\\ {}&{{}\prod_{i=1}^{n}(1+x_{i})\geq1+\sum_{i=1}^{n}x_{i}.}\\ \end{aligned}` | 61.0 % | meaning | unchecked |
 | beamer-serif · scan | 7 | `T(n) = \begin{cases} 1 & n = 1 \\ 2\,T(n/2) + n & n > 1 \end{cases}` | `\boxed{T(n)=\begin{cases}1&n=1\\2T(n/2)+n&n>1\end{cases}}` | 96.6 % | meaning | differs |
+| beamer-bullets · text layer | 2 | `\tilde{x}=\frac{x-\bar{x}}{\sigma}` | `\tilde{x}=\frac{x-\bar{x}\|}{\sigma}` | 95.7 % | meaning | differs |
+| beamer-bullets · text layer | 3 | `\\|x\\|_1=\sum_{i=1}^{n}\|x_i\|` | `\\|x\\|_{1}=\sum_{j=1}^{h}\|x_{j}\|` | 88.5 % | meaning | differs |
+| beamer-bullets · text layer | 4 | `\hat{y}=\arg\max_{c}\sum_{i\in N_k(x)}[y_i=c]` | `\hat{y}=\underset{c}{\arg\operatorname*{max}}\sum_{i\in\mathcal{N}_{k}(x)}[y_{i}=c]` | 92.6 % | meaning | match |
+| beamer-bullets · text layer | 5 | `\boldsymbol{\mu}=\frac{1}{n}\sum_{i=1}^{n}\boldsymbol{x}_i` | `\boldsymbol{\mu}=\frac{1}{n}\sum_{j=1}^{n}\mathsf{x}_{j}` | 91.3 % | meaning | differs |
+| beamer-bullets · text layer | 6 | `\sigma(z)=\frac{1}{1+e^{-z}}` | `\begin{aligned}&\bullet\cdots\bullet\cdots\bullet\cdots\bullet\\&\sigma(z)=\frac{1}{1+e^{-z}}\\&\cdots\end{aligned}` (too far off to count as found) | 36.2 % | meaning | – |
+| beamer-bullets · text layer | 8 | `\mathrm{Acc}=\frac{TP+TN}{TP+TN+FP+FN}` | `\mathrm{Acc}=\frac{\hat{TP}+\hat{TN}}{\hat{TP}+\hat{TN}+\hat{FP}+\hat{FN}}` | 51.6 % | meaning | differs |
+| beamer-bullets · scan | 5 | `\boldsymbol{\mu}=\frac{1}{n}\sum_{i=1}^{n}\boldsymbol{x}_i` | `\mu=\frac{1}{n}\sum_{j=1}^{n}\mathsf{x}_{j}` | 91.3 % | meaning | unchecked |
 <!-- bench:end -->
 
 ## How it is measured
@@ -113,7 +126,11 @@ Look only = the same symbols in the same structure; meaning = a symbol, script, 
 - `\binom`, norms, ε-δ quantifiers, `\limsup` with an n-th root, `\underbrace`, double integrals, `\pmod`, `\mathcal`
 - Leibniz, Fourier and Bayes formulas
 
-The frames mix dense stacks, coloured `block`s, two columns and `\small` type, with inline math in the bullets. One deck keeps Beamer's default sans-serif math, the other uses serif math. They are built when pdflatex with beamer is installed, and skipped otherwise.
+The frames mix dense stacks, coloured `block`s, two columns and `\small` type, with inline math in the bullets. One deck keeps Beamer's default sans-serif math, the other uses serif math.
+
+A third deck, **beamer-bullets**, is the everyday lecture slide: 4:3, Beamer's default theme and sans-serif math, eight frames with 16 formulas inside the bullets. Some are displayed under an item, some follow the item's text as `$\displaystyle …$`, and some are an item on their own. It has bold vectors (`\mathbf`, `\boldsymbol`), `\min`/`\max` and machine-learning formulas, among them the three a live run on real Beamer slides read badly with the small models.
+
+The decks are built when pdflatex with beamer is installed, and skipped otherwise.
 
 Every set exists twice. The **text layer** variant is the PDF itself, as a born-digital lecture PDF would be. The **scan** variant is the same pages as JPEG images, grey, slightly blurred and tilted by 0.35°, one image per page with no text layer. The Beamer pages are rendered at 200 dpi first.
 
@@ -138,11 +155,14 @@ The ground truth is the text Chromium laid out, read back from the page, and the
   - garbage such as `\ binom n k k`, unclosed `\left` and empty fraction parts
   - characters that aren't math (`\overset{平平}`)
   - a `\boxed` or a one-sided brace the model drew from a Beamer block's frame
+  - an invented accent or bar: `\hat`, `\tilde`, `\bar`, `\dot` and vertical bars are compared with the PDF's own accent glyphs, so `\hat{TP}` for TP or a stray `|` is marked
+  - a command name without its backslash, even glued to a letter (`Aboldsymbol`), a list bullet read into the formula, and anything KaTeX can't typeset (a text accent like `\=` in math)
 
-  It cannot see a misplaced exponent, a swapped fraction, or a letter dropped from just outside the box. Scans have no text to compare with, so their formulas stay unchecked. Either way, the image of every formula is saved for the agent's look.
+  It cannot see a misplaced exponent, a swapped fraction, an invented operator such as `\int` or `\stackrel` (TeX sets those from its extension font, which a text layer doesn't name), or a letter dropped from just outside the box. Scans have no text to compare with, so their formulas stay unchecked. Either way, the image of every formula is saved for the agent's look.
 - **Look only is not wrong.** A reading that renders differently from the source but has the same symbols in the same structure counts as look only, for example `\left|x\right|` for `|x|`, `aligned` in a brace for `cases`, or an alignment point on the other side of `=`. The tables keep it apart from readings whose meaning differs.
-- **The agent is the last check, and it is measured.** The model alone gets 17 of the 112 hard-deck formulas wrong in meaning, including a whole invented line on a scan. In the agent runs the skill's rule held: look at the image of every formula, write only what it shows, and store a correction only if it checks. The agents removed every invented box, brace, bar and line, read `y` where the model had `\gamma`, and left look-only differences alone. One agent's correct reading was refused because the check then compared only the detector's box. The agent kept the subscript rather than drop it to pass, which led to the visible-glyph rule above.
-- **Inline math is not read as LaTeX.** Only display formulas are read. Math inside a sentence stays pdf-inspector's text, with garbled sub- and superscripts (`*x<sub>i</sub>*`).
+- **The agent is the last check, and it is measured.** The model alone gets 24 of the 144 Beamer formulas wrong in meaning, including a whole invented line on a scan and hats over every TP and FN of an accuracy formula. In the agent runs the skill's rule held: look at the image of every formula, write only what it shows, and store a correction only if it checks. The agents removed every invented box, brace, bar and line, read `y` where the model had `\gamma`, and left look-only differences alone. One agent's correct reading was refused because the check then compared only the detector's box. The agent kept the subscript rather than drop it to pass, which led to the visible-glyph rule above.
+- **Formulas in bullets.** The layout model calls a formula that follows an item's text, or is an item of its own, an inline formula. Reading display formulas only, the bullets deck lost half of its 16. Inline formulas taller than 1.3 text lines or alone in their item are now read too, and 15–16 of 16 are found. Math inside a sentence is still not read as LaTeX: it stays pdf-inspector's text, with garbled sub- and superscripts (`*x<sub>i</sub>*`).
+- **Born-digital sans-serif slides read worse than their scans.** On the bullets deck the scan reads 15 of 16 exactly and the PDF itself 10: on crisp renders of thin sans-serif strokes the model invents hats and bars. A sharper render does not help. At 432 dpi the sans and bullets decks read 20 and 12 exactly, against 21 and 10 at the default 288 dpi. At 144 dpi they read 23 and 14, but the serif deck and the clean A4 page each lose one and gain new inventions that pass the check (`\int_{\neg(A\wedge B)}`, `y_{\mid}^{\mid}`), so 288 dpi stays. `IMSTUDIUM_MATH_RENDER_SCALE` repeats the comparison.
 - **Not covered:** handwriting, camera photos, chemistry, and fonts other than DejaVu, KaTeX and Computer Modern (serif and sans). For comparison, upstream reports PP-FormulaNet+ L at 92.2 BLEU on PaddleOCR's English formula set.
 - **Speed depends on the CPU.** The machine is named above the scorecard; compare runs on the same machine only.
 
@@ -157,11 +177,13 @@ The last step is the agent's. A coding agent gets a hard deck the way a student'
 | beamer-sans · scan | 28 | 25 · 1 | **26** · 2 · **0** | 26 · 0 | **0** | **0** | 0 | 3 | **0** |
 | beamer-serif · text layer | 28 | 22 · 5 | **27** · 1 · **0** | 27 · 0 | **0** | **0** | 0 | 7 | **0** |
 | beamer-serif · scan | 28 | 22 · 6 | **28** · 0 · **0** | 28 · 0 | **0** | **0** | 0 | 8 | **0** |
+| beamer-bullets · text layer | 16 | 10 · 6 | **16** · 0 · **0** | 16 · 0 | **0** | **0** | 0 | 8 | **0** |
+| beamer-bullets · scan | 16 | 15 · 1 | **16** · 0 · **0** | 16 · 0 | **0** | **0** | 0 | 3 | **0** |
 <!-- agent:end -->
 
 Right = renders exactly as the source. Agent's answer = the formulas the agent hands the student. Notes after correction = the formula blocks of content.md once the agent's corrections are stored, which is what search and later sessions read. Invented formulas = written down but not on the slide. Added symbols = rendered symbols in a written formula that the source doesn't have. Dropped symbols = the opposite. Look only and meaning wrong are defined as in the check table above. Stored corrections = `imstudium formulas fix` calls that passed the check; wrong corrections stored = those whose meaning still differs from the slide's formula.
 
-The agents were Claude Code subagents (Opus 5.5), one fresh agent per deck, told to work only with the deck folder, the skill and the CLI. Each reported every file it read, and none read the repository, the fixtures or the ground truth. An agent run is not deterministic; rerun it after a change to the skill, the check or the models.
+Bold and other font variants (`\mathbf{w}` against `\mathsf{w}`) are not scored: the rendered comparison sees the symbol, not its weight. The agents were Claude Code subagents (Opus 5.5), one fresh agent per deck, told to work only with the deck folder, the skill and the CLI. The four decks of the first run were prepared before the check compared accents and bars. Each reported every file it read, and none read the repository, the fixtures or the ground truth. An agent run is not deterministic; rerun it after a change to the skill, the check or the models.
 
 ## Run it
 

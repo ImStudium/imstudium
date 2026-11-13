@@ -22,7 +22,7 @@ vi.mock("./ingest/local-docs.js", async (orig) => ({
 }));
 
 const { Extractor, shouldRedoForOcr, summarizeOcr } = await import("./extract.js");
-const { IMAGE_ONLY } = await import("./ingest/local-docs.js");
+const { IMAGE_ONLY, OCR_MERGE } = await import("./ingest/local-docs.js");
 const { MATH_MODEL, LAYOUT_MODEL } = await import("./ingest/math.js");
 
 const native = (): LocalConvertOk => ({
@@ -46,7 +46,7 @@ const withOcr = (): LocalConvertOk => ({
     { index: 0, markdown: "Page one text" },
     { index: 1, markdown: "Read from the scan", ocr: { source: "Ocr", confidence: 0.97, low: false } },
   ],
-  metadata: { engine: "pdf-inspector+ocr", ocr: { model: "pp-ocrv6-small (oar-ocr v0.7.0)", pages: [1], lowConfidencePages: [] } },
+  metadata: { engine: "pdf-inspector+ocr", ocr: { model: "pp-ocrv6-small (oar-ocr v0.7.0)", merge: OCR_MERGE, pages: [1], lowConfidencePages: [] } },
 });
 
 let dir: string;
@@ -88,7 +88,7 @@ describe("Extractor: redo when OCR would add text", () => {
     expect(second.skipped).toBeUndefined();
     expect(second.ocrPages).toEqual([1]);
     expect(convert).toHaveBeenLastCalledWith(expect.any(Uint8Array), src, { ocr: undefined });
-    expect((await manifest()).ocr).toEqual({ model: "pp-ocrv6-small (oar-ocr v0.7.0)", pages: [1], lowConfidencePages: [] });
+    expect((await manifest()).ocr).toEqual({ model: "pp-ocrv6-small (oar-ocr v0.7.0)", merge: OCR_MERGE, pages: [1], lowConfidencePages: [] });
     const content = await readFile(join(out, "content.md"), "utf-8");
     expect(content).toContain("Read from the scan");
     expect(content).toContain("on-device OCR on 1 page(s)");
@@ -123,11 +123,47 @@ describe("Extractor: redo when OCR would add text", () => {
     runtime.ready = true;
     const ex = new Extractor({ anydoc: true, pdfInspector: true });
     // pdf-inspector routed nothing, yet the native layer still flags page 2 as image-only.
-    convert.mockResolvedValueOnce({ ...native(), engine: "pdf-inspector+ocr", metadata: { engine: "pdf-inspector+ocr", ocr: { model: "m", pages: [], lowConfidencePages: [] } } });
+    convert.mockResolvedValueOnce({ ...native(), engine: "pdf-inspector+ocr", metadata: { engine: "pdf-inspector+ocr", ocr: { model: "m", merge: OCR_MERGE, pages: [], lowConfidencePages: [] } } });
     await ex.extractFile(src, out);
-    expect((await manifest()).ocr).toEqual({ model: "m", pages: [], lowConfidencePages: [] });
+    expect((await manifest()).ocr).toEqual({ model: "m", merge: OCR_MERGE, pages: [], lowConfidencePages: [] });
     expect((await ex.extractFile(src, out)).skipped).toBe(true);
     expect(convert).toHaveBeenCalledTimes(1);
+  });
+
+  it("text the OCR call recovered from the page's own text layer lands in content.md as recovered, not OCR; a file read under the old merge is redone once", async () => {
+    runtime.ready = true;
+    const ex = new Extractor({ anydoc: true, pdfInspector: true });
+    // As 0.2.x-dev wrote it: OCR ran, the recovered page was dropped and stayed image-only.
+    convert.mockResolvedValueOnce({ ...native(), engine: "pdf-inspector+ocr", metadata: { engine: "pdf-inspector+ocr", ocr: { model: "m", pages: [], lowConfidencePages: [] } } });
+    await ex.extractFile(src, out);
+    expect((await manifest()).imageOnlyPages).toEqual([1]);
+
+    // With the current merge the same file is read again, once.
+    const recovered = "Nearest-Neighbor Classifier\n\nk=2";
+    convert.mockResolvedValueOnce({
+      ok: true,
+      engine: "pdf-inspector",
+      pageCount: 2,
+      markdown: `Page one text\f${recovered}`,
+      pages: [
+        { index: 0, markdown: "Page one text" },
+        { index: 1, markdown: recovered, imageOnly: false, recovered: true },
+      ],
+      metadata: { engine: "pdf-inspector", ocr: { model: "m", merge: OCR_MERGE, pages: [], lowConfidencePages: [], recoveredPages: [1] } },
+    });
+    const again = await ex.extractFile(src, out);
+    expect(again).toMatchObject({ recoveredPages: [1], ocrPages: [], imageOnlyPages: [] });
+    const content = await readFile(join(out, "content.md"), "utf-8");
+    expect(content).toContain("Nearest-Neighbor Classifier");
+    expect(content).not.toContain(IMAGE_ONLY);
+    expect(content).not.toContain("on-device OCR");
+    const m = await manifest();
+    expect(m.ocr).toEqual({ model: "m", merge: OCR_MERGE, pages: [], lowConfidencePages: [], recoveredPages: [1] });
+    expect(m.imageOnlyPages).toBeUndefined();
+    expect(summarizeOcr([again])).toMatchObject({ pages: 0, files: 0, recoveredPages: 1, imageOnlyPages: 0 });
+
+    expect((await ex.extractFile(src, out)).skipped).toBe(true);
+    expect(convert).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the native text and records the error when OCR fails", async () => {
@@ -149,7 +185,10 @@ describe("shouldRedoForOcr", () => {
     ["pdf with text on every page", { kind: "pdf" }, "all text", ready, undefined, false],
     ["image", { kind: "image" }, "", ready, undefined, true],
     ["office document", { kind: "office", imageOnlyPages: [0] }, "", ready, undefined, false],
-    ["OCR already ran", { kind: "pdf", imageOnlyPages: [2], ocr: { model: "m", pages: [1], lowConfidencePages: [] } }, "", ready, undefined, false],
+    ["OCR already ran, current merge", { kind: "pdf", imageOnlyPages: [2], ocr: { model: "m", merge: OCR_MERGE, pages: [1], lowConfidencePages: [] } }, "", ready, undefined, false],
+    ["OCR ran under the merge that dropped recovered text, pages still blank", { kind: "pdf", imageOnlyPages: [2], ocr: { model: "m", pages: [1], lowConfidencePages: [] } }, "", ready, undefined, true],
+    ["OCR ran under the old merge, every page has text", { kind: "pdf", ocr: { model: "m", pages: [1], lowConfidencePages: [] } }, "", ready, undefined, false],
+    ["old merge, but --no-ocr", { kind: "pdf", imageOnlyPages: [2], ocr: { model: "m", pages: [1], lowConfidencePages: [] } }, "", ready, false, false],
     ["OCR not installed", { kind: "pdf", imageOnlyPages: [2] }, "", { ready: false, disabled: false }, undefined, false],
     ["IMSTUDIUM_OCR=off", { kind: "image" }, "", { ready: true, disabled: true }, undefined, false],
     ["--no-ocr", { kind: "image" }, "", ready, false, false],
@@ -162,12 +201,12 @@ describe("summarizeOcr", () => {
   it("counts OCR files and pages of this run only", () => {
     expect(
       summarizeOcr([
-        { ocrPages: [0, 3], ocrLowConfidencePages: [3], imageOnlyPages: [], mathFormulas: 2 },
+        { ocrPages: [0, 3], ocrLowConfidencePages: [3], imageOnlyPages: [], recoveredPages: [4], mathFormulas: 2 },
         { ocrPages: [], imageOnlyPages: [1, 2], mathFormulas: 1 },
         { ocrPages: [5], skipped: true, mathFormulas: 9 },
         { error: "broken" },
       ]),
-    ).toEqual({ files: 1, pages: 2, lowConfidencePages: 1, imageOnlyPages: 2, formulas: 3 });
+    ).toEqual({ files: 1, pages: 2, lowConfidencePages: 1, imageOnlyPages: 2, recoveredPages: 1, formulas: 3 });
   });
 });
 

@@ -52,6 +52,7 @@ export const OcrSummary = z.object({
   pages: z.number().int().describe("Pages read by OCR"),
   lowConfidencePages: z.number().int().describe("OCR pages below the confidence threshold, marked in content.md"),
   imageOnlyPages: z.number().int().describe("Pages that still have no text"),
+  recoveredPages: z.number().int().default(0).describe("Pages whose own text layer was recovered through PDFium on the OCR path (the PDF's text, not OCR)"),
   formulas: z.number().int().describe("Display formulas read into LaTeX on this machine ($$…$$ in content.md, boxes in math.json)"),
 });
 export type OcrSummary = z.infer<typeof OcrSummary>;

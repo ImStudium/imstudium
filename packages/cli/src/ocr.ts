@@ -51,6 +51,7 @@ export function ocrSummaryLine(ocr: OcrSummary, status: Pick<OcrRuntimeStatus, "
       `on-device OCR read ${ocr.pages} page${ocr.pages === 1 ? "" : "s"} in ${ocr.files} file${ocr.files === 1 ? "" : "s"}${ocr.lowConfidencePages ? ` (${ocr.lowConfidencePages} with low confidence, marked in content.md)` : ""}`,
     );
   }
+  if (ocr.recoveredPages) parts.push(`${ocr.recoveredPages} page${ocr.recoveredPages === 1 ? "" : "s"} of text recovered from the PDF's own text layer`);
   if (ocr.formulas) parts.push(`${ocr.formulas} formula${ocr.formulas === 1 ? "" : "s"} read as LaTeX`);
   if (ocr.imageOnlyPages) {
     const tip = !status.ready && status.supported && !status.disabled ? ": imstudium setup ocr reads them on this machine" : "";

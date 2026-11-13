@@ -4,7 +4,10 @@
  * nested fractions, binomials, norms, quantifiers, small type, coloured blocks
  * and two columns, with inline math in the bullets. The same frames are built
  * twice, with Beamer's default sans-serif math and with serif math, and each
- * deck also as a degraded scan.
+ * deck also as a degraded scan. A third deck is the everyday case: 4:3 slides
+ * in Beamer's default theme and sans-serif math, with the formulas inside the
+ * bullets (a display formula under an item, `$\displaystyle …$` after its
+ * text, or an item that is only a formula), bold vectors and `\min`/`\max`.
  *
  * Every formula and sentence here is written for the benchmark; no course
  * material. Needs pdflatex with beamer and amsmath (TeX Live); skipped
@@ -45,6 +48,76 @@ export const BEAMER_FORMULAS = [
   "\\begin{aligned} \\operatorname{Var}(X) &= E[(X - \\mu)^2] \\\\ &= E[X^2] - 2\\mu E[X] + \\mu^2 \\\\ &= E[X^2] - \\mu^2 \\end{aligned}",
   "E[X \\mid Y = y] = \\sum_{x} x \\, P(X = x \\mid Y = y)",
 ];
+
+/**
+ * The 4:3 bullets deck. The first three are the kind a live run on real Beamer
+ * slides read badly with the small models (textbook formulas, written here).
+ */
+export const BULLET_FORMULAS = [
+  "A=(1,0,0),\\ B=(0,1,0),\\ C=(0,0,1)",
+  "\\tilde{x}=\\frac{x-\\bar{x}}{\\sigma}",
+  "\\tilde{x}=\\frac{x-\\min}{\\max-\\min}",
+  "\\overrightarrow{AB}=B-A=(-1,1,0)",
+  "d(x,y)=\\sqrt{\\sum_{i=1}^{n}(x_i-y_i)^2}",
+  "\\|x\\|_1=\\sum_{i=1}^{n}|x_i|",
+  "\\hat{y}=\\arg\\max_{c}\\sum_{i\\in N_k(x)}[y_i=c]",
+  "s^2=\\frac{1}{n-1}\\sum_{i=1}^{n}(x_i-\\bar{x})^2",
+  "\\mathbf{w}^\\top\\mathbf{x}+b=0",
+  "\\boldsymbol{\\mu}=\\frac{1}{n}\\sum_{i=1}^{n}\\boldsymbol{x}_i",
+  "\\sigma(z)=\\frac{1}{1+e^{-z}}",
+  "L(\\theta)=-\\sum_{i=1}^{n}y_i\\log\\hat{y}_i",
+  "\\nabla_{\\theta}J=\\frac{1}{m}X^\\top(X\\theta-y)",
+  "\\theta\\leftarrow\\theta-\\eta\\,\\nabla_{\\theta}J",
+  "\\mathrm{Acc}=\\frac{TP+TN}{TP+TN+FP+FN}",
+  "H(X)=-\\sum_{x}p(x)\\log_2 p(x)",
+];
+
+/** How a formula sits in its bullet: displayed under the item's text, `$\displaystyle …$` after it, or alone in the item. */
+type BulletStyle = "display" | "after" | "alone";
+
+interface BulletFrame {
+  title: string;
+  /** The frame's opening bullet, with inline math. */
+  lead: string;
+  items: Array<{ text: string; style: BulletStyle; formula: number }>;
+}
+
+const BULLET_FRAMES: BulletFrame[] = [
+  { title: "Punkte im Raum", lead: "Gegeben sind drei Punkte im $\\mathbb{R}^3$:", items: [{ text: "Einheitspunkte", style: "display", formula: 0 }, { text: "Verbindungsvektor:", style: "after", formula: 3 }] },
+  { title: "Normalisierung", lead: "Merkmale auf eine Skala bringen, $x \\in \\mathbb{R}$:", items: [{ text: "z-Score", style: "display", formula: 1 }, { text: "Min-Max-Skalierung", style: "display", formula: 2 }] },
+  { title: "Abstände", lead: "Für $x, y \\in \\mathbb{R}^n$:", items: [{ text: "Euklidisch:", style: "after", formula: 4 }, { text: "", style: "alone", formula: 5 }] },
+  { title: "k-Nearest-Neighbor", lead: "Mehrheitsentscheid unter den $k$ nächsten Nachbarn:", items: [{ text: "Vorhersage", style: "display", formula: 6 }, { text: "Stichprobenvarianz:", style: "after", formula: 7 }] },
+  { title: "Lineare Modelle", lead: "Trennebene mit Gewichten $\\mathbf{w}$ und Bias $b$:", items: [{ text: "", style: "alone", formula: 8 }, { text: "Mittelwertvektor", style: "display", formula: 9 }] },
+  { title: "Logistische Regression", lead: "Wahrscheinlichkeit für Klasse $1$:", items: [{ text: "Sigmoid:", style: "after", formula: 10 }, { text: "Kreuzentropie", style: "display", formula: 11 }] },
+  { title: "Gradientenabstieg", lead: "Lernrate $\\eta > 0$, $m$ Beispiele:", items: [{ text: "Gradient", style: "display", formula: 12 }, { text: "", style: "alone", formula: 13 }] },
+  { title: "Bewertung", lead: "Konfusionsmatrix mit $TP, TN, FP, FN$:", items: [{ text: "Genauigkeit:", style: "after", formula: 14 }, { text: "Entropie", style: "display", formula: 15 }] },
+];
+
+function bulletFrameTex(f: BulletFrame): string {
+  const item = ({ text, style, formula }: BulletFrame["items"][number]) => {
+    const tex = BULLET_FORMULAS[formula]!;
+    if (style === "display") return `  \\item ${text}\n  \\[ ${tex} \\]`;
+    if (style === "after") return `  \\item ${text} $\\displaystyle ${tex}$`;
+    return `  \\item $\\displaystyle ${tex}$`;
+  };
+  return `\\begin{frame}{${f.title}}\n\\begin{itemize}\n  \\item ${f.lead}\n${f.items.map(item).join("\n")}\n\\end{itemize}\n\\end{frame}`;
+}
+
+function bulletDeckTex(): string {
+  return [
+    "\\documentclass{beamer}",
+    "\\usepackage[utf8]{inputenc}",
+    "\\usepackage[T1]{fontenc}",
+    "\\usepackage{amsmath,amssymb}",
+    "\\setbeamertemplate{navigation symbols}{}",
+    "\\title{Maschinelles Lernen}",
+    "\\date{}",
+    "\\begin{document}",
+    ...BULLET_FRAMES.map(bulletFrameTex),
+    "\\end{document}",
+    "",
+  ].join("\n");
+}
 
 type Layout = "stack" | "block" | "columns" | "small";
 
@@ -123,15 +196,19 @@ export interface BeamerDeck {
   inline: string[][];
 }
 
-/** Writes beamer-sans.pdf and beamer-serif.pdf into `dir`. */
+/** Writes beamer-sans.pdf, beamer-serif.pdf and beamer-bullets.pdf into `dir`. */
 export async function buildBeamerDecks(dir: string, log: (s: string) => void): Promise<BeamerDeck[]> {
   const decks: BeamerDeck[] = [];
   const work = join(dir, "beamer-tex");
   await mkdir(work, { recursive: true });
-  for (const serif of [false, true]) {
-    const name = serif ? "beamer-serif" : "beamer-sans";
-    log(`fixtures: ${name} (pdflatex, ${FRAMES.length} frames)`);
-    await writeFile(join(work, `${name}.tex`), deckTex(serif));
+  const sources = [
+    { name: "beamer-sans", tex: deckTex(false), frames: FRAMES.length },
+    { name: "beamer-serif", tex: deckTex(true), frames: FRAMES.length },
+    { name: "beamer-bullets", tex: bulletDeckTex(), frames: BULLET_FRAMES.length },
+  ];
+  for (const { name, tex, frames } of sources) {
+    log(`fixtures: ${name} (pdflatex, ${frames} frames)`);
+    await writeFile(join(work, `${name}.tex`), tex);
     try {
       // Twice, so the frame numbers in the footer are right.
       for (let pass = 0; pass < 2; pass++) execFileSync("pdflatex", ["-interaction=nonstopmode", "-halt-on-error", `${name}.tex`], { cwd: work, stdio: "pipe" });
@@ -141,11 +218,14 @@ export async function buildBeamerDecks(dir: string, log: (s: string) => void): P
     }
     const pdf = join(dir, `${name}.pdf`);
     await writeFile(pdf, await readFile(join(work, `${name}.pdf`)));
+    const bullets = name === "beamer-bullets";
     decks.push({
       name,
       pdf,
-      formulas: FRAMES.map((f) => f.formulas.map((i) => BEAMER_FORMULAS[i]!)),
-      inline: FRAMES.map((f) => f.bullets.flatMap((b) => [...b.matchAll(/\$([^$]+)\$/g)].map((m) => m[1]!))),
+      formulas: bullets ? BULLET_FRAMES.map((f) => f.items.map((i) => BULLET_FORMULAS[i.formula]!)) : FRAMES.map((f) => f.formulas.map((i) => BEAMER_FORMULAS[i]!)),
+      inline: bullets
+        ? BULLET_FRAMES.map((f) => [...f.lead.matchAll(/\$([^$]+)\$/g)].map((m) => m[1]!))
+        : FRAMES.map((f) => f.bullets.flatMap((b) => [...b.matchAll(/\$([^$]+)\$/g)].map((m) => m[1]!))),
     });
   }
   await rm(work, { recursive: true, force: true });

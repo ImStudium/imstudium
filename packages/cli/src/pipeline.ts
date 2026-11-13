@@ -320,6 +320,7 @@ async function extractAndIndex(
       pages: result.ocr.pages + ocr.pages,
       lowConfidencePages: result.ocr.lowConfidencePages + ocr.lowConfidencePages,
       imageOnlyPages: result.ocr.imageOnlyPages + ocr.imageOnlyPages,
+      recoveredPages: result.ocr.recoveredPages + ocr.recoveredPages,
       formulas: result.ocr.formulas + ocr.formulas,
     };
   }

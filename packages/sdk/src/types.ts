@@ -277,6 +277,8 @@ export interface ExtractResult {
   ocrLowConfidencePages?: number[];
   /** Pages still without text. */
   imageOnlyPages?: number[];
+  /** Pages whose own text layer was recovered through PDFium on the OCR path (not OCR). */
+  recoveredPages?: number[];
   /** Display formulas read into LaTeX on this machine (set when math ran). */
   mathFormulas?: number;
 }
@@ -294,6 +296,10 @@ export interface ExtractOcrInfo {
   model: string;
   pages: number[];
   lowConfidencePages: number[];
+  /** Pages whose own text layer the OCR call recovered through PDFium (not OCR). */
+  recoveredPages?: number[];
+  /** OCR_MERGE of the extraction; missing means 1, which dropped recovered text. */
+  merge?: number;
 }
 
 export interface ExtractManifest {

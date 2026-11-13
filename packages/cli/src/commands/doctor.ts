@@ -184,7 +184,7 @@ export const DOCTOR_CHECKS: CheckDef[] = [
           )
         : warn(
             `${session.type} session stored in ${tier}: the keychain module (keytar) does not load`,
-            "npm i -g @imstudium/cli rebuilds it, or install ImSicheren; the session moves out of the file on the next command",
+            "npm 11 skips keytar's install script unless allowed: npm install -g @imstudium/cli --allow-scripts=keytar (npm install-scripts approve doesn't work for global installs), or install ImSicheren. The session moves out of the file on the next command; until then the 0600 file is readable by your user only",
             { store, type: session.type, keychain: "missing" },
           );
     },
@@ -305,7 +305,11 @@ export const DOCTOR_CHECKS: CheckDef[] = [
       const data = { platform: s.platform, ready: s.ready, disabled: s.disabled, dir: s.dir, installed: s.installed, math: { ready: m.ready, disabled: m.disabled, reason: m.reason } };
       if (!s.supported) return skip(`no pinned runtime for ${s.platform}; image-only pages stay marked, native text is unaffected`);
       if (s.ready && s.disabled) return skip("installed, switched off by IMSTUDIUM_OCR=off");
-      const math = m.ready ? (m.disabled ? " · math off (IMSTUDIUM_MATH=off)" : " · math: formulas as LaTeX") : " · math not installed (optional: imstudium setup ocr --math)";
+      const math = m.ready
+        ? m.disabled
+          ? " · math off (IMSTUDIUM_MATH=off)"
+          : " · math: formulas as LaTeX model readings, about four in five exact on lecture slides; marked ones need a look (imstudium formulas list <file> --needs-look)"
+        : " · math not installed (opt-in: imstudium setup ocr --math)";
       if (s.ready) return ok(`${s.model} · PDFium ${s.installed?.pdfium} · ONNX Runtime ${s.installed?.onnxruntime} (offline, on this machine)${math}`, data);
       return warn(`${s.reason ?? "not ready"}: scanned pages and photos stay unread`, s.reason?.startsWith("runs under Node") ? "Run imstudium with Node: npm i -g @imstudium/cli" : "imstudium setup ocr", data);
     },
@@ -323,8 +327,13 @@ export const DOCTOR_CHECKS: CheckDef[] = [
       if (!detected.length) return ok("no coding agent detected (skills are optional)", data);
       if (!rest.length) return ok(`skills come from the ${plugin}`, data);
       const also = plugin ? ` (${plugin})` : "";
+      if (s.staleByAgent.length) {
+        // Name the harness, not every skill: "Cursor: skills not installed", with the command for that harness alone.
+        const what = s.staleByAgent.map((g) => `${g.labels.join(" / ")}: ${g.outdated.length ? `${g.outdated.length + g.missing.length} skill${g.outdated.length + g.missing.length === 1 ? "" : "s"} out of date` : "skills not installed"}`);
+        const fix = s.staleByAgent.length === 1 ? `imstudium setup all --agent ${s.staleByAgent[0]!.agents[0]} -y` : "imstudium setup all -y";
+        return warn(`${what.join("; ")}${also}`, fix, { ...data, stale: s.staleSkills, staleByAgent: s.staleByAgent });
+      }
       if (!s.manifest) return warn(`detected ${rest.join(", ")}: skills not installed${also}`, "imstudium setup all -y", data);
-      if (s.staleSkills.length) return warn(`stale skills: ${s.staleSkills.join(", ")}${also}`, "imstudium setup all -y", { ...data, stale: s.staleSkills });
       if (!s.upToDate) return warn(`setup is from another version or workspace${also}`, "imstudium setup all -y", data);
       return ok(`skills current for ${rest.join(", ")}${also}`, data);
     },

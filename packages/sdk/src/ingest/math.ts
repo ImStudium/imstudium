@@ -318,12 +318,18 @@ interface Engine {
   layoutInput: number;
   /** Layout classes that are display formulas. */
   formulaClasses: number[];
+  /** Layout classes for inline formulas and for running text (see displayLikeInline); empty when unknown. */
+  inlineClasses: number[];
+  textClasses: number[];
   /** Square input side of the formula model (768 for PP-FormulaNet+ L). */
   formulaInputSize: number;
 }
 
 /** Display-formula class ids per layout model (PP-DocLayoutV2 has its own label list). */
 const FORMULA_CLASSES: Record<string, number[]> = { "pp-doclayoutv2.onnx": [5] };
+/** PP-DocLayoutV2's inline_formula and text classes. */
+const INLINE_CLASSES: Record<string, number[]> = { "pp-doclayoutv2.onnx": [15] };
+const TEXT_CLASSES: Record<string, number[]> = { "pp-doclayoutv2.onnx": [22] };
 /** Class 7 ("formula") in the PP-DocLayout family other than V2. */
 
 /** The square side of a model input from its metadata, e.g. image:[1,3,480,480] → 480. */
@@ -376,6 +382,8 @@ async function loadEngine(): Promise<Engine> {
     vocab,
     layoutInput: inputSide(layout, "image", LAYOUT_INPUT),
     formulaClasses: FORMULA_CLASSES[basename(layoutFile)] ?? [FORMULA_CLASS],
+    inlineClasses: INLINE_CLASSES[basename(layoutFile)] ?? [],
+    textClasses: TEXT_CLASSES[basename(layoutFile)] ?? [],
     formulaInputSize: inputSide(formula, formula.inputNames[0]!, FORMULA_INPUT),
   };
 }
@@ -470,7 +478,9 @@ const SPEC_ENVS = new Set(["array", "tabular"]);
 /**
  * The letters (Latin and Greek) and digits a LaTeX formula puts on the page,
  * in order: `\\frac{n!}{k!}` → n k, `\\log_2 n` → l o g 2 n, `\\mathbb{R}` → R,
- * `\\pmod{m}` → m o d m. Structure, operators and delimiters are left out:
+ * `\\pmod{m}` → m o d m, plus the accents a font sets as glyphs (`\\hat`
+ * ˆ, `\\tilde` ˜, `\\bar` ¯, `\\dot`, `\\ddot`) and vertical bars (`|x|`,
+ * `\\mid`, `\\|`). Structure, operators and other delimiters are left out:
  * they are what a PDF's text layer most often can't name.
  */
 export function latexGlyphs(latex: string): string[] {
@@ -499,10 +509,40 @@ export function latexGlyphs(latex: string): string[] {
       if (GREEK[name]) out.push(GREEK[name]!);
       else if (NAMED.has(name)) out.push(...name);
       else if (name === "pmod" || name === "bmod" || name === "mod") out.push("m", "o", "d");
+      else if (ACCENTS[name]) out.push(ACCENTS[name]!);
+      else if (!sized(toks, i) && BARS[name]) out.push(...BARS[name]!);
       continue;
     }
-    if (/^[a-zA-Z0-9]$/.test(t)) out.push(t);
+    if (t === "|" && !sized(toks, i)) out.push("|");
+    else if (/^[a-zA-Z0-9]$/.test(t)) out.push(t);
   }
+  return out;
+}
+
+/** Accent glyphs a TeX font sets as characters of their own, as PDFium names them (˜ U+02DC, ¯ U+00AF, ˆ U+02C6). */
+const ACCENTS: Record<string, string> = { hat: "ˆ", tilde: "˜", bar: "¯", dot: "˙", ddot: "¨" };
+/** What may stand for such a glyph without being one: rules and extension-font pieces. */
+const ACCENT_LIKE: Record<string, string> = { overline: "¯", widehat: "ˆ", widetilde: "˜" };
+/** Vertical bars: |x|, conditionals, norms. */
+const BARS: Record<string, string[]> = { vert: ["|"], lvert: ["|"], rvert: ["|"], mid: ["|"], "|": ["|", "|"], Vert: ["|", "|"], lVert: ["|", "|"], rVert: ["|", "|"] };
+const SIZERS = new Set(["\\left", "\\right", "\\middle", "\\big", "\\Big", "\\bigg", "\\Bigg", "\\bigl", "\\bigr", "\\Bigl", "\\Bigr", "\\biggl", "\\biggr", "\\Biggl", "\\Biggr", "\\bigm", "\\Bigm"]);
+/** A delimiter after \left, \big…: drawn from extension-font pieces, which a text layer may not name. */
+const sized = (toks: string[], i: number) => SIZERS.has(toks[i - 1] ?? "");
+
+/**
+ * Marks the LaTeX may show without the PDF naming them as such: \overline,
+ * \widehat and \widetilde (a rule or extension glyph where the page may have
+ * a plain accent), and bars after \left or \big. They excuse a PDF glyph
+ * that would otherwise be missing; they never count as extra.
+ */
+export function latexOptionalGlyphs(latex: string): string[] {
+  const out: string[] = [];
+  const toks = latex.match(/\\[a-zA-Z]+\*?|\\.|[^\s]/g) ?? [];
+  toks.forEach((t, i) => {
+    const name = t.startsWith("\\") ? t.slice(1) : t;
+    if (ACCENT_LIKE[name]) out.push(ACCENT_LIKE[name]!);
+    else if (sized(toks, i) && (t === "|" || BARS[name])) out.push(...(BARS[name] ?? ["|"]));
+  });
   return out;
 }
 
@@ -523,6 +563,13 @@ export function foldGlyph(ch: string): string | null {
   if (cp === 0x2102) return "C"; // ℂ
   const variants: Record<string, string> = { "ϵ": "ε", "ϑ": "θ", "ϕ": "φ", "ϱ": "ρ", "ς": "σ", "ϖ": "π", "µ": "μ" };
   if (variants[ch]) return variants[ch]!;
+  // Accents (spacing or combining) and bars, folded to latexGlyphs' marks.
+  const marks: Record<string, string> = {
+    // KaTeX (browser-typeset pages) sets \\hat as ^ and \\tilde as ~.
+    "ˆ": "ˆ", "^": "ˆ", "\u0302": "ˆ", "˜": "˜", "~": "˜", "\u0303": "˜", "¯": "¯", "ˉ": "¯", "\u0304": "¯", "˙": "˙", "\u0307": "˙", "¨": "¨", "\u0308": "¨",
+    "|": "|", "∣": "|", "‖": "||", "∥": "||",
+  };
+  if (marks[ch]) return marks[ch]!;
   if (/^[a-zA-Z0-9]$/.test(ch) || /^[\u0391-\u03a9\u03b1-\u03c9]$/.test(ch)) return ch;
   // Ligatures from text fonts.
   const lig: Record<string, string> = { "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl" };
@@ -544,15 +591,16 @@ export interface GlyphDiff {
  * glyph the LaTeX has beyond these is extra. A subscript the detector's box
  * cut off is then neither missing nor invented.
  */
-export function compareGlyphs(latex: string[], pdf: string[], visible: string[] = pdf): GlyphDiff {
+export function compareGlyphs(latex: string[], pdf: string[], visible: string[] = pdf, optional: string[] = []): GlyphDiff {
   const tally = (gs: string[]) => gs.reduce((m, g) => m.set(g, (m.get(g) ?? 0) + 1), new Map<string, number>());
   const want = tally(latex);
+  const may = tally(optional);
   const inside = tally(pdf);
   const seen = tally(visible);
   const extra: string[] = [];
   const missing: string[] = [];
   for (const [g, n] of want) for (let k = seen.get(g) ?? 0; k < n; k++) extra.push(g);
-  for (const [g, n] of inside) for (let k = want.get(g) ?? 0; k < n; k++) missing.push(g);
+  for (const [g, n] of inside) for (let k = (want.get(g) ?? 0) + (may.get(g) ?? 0); k < n; k++) missing.push(g);
   return { missing: missing.sort(), extra: extra.sort() };
 }
 
@@ -665,7 +713,7 @@ export interface FormulaVerdict {
 export function judgeFormula(latex: string, pdf: string[] | { inside: string[]; visible: string[] } | null): FormulaVerdict {
   const issues = latexIssues(latex);
   const { inside, visible } = Array.isArray(pdf) ? { inside: pdf, visible: pdf } : (pdf ?? { inside: [], visible: [] });
-  const glyphs = visible.length ? { ...compareGlyphs(latexGlyphs(latex), inside, visible), pdf: inside.length } : null;
+  const glyphs = visible.length ? { ...compareGlyphs(latexGlyphs(latex), inside, visible, latexOptionalGlyphs(latex)), pdf: inside.length } : null;
   const differs = issues.length > 0 || (glyphs !== null && (glyphs.missing.length > 0 || glyphs.extra.length > 0));
   return { issues, glyphs, check: differs ? "differs" : glyphs ? "match" : "unchecked" };
 }
@@ -693,6 +741,41 @@ export async function checkFormula(pdf: Uint8Array, page: number, bbox: readonly
 
 /** Command names that only mean something with their backslash: seen bare, the model produced garbage. */
 const BARE_COMMANDS = /(?<![\\a-zA-Z])(binom|frac|dfrac|sqrt|bigl|bigr|Bigl|Bigr|cdot|cdots|ldots|mathbb|mathcal|mathbf|mathrm|operatorname|begin|end|alpha|beta|gamma|delta|varepsilon|epsilon|lambda|sigma|theta|infty|partial|nabla|prod|sum|int|lim|limsup|liminf)(?![a-zA-Z])/;
+
+/**
+ * Command names long enough that a run of plain letters containing one is a
+ * dropped backslash, even glued to a variable (`Aboldsymbol`): no variable
+ * product spells them.
+ */
+const GLUED_COMMANDS = /boldsymbol|mathsf|mathbb|mathcal|mathrm|mathbf|mathit|mathtt|operatorname|displaystyle|overline|underline|widetilde|widehat|overrightarrow|textbf|textrm/;
+
+let katexModule: { renderToString(latex: string, options: object): string } | null | undefined;
+
+/** KaTeX, loaded on first use (pure JS, ~600 KB); null if it can't be loaded. */
+function katex() {
+  if (katexModule === undefined) {
+    try {
+      katexModule = createRequire(import.meta.url)("katex") as NonNullable<typeof katexModule>;
+    } catch {
+      katexModule = null;
+    }
+  }
+  return katexModule;
+}
+
+/** Why KaTeX can't typeset `latex` (display mode), or null when it can (or KaTeX isn't there). */
+export function katexError(latex: string): string | null {
+  const k = katex();
+  if (!k) return null;
+  try {
+    // Strict only where LaTeX itself would fail: a text accent (`\\=`) or text unit in math mode.
+    const strict = (code: string) => (code === "mathVsTextAccents" || code === "mathVsTextUnits" ? "error" : "ignore");
+    k.renderToString(latex, { displayMode: true, throwOnError: true, strict, output: "mathml", trust: false, maxExpand: 200 });
+    return null;
+  } catch (err) {
+    return (err instanceof Error ? err.message : String(err)).replace(/^KaTeX parse error:\s*/, "").split("\n")[0]!.slice(0, 120);
+  }
+}
 
 /**
  * Structural problems in recognised LaTeX that mean it can't be what the page
@@ -726,7 +809,9 @@ export function latexIssues(latex: string): string[] {
   if (envs.length) issues.push(`\\begin{${envs[envs.length - 1]}} is never closed`);
   const outsideText = latex.replace(/\\(text|mathrm|operatorname\*?|textrm|mbox)\s*\{[^{}]*\}/g, "");
   const bare = BARE_COMMANDS.exec(outsideText);
+  const glued = bare ? null : [...outsideText.matchAll(/(?<![\\a-zA-Z])[a-zA-Z]+/g)].map((m) => GLUED_COMMANDS.exec(m[0])).find(Boolean);
   if (bare) issues.push(`"${bare[1]}" without its backslash`);
+  else if (glued) issues.push(`"${glued[0]}" without its backslash`);
   if (/\\ [a-zA-Z]{3,}/.test(outsideText)) issues.push("a word after an escaped space");
   if (/\[object Object\]|undefined|NaN/.test(latex)) issues.push("text that is not LaTeX");
   // Characters a formula reader writes as commands: anything else outside \text is something it made up (e.g. CJK).
@@ -735,8 +820,15 @@ export function latexIssues(latex: string): string[] {
   if (hasEmptyFraction(latex)) issues.push("a fraction with an empty part");
   // Models box a formula when its crop catches a frame (a Beamer block, a table rule).
   if (/\\(boxed|fbox|framebox)\b/.test(latex)) issues.push("a box around it: keep \\boxed only if the formula itself is boxed on the page");
+  // On slides a • in a formula is nearly always the item markers the box caught, read as math.
+  if (/\\bullet(?![a-zA-Z])/.test(latex)) issues.push("a list bullet (•): the box may have caught the slide's item markers");
   // One-sided brace around one line: cases with a single row, usually an invented \left\{.
   if (/\\left\s*(\\\{|\\lbrace)/.test(latex) && /\\right\s*\./.test(latex) && !/\\\\/.test(latex)) issues.push("a one-sided brace around a single line");
+  // Last, and only for what passed the cheap rules: whatever KaTeX can't typeset, a reader's renderer likely can't either.
+  if (!issues.length) {
+    const err = katexError(latex);
+    if (err) issues.push(`KaTeX can't typeset it: ${err}`);
+  }
   return issues;
 }
 
@@ -895,7 +987,32 @@ const FORMULA_CLASS = 7;
 const MIN_SCORE = 0.5;
 /** Render so the long side is about this many pixels (≈ 200–290 DPI for slides and A4). */
 const RENDER_LONG_SIDE = 2400;
+/** Page render scale for layout and crops (4 = 288 dpi), at most RENDER_LONG_SIDE pixels on the long side. */
+const RENDER_SCALE = 4;
 const BATCH = 8;
+
+/**
+ * Inline formulas that are display formulas in all but name, the way lecture
+ * slides write them inside bullets: taller than 1.3 text lines
+ * (`$\displaystyle\frac…$`, sums with limits, roots), or alone on their line
+ * (an item that is only a formula). `$x$`, `$\mathbb{R}^3$` or a formula
+ * inside a sentence stay pdf-inspector's text. The line height is the 25th
+ * percentile of the page's text boxes, else of its inline formulas.
+ */
+export function displayLikeInline<T extends { box: number[] }>(inline: T[], text: number[][]): T[] {
+  if (!inline.length) return [];
+  const h = (b: number[]) => b[3]! - b[1]!;
+  const heights = (text.length ? text : inline.map((f) => f.box)).map(h).sort((a, b) => a - b);
+  const lineH = heights[Math.floor((heights.length - 1) / 4)]!;
+  return inline.filter(({ box }) => {
+    if (h(box) >= 1.3 * lineH) return true;
+    // The one-line text box it sits in: alone when it starts right after the bullet (within 1.5
+    // lines of the box's left edge) and fills the rest. "Für $0 \le k \le n$:" is not alone.
+    const tol = lineH / 2;
+    const line = text.find((t) => h(t) < 1.6 * lineH && t[0]! <= box[0]! + tol && t[1]! <= box[1]! + tol && t[2]! >= box[2]! - tol && t[3]! >= box[3]! - tol);
+    return !!line && box[0]! - line[0]! <= 1.5 * lineH && box[2]! - box[0]! >= 0.8 * (line[2]! - line[0]!) - 1.5 * lineH;
+  });
+}
 
 const iou = (a: number[], b: number[]) => {
   const ix = Math.max(0, Math.min(a[2]!, b[2]!) - Math.max(a[0]!, b[0]!));
@@ -938,7 +1055,8 @@ export async function recognizeMath(pdf: Uint8Array, options: { pages?: number[]
       const page = doc.getPage(index);
       try {
         const { originalWidth, originalHeight } = page.getOriginalSize();
-        const scale = Math.min(4, RENDER_LONG_SIDE / Math.max(originalWidth, originalHeight));
+        // Benchmark only: IMSTUDIUM_MATH_RENDER_SCALE renders at another scale to compare.
+        const scale = Number(process.env.IMSTUDIUM_MATH_RENDER_SCALE) || Math.min(RENDER_SCALE, RENDER_LONG_SIDE / Math.max(originalWidth, originalHeight));
         const r = await page.render({ scale, render: "bitmap", colorSpace: "RGBA" });
         const L = e.layoutInput;
         const image = new e.ort.Tensor("float32", resizeToChw(r.data, r.width, r.height, L, L), [1, 3, L, L]);
@@ -950,13 +1068,21 @@ export async function recognizeMath(pdf: Uint8Array, options: { pages?: number[]
         if (!det) continue;
         const width = det.dims[1]!;
         const boxes: Array<{ box: number[]; score: number }> = [];
+        const inline: Array<{ box: number[]; score: number }> = [];
+        const text: number[][] = [];
         for (let i = 0; i < det.dims[0]!; i++) {
           const cls = Number(det.data[i * width]);
           const score = Number(det.data[i * width + 1]);
-          if (!e.formulaClasses.includes(cls) || score < MIN_SCORE) continue;
+          if (score < MIN_SCORE) continue;
           const box = [2, 3, 4, 5].map((k) => Number(det.data[i * width + k]));
+          if (e.inlineClasses.includes(cls)) inline.push({ box, score });
+          else if (e.textClasses.includes(cls)) text.push(box);
+          if (!e.formulaClasses.includes(cls)) continue;
           if (boxes.some((b) => iou(b.box, box) > 0.5)) continue;
           boxes.push({ box, score });
+        }
+        for (const f of displayLikeInline(inline, text)) {
+          if (!boxes.some((b) => iou(b.box, f.box) > 0.3)) boxes.push(f);
         }
         boxes.sort((a, b) => a.box[1]! - b.box[1]! || a.box[0]! - b.box[0]!);
         const crops: Array<{ input: Float32Array; box: number[]; score: number; png?: Uint8Array }> = [];

@@ -84,7 +84,7 @@ if (mode === "prepare") {
   }
   console.log(`prepared ${decks.join(", ")} in ${dir}`);
 } else {
-  const decks = (decksFlag?.split(",") ?? ["beamer-sans", "beamer-sans-scan", "beamer-serif", "beamer-serif-scan"]).filter((d) => existsSync(join(dir, d, "answers.json")));
+  const decks = (decksFlag?.split(",") ?? ["beamer-sans", "beamer-sans-scan", "beamer-serif", "beamer-serif-scan", "beamer-bullets", "beamer-bullets-scan"]).filter((d) => existsSync(join(dir, d, "answers.json")));
   const rows: string[] = [];
   const pct = (x: number) => `${(x * 100).toFixed(1)} %`;
   const score = (deck: string, byPage: Map<number, string[]>) => {

@@ -1,7 +1,7 @@
 import { cp, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative } from "node:path";
 import { ensureDir, slugify } from "./config.js";
-import { convertImage, convertLocalDocument, IMAGE_ONLY, probeLocalIngest, type LocalConvertOk } from "./ingest/local-docs.js";
+import { convertImage, convertLocalDocument, IMAGE_ONLY, OCR_MERGE, probeLocalIngest, type LocalConvertOk } from "./ingest/local-docs.js";
 import { imageToPdf } from "./ingest/image-pdf.js";
 import { isMathCandidate, LAYOUT_MODEL, MATH_MODEL, mathRuntimeStatus, recognizeMath, type Formula, type MathRuntimeStatus } from "./ingest/math.js";
 import { ocrRuntimeStatus, type OcrRuntimeStatus } from "./ingest/ocr-runtime.js";
@@ -129,7 +129,7 @@ export class Extractor {
 
   /** See {@link shouldRedoForOcr}. */
   private async ocrWouldAdd(prev: ExtractManifest, outDir: string, opts: { ocr?: boolean }): Promise<boolean> {
-    if (opts.ocr === false || prev.ocr) return false;
+    if (opts.ocr === false || (prev.ocr && !mergeOutdated(prev))) return false;
     const status = ocrRuntimeStatus();
     if (!status.ready || status.disabled) return false;
     const content = prev.kind === "pdf" && !prev.imageOnlyPages?.length ? await readFile(join(outDir, "content.md"), "utf-8").catch(() => "") : "";
@@ -201,10 +201,12 @@ export class Extractor {
   }
 
   private recordOcr(converted: LocalConvertOk): void {
-    const ocr = converted.metadata.ocr as { model: string; pages: number[]; lowConfidencePages: number[] } | undefined;
+    const ocr = converted.metadata.ocr as Required<ExtractOcrInfo> | undefined;
     // Present whenever the OCR engine looked at the file, even if it read no page: that file is
     // not redone for OCR again. Native-only runs leave it out, so a later `setup ocr` redoes them.
-    this.lastOcr = ocr ? { model: ocr.model, pages: ocr.pages, lowConfidencePages: ocr.lowConfidencePages } : undefined;
+    this.lastOcr = ocr
+      ? { model: ocr.model, merge: ocr.merge, pages: ocr.pages, lowConfidencePages: ocr.lowConfidencePages, ...(ocr.recoveredPages?.length ? { recoveredPages: ocr.recoveredPages } : {}) }
+      : undefined;
     this.lastOcrError = typeof converted.metadata.ocrError === "string" ? converted.metadata.ocrError : undefined;
   }
 
@@ -262,6 +264,7 @@ export class Extractor {
     let pageTexts = converted.pages.map((p) => p.markdown);
     const ocrPages = converted.pages.filter((p) => p.ocr).map((p) => p.index);
     const ocrLowConfidencePages = converted.pages.filter((p) => p.ocr?.low).map((p) => p.index);
+    const recoveredPages = converted.pages.filter((p) => p.recovered).map((p) => p.index);
     this.recordOcr(converted);
 
     let formulas = 0;
@@ -285,6 +288,7 @@ export class Extractor {
       tool: converted.engine,
       ocrPages,
       ...(ocrLowConfidencePages.length ? { ocrLowConfidencePages } : {}),
+      ...(recoveredPages.length ? { recoveredPages } : {}),
       imageOnlyPages: converted.pages.filter((p) => p.imageOnly).map((p) => p.index),
       ...(this.lastMath ? { mathFormulas: formulas } : {}),
     };
@@ -331,10 +335,20 @@ export class Extractor {
 }
 
 /**
+ * A PDF the OCR path read under the first merge rule, which dropped the text a
+ * page's own text layer gave back through PDFium. Only one with pages still
+ * text-less can have lost any.
+ */
+function mergeOutdated(prev: Pick<ExtractManifest, "kind" | "imageOnlyPages" | "ocr">): boolean {
+  return prev.kind === "pdf" && !!prev.ocr && (prev.ocr.merge ?? 1) < OCR_MERGE && !!prev.imageOnlyPages?.length;
+}
+
+/**
  * An unchanged file is extracted again when on-device OCR is ready and would
  * add text: an image, or a PDF with pages that had no text layer (older
  * extractions only left the marker in content.md), and OCR hasn't run on it
- * yet. Never with `--no-ocr` / IMSTUDIUM_OCR=off.
+ * yet, or ran under an older merge rule that dropped recovered text. Never
+ * with `--no-ocr` / IMSTUDIUM_OCR=off.
  */
 export function shouldRedoForOcr(
   prev: Pick<ExtractManifest, "kind" | "imageOnlyPages" | "ocr">,
@@ -342,7 +356,8 @@ export function shouldRedoForOcr(
   status: Pick<OcrRuntimeStatus, "ready" | "disabled">,
   ocr?: boolean,
 ): boolean {
-  if (ocr === false || prev.ocr || !status.ready || status.disabled) return false;
+  if (ocr === false || !status.ready || status.disabled) return false;
+  if (prev.ocr) return mergeOutdated(prev);
   if (prev.kind === "image") return true;
   if (prev.kind !== "pdf") return false;
   if (prev.imageOnlyPages?.length) return true;
@@ -378,17 +393,20 @@ export interface OcrSummary {
   lowConfidencePages: number;
   /** Pages that still have no text (no OCR, or OCR found nothing). */
   imageOnlyPages: number;
+  /** Pages whose own text layer the OCR path recovered through PDFium (not OCR). */
+  recoveredPages: number;
   /** Display formulas read into LaTeX by on-device math recognition. */
   formulas: number;
 }
 
-export function summarizeOcr(results: Array<Pick<ExtractResult, "ocrPages" | "ocrLowConfidencePages" | "imageOnlyPages" | "mathFormulas" | "skipped" | "error">>): OcrSummary {
+export function summarizeOcr(results: Array<Pick<ExtractResult, "ocrPages" | "ocrLowConfidencePages" | "imageOnlyPages" | "recoveredPages" | "mathFormulas" | "skipped" | "error">>): OcrSummary {
   const done = results.filter((r) => !r.skipped && !r.error);
   return {
     files: done.filter((r) => r.ocrPages?.length).length,
     pages: done.reduce((n, r) => n + (r.ocrPages?.length ?? 0), 0),
     lowConfidencePages: done.reduce((n, r) => n + (r.ocrLowConfidencePages?.length ?? 0), 0),
     imageOnlyPages: done.reduce((n, r) => n + (r.imageOnlyPages?.length ?? 0), 0),
+    recoveredPages: done.reduce((n, r) => n + (r.recoveredPages?.length ?? 0), 0),
     formulas: done.reduce((n, r) => n + (r.mathFormulas ?? 0), 0),
   };
 }

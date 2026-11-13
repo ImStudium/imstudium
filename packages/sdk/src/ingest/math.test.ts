@@ -18,6 +18,8 @@ import {
   foldGlyph,
   compareGlyphs,
   judgeFormula,
+  displayLikeInline,
+  katexError,
 } from "./math.js";
 import { ocrPlatformKey, OCR_RUNTIMES } from "./ocr-runtime.js";
 
@@ -166,8 +168,20 @@ describe("latexIssues", () => {
     ["\\frac{ }{n}", "a fraction with an empty part"],
     ["\\boxed{\\int_{-\\infty}^{\\infty}e^{-x^{2}}dx=\\sqrt{\\pi}}", "a box around it: keep \\boxed only if the formula itself is boxed on the page"],
     ["\\left\\{\\neg(A\\land B)\\equiv\\neg A\\lor\\neg B\\right.", "a one-sided brace around a single line"],
+    // Read from a real Beamer slide by the small models: "boldsymbol" glued to the A.
+    ["Aboldsymbol=(1,0,0),B\\=(0,1,0),C=(0,0,1)", '"boldsymbol" without its backslash'],
+    ["xmathsf{min}", '"mathsf" without its backslash'],
+    ["\\begin{aligned}&\\bullet\\cdots\\bullet\\\\&\\sigma(z)=\\frac{1}{1+e^{-z}}\\end{aligned}", "a list bullet (•): the box may have caught the slide's item markers"],
   ])("%s: %s", (latex, issue) => {
     expect(latexIssues(latex)).toContain(issue);
+  });
+
+  it("flags what KaTeX can't typeset, and passes what it can (spaced \\mathsf letters included)", () => {
+    expect(latexIssues("A=(1,0,0),B\\=(0,1,0)")[0]).toMatch(/^KaTeX can't typeset it: /);
+    expect(latexIssues("x\\foo{y}")[0]).toMatch(/^KaTeX can't typeset it: .*\\foo/);
+    expect(katexError("\\tilde{x}=\\frac{x-\\mathsf{m i n}}{\\mathsf{m a x}-\\mathsf{m i n}}")).toBeNull();
+    expect(latexIssues("\\boldsymbol{\\mu}=\\frac{1}{n}\\sum_{i=1}^{n}\\boldsymbol{x}_i")).toEqual([]);
+    expect(latexIssues("\\dfrac{a}{b}+\\operatorname*{arg\\,max}_{c}\\overrightarrow{AB}")).toEqual([]);
   });
 });
 
@@ -215,11 +229,13 @@ describe("glyph check", () => {
   it.each([
     ["\\binom{n}{k}=\\frac{n!}{k!(n-k)!}", "nknkn k"],
     ["\\log_2(n!)\\in\\Theta(n\\log n)", "log2nΘnlogn"],
-    ["M=\\{x\\in\\mathbb{R}\\mid x^{2}<2\\}", "MxRx22"],
+    ["M=\\{x\\in\\mathbb{R}\\mid x^{2}<2\\}", "MxR|x22"],
     ["a\\equiv b\\pmod{m}", "abmodm"],
-    ["\\hat{\\theta}=\\arg\\max_{\\theta}\\sum_{i=1}^{n}\\log p(x_{i}\\mid\\theta)", "θargmaxθi1nlogpxiθ"],
+    ["\\hat{\\theta}=\\arg\\max_{\\theta}\\sum_{i=1}^{n}\\log p(x_{i}\\mid\\theta)", "ˆθargmaxθi1nlogpxi|θ"],
     ["\\left\\{\\begin{array}{l l}{\\vdots}\\\\ \\end{array}\\right.", ""],
-    ["|x|=\\begin{cases}x&x\\geq0\\\\-x&x<0\\end{cases}", "xxx0xx0"],
+    ["|x|=\\begin{cases}x&x\\geq0\\\\-x&x<0\\end{cases}", "|x|xx0xx0"],
+    ["\\tilde{x}=\\frac{x-\\bar{x}}{\\sigma}+\\left|y\\right|+\\|z\\|", "˜xx¯xσy||z||"],
+    ["\\begin{array}{l|l}a&b\\end{array}", "ab"],
     ["\\operatorname{sgn}(\\sigma)\\cdot\\infty", "sgnσ"],
   ])("latexGlyphs(%s)", (latex, glyphs) => {
     expect(latexGlyphs(latex).join("")).toBe(glyphs.replace(/ /g, ""));
@@ -234,6 +250,24 @@ describe("glyph check", () => {
     expect(foldGlyph("ﬁ")).toBe("fi");
     expect(foldGlyph("+")).toBeNull();
     expect(foldGlyph("∑")).toBeNull();
+    // Accents as PDFium names TeX's accent glyphs, and bars.
+    expect([foldGlyph("ˆ"), foldGlyph("^"), foldGlyph("˜"), foldGlyph("~"), foldGlyph("¯"), foldGlyph("\u0303"), foldGlyph("∣"), foldGlyph("‖")]).toEqual(["ˆ", "ˆ", "˜", "˜", "¯", "˜", "|", "||"]);
+  });
+
+  it("accents and bars: an invented hat or bar differs; \\overline and \\left| may stand for the PDF's own", () => {
+    // Acc = (TP+TN)/(TP+TN+FP+FN): no accent on the page; a reading with hats invented them.
+    const acc = [..."AccTPTNTPTNFPFN"];
+    expect(judgeFormula("\\mathrm{Acc}=\\frac{TP+TN}{TP+TN+FP+FN}", acc).check).toBe("match");
+    expect(judgeFormula("\\mathrm{Acc}=\\frac{\\hat{TP}+TN}{TP+TN+FP+FN}", acc).glyphs?.extra).toEqual(["ˆ"]);
+    // x̃ = (x − x̄)/σ: a stray bar in the numerator differs.
+    const z = [..."˜xx¯xσ"];
+    expect(judgeFormula("\\tilde{x}=\\frac{x-\\bar{x}}{\\sigma}", z).check).toBe("match");
+    expect(judgeFormula("\\tilde{x}=\\frac{x-\\bar{x}|}{\\sigma}", z).glyphs?.extra).toEqual(["|"]);
+    // \\overline for the page's \\bar, \\left|…\\right| for its |…|: look only, not flagged.
+    expect(judgeFormula("\\tilde{x}=\\frac{x-\\overline{x}}{\\sigma}", z).check).toBe("match");
+    expect(judgeFormula("\\left|x\\right|=1", [..."|x|1"]).check).toBe("match");
+    // A dropped accent is missing.
+    expect(judgeFormula("x=\\frac{x-x}{\\sigma}", z).glyphs?.missing).toEqual(["¯", "˜"]);
   });
 
   it("compareGlyphs is a multiset difference", () => {
@@ -244,9 +278,9 @@ describe("glyph check", () => {
 
   it("compareGlyphs: a glyph cut off by the box but visible in the crop is not extra; one beyond the crop is", () => {
     // E[X|Y=y] = Σ_x x P(X=x|Y=y), the x under Σ just below the detector's box.
-    const inside = [..."EXYyxPXxYy"];
+    const inside = [..."EXY|yxPXx|Yy"];
     const visible = [...inside, "x"];
-    const latex = [..."EXYyxxPXxYy"];
+    const latex = [..."EXY|yxxPXx|Yy"];
     expect(compareGlyphs(latex, inside, visible)).toEqual({ missing: [], extra: [] });
     expect(compareGlyphs(latex, inside)).toEqual({ missing: [], extra: ["x"] });
     expect(compareGlyphs([...latex, "n"], inside, visible)).toEqual({ missing: [], extra: ["n"] });
@@ -264,5 +298,32 @@ describe("glyph check", () => {
     expect(judgeFormula("\\sum_{k=0}^{n}\\ binom n k k=2^{n}", [..."k0nnk2n"]).check).toBe("differs");
     expect(judgeFormula("x^{2}", null)).toEqual({ issues: [], glyphs: null, check: "unchecked" });
     expect(judgeFormula("x^{2", null).check).toBe("differs");
+  });
+});
+
+describe("displayLikeInline", () => {
+  // Boxes in pt from the 4:3 bullets deck: text lines are 11–12 pt high.
+  const text = [
+    [34, 92, 238, 104],
+    [35, 108, 110, 120],
+    [34, 126, 126, 137],
+    [34, 103, 221, 143],
+  ];
+  const f = (box: number[]) => ({ box, score: 0.95 });
+  it("reads tall inline formulas and those alone on their line, not math inside a sentence", () => {
+    const tall = f([102, 103, 220, 143]); // $\displaystyle d(x,y)=\sqrt{\sum…}$ after the item's text
+    const alone = f([48, 108, 110, 120]); // \item $\mathbf{w}^\top\mathbf{x}+b=0$
+    const inSentence = f([151, 92, 225, 103]); // "… mit $TP, TN, FP, FN$:"
+    const symbol = f([228, 93, 237, 103]); // $\mathbf{w}$
+    expect(displayLikeInline([tall, alone, inSentence, symbol], text)).toEqual([tall, alone]);
+    // "Für $0 \le k \le n$:" — a short line, but text before the formula: stays text.
+    expect(displayLikeInline([f([60, 126, 99, 137])], [[34, 126, 100, 137]])).toEqual([]);
+    expect(displayLikeInline([f([47, 126, 99, 137])], [[34, 126, 100, 137]])).toHaveLength(1);
+  });
+  it("without text boxes the line height comes from the inline formulas themselves", () => {
+    const small = [f([10, 10, 30, 21]), f([40, 10, 60, 21]), f([70, 10, 90, 22])];
+    const frac = f([10, 40, 80, 70]);
+    expect(displayLikeInline([...small, frac], [])).toEqual([frac]);
+    expect(displayLikeInline([], text)).toEqual([]);
   });
 });

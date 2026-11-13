@@ -79,6 +79,17 @@ describe("setup and doctor with the imstudium plugin installed", () => {
     expect(doctor.checks.find((c) => c.id === "agents")).toMatchObject({ status: "ok", detail: expect.stringContaining("imstudium plugin in claude-code") });
   });
 
+  it("doctor names the one harness the plugin doesn't cover, with the command for it alone", async () => {
+    await claudePlugin();
+    await mkdir(join(fx.home, ".cursor"), { recursive: true });
+    const doctor = DoctorOutput.parse(runCli(fx, ["--json", "doctor", "--offline"]).json());
+    const agents = doctor.checks.find((c) => c.id === "agents")!;
+    expect(agents).toMatchObject({ status: "warn", fix: "imstudium setup all --agent cursor -y" });
+    expect(agents.detail).toMatch(/^Cursor: skills not installed \(imstudium plugin in claude-code\)$/);
+    const status = runCli(fx, ["--json", "setup", "status"]).json() as { staleByAgent: Array<{ agents: string[]; missing: string[]; outdated: string[] }> };
+    expect(status.staleByAgent).toEqual([expect.objectContaining({ agents: ["cursor"], outdated: [] })]);
+  });
+
   it("a plugin switched off in settings.json does not count", async () => {
     await claudePlugin(false);
     runCli(fx, ["--json", "setup", "all", "-y", "--agent", "claude-code"]);

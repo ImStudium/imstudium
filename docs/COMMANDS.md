@@ -1209,7 +1209,7 @@ imstudium setup ocr [options]
 
 | Option | |
 |---|---|
-| `--math` | Also read display formulas into LaTeX and check them against the PDF: PP-DocLayoutV2 + PP-FormulaNet+ L (~1.1 GB download, once) |
+| `--math` | Opt in to reading display formulas as LaTeX (PP-DocLayoutV2 + PP-FormulaNet+ L, ~1.1 GB once). Model readings: about four in five exact on lecture slides, each checked against the PDF and marked when it needs a look |
 | `--force` | Download and verify everything again, models included |
 | `--remove` | Delete the runtime and models (with --math: only the math part) |
 

@@ -139,7 +139,7 @@ OCR and math are optional downloads, pinned by version and SHA-256 and unpacked 
 
 ```bash
 imstudium setup ocr          # OCR for scanned pages, ~60 MB (PDFium, ONNX Runtime, PP-OCRv6)
-imstudium setup ocr --math   # plus formula recognition and its check, ~1.1 GB more download
+imstudium setup ocr --math   # opt-in: formula recognition and its check, ~1.1 GB more download
 imstudium setup ocr --remove # remove it again (--remove --math removes only math)
 ```
 
@@ -148,9 +148,9 @@ After installing, the next `sync --extract` reads the scanned pages it skipped b
 What to expect ([docs/BENCHMARKS.md](docs/BENCHMARKS.md), reproducible with `bun run bench`):
 
 - Synthetic prose scans come back almost character-perfect, and slide scans keep about 98 % of their words.
-- Clean display formulas come back exactly as typeset. On hard Beamer slides about four in five do.
-- On born-digital pages every formula is checked against the PDF's own letters and digits, and the ones that fail are marked.
-- An agent following the `imstudium-visual` skill looks at each formula's image and corrects the rest. On the hard benchmark decks it left none wrong in meaning and invented nothing.
+- Clean display formulas come back exactly as typeset. On Beamer slides, formulas inside bullets included, about four in five do.
+- On born-digital pages every formula is checked against the PDF's own letters, digits, accents and bars, and the ones that fail are marked.
+- An agent following the `imstudium-visual` skill looks at each formula's image and corrects the rest. On the six benchmark Beamer decks it left none wrong in meaning and invented nothing.
 
 Formula recognition finds display formulas only: math inside a sentence stays plain text with garbled sub- and superscripts. Recognised LaTeX can still be wrong where the check can't see it (an exponent's place, a scanned page), so check formulas and diagrams against the original in `files/`; `math.json` gives each formula's page, box and check, and `formulas/<id>.png` its image.
 

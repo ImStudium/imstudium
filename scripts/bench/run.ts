@@ -183,6 +183,7 @@ const FORMULA_SETS: Record<string, string> = {
   formulas: "Display formulas on A4 pages",
   "beamer-sans": "Beamer slides, sans-serif math (hard)",
   "beamer-serif": "Beamer slides, serif math (hard)",
+  "beamer-bullets": "Beamer slides 4:3, formulas in bullets, sans-serif math",
 };
 const CASES = [
   { label: "Born-digital lecture notes", set: "prose", variant: "text layer" },

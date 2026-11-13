@@ -499,24 +499,39 @@ export interface SetupStatusReport {
   upToDate: boolean;
   stale: boolean;
   staleSkills: string[];
+  /** Per harness (harnesses sharing a skills folder together), what setup would install or update there. */
+  staleByAgent: StaleAgentSkills[];
   workspace: string;
 }
 
-async function findStaleSkills(agents: AgentProfile[]): Promise<string[]> {
+export interface StaleAgentSkills {
+  /** Harness ids sharing this skills folder, e.g. ["cursor"]. */
+  agents: string[];
+  labels: string[];
+  /** Bundled skills not there at all. */
+  missing: string[];
+  /** Bundled skills there in another version. */
+  outdated: string[];
+}
+
+async function findStaleSkills(agents: AgentProfile[]): Promise<StaleAgentSkills[]> {
   const bundled = [...(await bundledSkills("core")), ...(await bundledSkills("workflows"))];
-  const stale = new Set<string>();
+  const out: StaleAgentSkills[] = [];
   for (const [skillsDir, group] of uniqueSkillsDirs(agents)) {
     if (pluginCovers(group)) continue; // the plugin keeps its own skills current
+    const missing: string[] = [];
+    const outdated: string[] = [];
     for (const skill of bundled) {
       try {
         const content = await readFile(join(skillsDir, skill.name, "SKILL.md"), "utf-8");
-        if (hashContent(content) !== skill.hash) stale.add(skill.name);
+        if (hashContent(content) !== skill.hash) outdated.push(skill.name);
       } catch {
-        stale.add(skill.name);
+        missing.push(skill.name);
       }
     }
+    if (missing.length || outdated.length) out.push({ agents: group.map((a) => a.id), labels: group.map((a) => a.label), missing: missing.sort(), outdated: outdated.sort() });
   }
-  return [...stale].sort();
+  return out;
 }
 
 export async function getSetupStatus(workspace?: string): Promise<SetupStatusReport> {
@@ -538,7 +553,8 @@ export async function getSetupStatus(workspace?: string): Promise<SetupStatusRep
     configured.length > 0
       ? resolveAgentProfiles("all", true).filter((a) => configured.includes(a.id))
       : agentProfiles;
-  const staleSkills = await findStaleSkills(agentsToCheck.length > 0 ? agentsToCheck : agentProfiles);
+  const staleByAgent = await findStaleSkills(agentsToCheck.length > 0 ? agentsToCheck : agentProfiles);
+  const staleSkills = [...new Set(staleByAgent.flatMap((g) => [...g.missing, ...g.outdated]))].sort();
   const versionOk = manifest?.imstudiumVersion === IMSTUDIUM_SETUP_VERSION;
   const workspaceOk = manifest?.workspace === ws;
   const skillsOk = staleSkills.length === 0;
@@ -547,7 +563,7 @@ export async function getSetupStatus(workspace?: string): Promise<SetupStatusRep
   const upToDate = allPlugin || Boolean(manifest && versionOk && workspaceOk && skillsOk);
   const stale = !upToDate;
 
-  return { detected, plugins, configured, manifest, upToDate, stale, staleSkills, workspace: ws };
+  return { detected, plugins, configured, manifest, upToDate, stale, staleSkills, staleByAgent, workspace: ws };
 }
 
 /** @deprecated use resolveAgentProfiles */

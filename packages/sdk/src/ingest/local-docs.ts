@@ -49,6 +49,11 @@ export type LocalPage = {
   imageOnly?: boolean;
   /** Text came (partly) from on-device OCR. */
   ocr?: { source: "Ocr" | "Fused"; confidence: number | null; low: boolean };
+  /**
+   * Text came from the PDF's own text layer, read through PDFium by the OCR
+   * call after pdf-inspector's per-page native pass withheld it (not OCR).
+   */
+  recovered?: true;
 };
 
 export type LocalConvertOk = {
@@ -100,6 +105,19 @@ export const OCR_LOW_CONFIDENCE = "_(read by OCR with low confidence — check t
 /** Pages below this OCR confidence get the low-confidence note. */
 const LOW_CONFIDENCE = 0.6;
 
+/**
+ * Version of the rule that merges OCR results into the native pages, kept in
+ * the manifest. 2: a page the OCR call returns as native text (PDFium
+ * recovery) keeps that text; 1 dropped it and left the page text-less.
+ */
+export const OCR_MERGE = 2;
+
+/** What mergeOcrPages needs from pdf-inspector's processPdfWithOcr result. */
+export interface OcrPagesResult {
+  pages: Array<{ pageNumber: number; markdown?: string | null; provenance: { source: unknown; ocrConfidence?: number | null; hostedRecommended?: boolean } }>;
+  ocrTimeMs: number;
+}
+
 export interface ConvertOptions {
   /** false: native text only, even when the OCR runtime is installed. */
   ocr?: boolean;
@@ -124,23 +142,35 @@ function asError(err: unknown, fallback: string): Error {
  */
 async function convertPdfWithOcr(bytes: Uint8Array, native: LocalConvertOk): Promise<LocalConvertResult> {
   const targets = native.pages.filter((p) => p.imageOnly).map((p) => p.index);
-  const ocrInfo = { model: OCR_MODEL, onDevice: true, pages: [] as number[], lowConfidencePages: [] as number[], ocrTimeMs: 0 };
-  if (!targets.length) {
-    native.metadata.ocr = ocrInfo;
-    return native;
-  }
+  if (!targets.length) return mergeOcrPages(native, null);
   const { processPdfWithOcr } = await loadPdfInspector();
   const r = await processPdfWithOcr(toNodeBuffer(bytes), { mode: "Force" as never, pageNumbers: targets.map((i) => i + 1), offline: true });
-  const byIndex = new Map(r.pages.map((p) => [p.pageNumber - 1, p]));
+  return mergeOcrPages(native, r);
+}
+
+/**
+ * The native pages with the OCR call's result for the pages native extraction
+ * left without text. A page comes back from that call either read by OCR
+ * (`Ocr`, `Fused`) or as `Native`: pdf-inspector first reads the page's own
+ * text layer through PDFium and keeps it when OCR adds nothing ("kept
+ * trustworthy PDFium native recovery"). That text is the PDF's, not OCR's:
+ * it is used as is, without a confidence note, and counted as recovered, not
+ * as OCR. Pages the native pass did read are never touched. `r` null: no page
+ * needed OCR.
+ */
+export function mergeOcrPages(native: LocalConvertOk, r: OcrPagesResult | null): LocalConvertOk {
+  const targets = new Set(native.pages.filter((p) => p.imageOnly).map((p) => p.index));
+  const byIndex = new Map((r?.pages ?? []).map((p) => [p.pageNumber - 1, p]));
   const pages: LocalPage[] = native.pages.map((page) => {
-    const p = targets.includes(page.index) ? byIndex.get(page.index) : undefined;
+    const p = targets.has(page.index) ? byIndex.get(page.index) : undefined;
     if (!p) return page;
     const source = String(p.provenance.source);
     const confidence = typeof p.provenance.ocrConfidence === "number" ? p.provenance.ocrConfidence : null;
     const markdown = (p.markdown ?? "").trim();
-    const fromOcr = source === "Ocr" || source === "Fused";
-    if (!fromOcr) return page;
-    const low = p.provenance.hostedRecommended || (confidence !== null && confidence < LOW_CONFIDENCE);
+    if (source !== "Ocr" && source !== "Fused") {
+      return markdown ? { index: page.index, markdown, imageOnly: false, recovered: true } : page;
+    }
+    const low = !!p.provenance.hostedRecommended || (confidence !== null && confidence < LOW_CONFIDENCE);
     return {
       index: page.index,
       markdown: !markdown ? IMAGE_ONLY : low ? `${markdown}\n\n${OCR_LOW_CONFIDENCE}` : markdown,
@@ -148,9 +178,15 @@ async function convertPdfWithOcr(bytes: Uint8Array, native: LocalConvertOk): Pro
       ocr: { source: source as "Ocr" | "Fused", confidence, low },
     };
   });
-  ocrInfo.pages = pages.filter((p) => p.ocr).map((p) => p.index);
-  ocrInfo.lowConfidencePages = pages.filter((p) => p.ocr?.low).map((p) => p.index);
-  ocrInfo.ocrTimeMs = r.ocrTimeMs;
+  const ocrInfo = {
+    model: OCR_MODEL,
+    onDevice: true,
+    merge: OCR_MERGE,
+    pages: pages.filter((p) => p.ocr).map((p) => p.index),
+    lowConfidencePages: pages.filter((p) => p.ocr?.low).map((p) => p.index),
+    recoveredPages: pages.filter((p) => p.recovered).map((p) => p.index),
+    ocrTimeMs: r?.ocrTimeMs ?? 0,
+  };
   return {
     ok: true,
     markdown: joinPagesFormFeed(pages),
