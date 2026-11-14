@@ -45,7 +45,7 @@ export function buildLoginHelperHtml(opts: {
       <details class="is-advanced">
         <summary>Expert: paste session manually</summary>
         <form method="POST" action="/submit">
-          <textarea class="is-input" name="cookie" placeholder="Paste Seminar_Session value"></textarea>
+          <textarea class="is-input" name="cookie" placeholder="Paste Studip_Session (or Seminar_Session) value"></textarea>
           <button class="is-btn" type="submit">Save session</button>
         </form>
       </details>
@@ -103,6 +103,6 @@ export function parseFormBody(body: string, field: string): string {
 
 function buildConnectBookmarklet(captureUrl: string): string {
   const target = `${captureUrl}?cookie=`;
-  const js = `(function(){var m=document.cookie.match(/Seminar_Session=([^;]+)/);if(!m){alert('Sign in to Stud.IP first');return;}location.href=${JSON.stringify(target)}+encodeURIComponent(m[1]);})()`;
+  const js = `(function(){var m=document.cookie.match(/(?:Studip|Seminar)_Session=([^;]+)/);if(!m){alert('Sign in to Stud.IP first');return;}location.href=${JSON.stringify(target)}+encodeURIComponent(m[1]);})()`;
   return `javascript:${encodeURIComponent(js)}`;
 }

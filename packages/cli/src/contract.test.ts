@@ -46,6 +46,12 @@ describe("CLI --json matches @imstudium/contract (offline, synthetic)", () => {
     expect((out.semester as { workspace: { courses: number } }).workspace.courses).toBe(2);
     expect((out.tasks as unknown[]).length).toBe(1);
     expect((out.newFiles as unknown[]).length).toBe(2);
+    // Agents get the hints in English; the briefing a student reads is German throughout, like today and week.
+    expect(out.next).toContain("imstudium login   (signed out — briefing from local files only)");
+    const human = runCli(fx, ["context", "--offline", "--since", "2w"]);
+    expect(human.status, human.stderr).toBe(0);
+    expect(human.stdout).toContain("→ imstudium login   (abgemeldet, Briefing nur aus lokalen Dateien)");
+    expect(human.stdout).not.toMatch(/signed out|last sync|overdue|unread|no .* courses/);
   });
 
   it("a bad --limit is a usage error (exit 2), never a silent default", () => {

@@ -48,9 +48,16 @@ The full layout is in [docs/STUDIUM.md](docs/STUDIUM.md).
 
 Some limits on extracted text:
 
-- `content.md` comes from pdf-inspector (PDF) and AnyDoc (Office) on the student's machine. It is **not LaTeX**.
-- Image-only pages are marked `_(image-only page — no text layer)_`.
-- For formulas and diagrams, open the original in `files/`. Never invent math from the markdown.
+- `content.md` comes from pdf-inspector (PDF) and AnyDoc (Office) on the student's machine. Its prose is markdown, not LaTeX: inline math keeps garbled sub- and superscripts (`x<sub>i</sub>`).
+- With `imstudium setup ocr`, scanned pages are read by on-device OCR (the header says `on-device OCR on N page(s)`). Pages it read poorly carry `_(read by OCR with low confidence — check the original)_`. Without it, they are marked `_(image-only page — no text layer)_`. A slide that is mostly a picture keeps its own title and labels, marked `_(mostly an image: only the page's own text is above, the image itself is not read)_`.
+- With `imstudium setup ocr --math`, display formulas follow their page as `$$…$$` blocks under `_Formulas on this page, read on this machine as LaTeX …_`. `math.json` lists each with its page, box and check, and `formulas/<id>.png` is its image. They are model output: a wrong exponent or a dropped term changes the meaning.
+- Every formula is checked on the machine. On born-digital pages its letters and digits must be the ones the PDF has in that box. A formula that fails gets `_(formula p3-2 needs a look: …)_`, and a scanned one gets `_(formula p3-2 unchecked: …)_`.
+- Before you write formulas down for a student, follow the formula procedure in the `imstudium-visual` skill:
+  - `imstudium formulas list <file>`
+  - look at the image of every formula you write down, flagged and unchecked ones first, and transcribe only what it shows (a passing check proves the letters and digits, not where they sit)
+  - `imstudium formulas check <file> <id> --latex '…'`
+  - and, when the student wants corrected notes, `imstudium formulas fix`, which refuses a correction that doesn't check
+- For diagrams, open the original in `files/`. Never invent math from the markdown, from memory or from what a formula usually looks like.
 
 ### MCP (opt-in)
 
@@ -62,7 +69,7 @@ The door refuses anything that writes:
 - `semester start`, `files download`
 - every command outside its allowlist (`login`, `setup`, `sync`, …)
 
-The workspace tools are still there: `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium_find_materials`, `studium_read_material`, `imstudium_sync`, `imstudium_sync_dry_run`, `imstudium_list_courses`, `imstudium_whoami` and `studium_modules`.
+The workspace tools are still there: `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium_find_materials`, `studium_read_material`, `imstudium_sync_dry_run`, `imstudium_list_courses`, `imstudium_whoami` and `studium_modules`. A sync runs only in a terminal (`imstudium sync`).
 
 ### Never
 
@@ -71,6 +78,10 @@ The workspace tools are still there: `studium_overview`, `studium_klausuren`, `s
 - Handle the university password, print the session, or copy anything from `~/.config/imstudium`.
 - Paste messages, grades, Matrikelnummer or classmates' names anywhere outside the session. Don't upload `~/Studium` content anywhere. Course material is licensed for the student's own studies (UrhG §60a). See the `imstudium-datenschutz` skill.
 - Hand in solutions to current Übungsblätter as the student's own work. Explain, quiz, and give hints and worked examples of *similar* problems instead.
+
+### Plugin (Claude Code, Codex)
+
+`plugins/imstudium/` is one plugin for both: skills, slash commands (`/imstudium:today`, `:week`, `:catchup`, `:klausur`, `:explain`, `:quiz`, `:sync`, `:doctor`), the `studium-tutor` subagent, a SessionStart hook that adds the offline briefing inside a workspace, and the MCP door. Install with `claude plugin marketplace add ImStudium/imstudium` or `codex plugin marketplace add ImStudium/imstudium`. Use the plugin *or* `imstudium setup all` per harness, not both.
 
 ### Setup per harness
 
@@ -92,12 +103,12 @@ The installed skills:
 - `imstudium-cli`: command map
 - `imstudium-datenschutz`
 - `imstudium-studium`, `imstudium-klausuren`, `imstudium-sync`, `imstudium-visual`, `imstudium-mcp`
-- workflows `klausur-prep` and `semester-refresh`
+- workflows `imstudium-klausur-prep`, `imstudium-semester-refresh` and `imstudium-study-session`
 
 Paths:
 
 - setup manifest: `~/.config/imstudium/setup-manifest.json`
-- workspace: `~/Studium` (`IMSTUDIUM_WORKSPACE`)
+- workspace: `~/Studium`. `IMSTUDIUM_WORKSPACE` overrides `config.json` for one process (so do `IMSTUDIUM_ORIGIN` and `IMSTUDIUM_BASE_URL`) and is never saved
 
 ## Part 2 — Working on this repository
 
@@ -164,7 +175,7 @@ Bun workspaces, four packages:
   - `GET /courseware-structural-elements/{id}` stores the last-visited page
 - Workspace writers are idempotent (content hash in frontmatter) and keep a `## Student notes` section across rebuilds. Resolve folders from `course.path`.
 - Exam dates parsed from course text stay `confirmed: false`.
-- `content.md` is markdown, not LaTeX. Don't reintroduce poppler, Tesseract, LibreOffice or cloud parsing.
+- Extraction stays on the student's machine with pinned artifacts: pdf-inspector and AnyDoc, plus the optional runtime from `imstudium setup ocr` (PDFium, ONNX Runtime and the PP-OCR models through pdf-inspector; PP-DocLayoutV2 and UniRec-0.1B for `--math`), every download checked against its SHA-256 in `ocr-runtime.ts` and `math.ts`. Don't reintroduce poppler, Tesseract, LibreOffice or cloud parsing, and never send a page to a remote model. Formula LaTeX goes only in `$$…$$` blocks under `FORMULAS_HEADING` and in `math.json`; the prose stays markdown. A change to OCR or math runs `bun run bench` (docs/BENCHMARKS.md) before and after.
 - Messages are never written into the workspace. `people` counts students and never names them. `snapshots/studium.json` holds counts and dates only.
 
 ### Tests and validation
@@ -176,5 +187,15 @@ Bun workspaces, four packages:
 - Build and check commands with `bun run build`, then `node packages/cli/dist/cli.js <command> --help`.
 - CLI integration tests use `packages/cli/src/test/harness.ts`: a synthetic workspace, a throwaway `HOME`, the file session store and a preload that fails every network call.
 - Never commit anything from `~/Studium`, `~/.config/imstudium` or `~/.local/share/imstudium`.
+
+- `plugins/imstudium/` is partly generated (`scripts/docs/plugin.ts`): both manifests, `.mcp.json`, `skills/` (copied from `packages/cli/skills`, workflows flattened) and the root marketplaces (`.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json`, `.cursor-plugin/plugin.json`). Edit the sources and run `bun run docs`; `commands/`, `agents/` and `hooks/` are hand-written. `scripts/plugin.test.ts` checks for stale files, frontmatter, versions and the hook. `claude plugin validate .` and `claude plugin validate plugins/imstudium` must pass.
+
+### Stud.IP 5 and 6
+
+Both must work. Stud.IP 6 differs in ways the SDK absorbs:
+
+- The session cookie is `Studip_Session` (5.x: `Seminar_Session`). `SESSION_COOKIE_NAMES` in `login-url.ts` lists both; never hard-code one.
+- Some routes (e.g. `/courseware-tasks`) take no `page[…]` parameters and answer 400; `client.paginate` retries those once unpaged.
+- Error objects may omit `status`; `parseApiErrors` falls back to the HTTP status.
 
 User-facing changes go in [CHANGELOG.md](CHANGELOG.md), plus the README, [docs/](docs/) and the bundled skills when behaviour changes.

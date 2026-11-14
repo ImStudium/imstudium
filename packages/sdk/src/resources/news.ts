@@ -1,4 +1,4 @@
-import { readFile, unlink } from "node:fs/promises";
+import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { StudIpClient } from "../client.js";
 import { attr, htmlToText, Included, relId } from "../jsonapi.js";
@@ -19,6 +19,7 @@ import {
   writeIfChanged,
   type Person,
 } from "./comm-util.js";
+import { parseFrontmatter } from "../content/markdown.js";
 
 /** Where an announcement was published. */
 export type NewsScope = "course" | "global" | "institute" | "user" | "unknown";
@@ -40,6 +41,8 @@ export interface NewsItem {
   courseId: string | null;
   courseTitle: string | null;
   commentsAllowed: boolean;
+  /** Only in the workspace: Stud.IP no longer serves it (publication ended). */
+  archived?: boolean;
 }
 
 export interface NewsComment {
@@ -232,6 +235,119 @@ export async function writeNewsIndex(newsDir: string, courseTitle?: string): Pro
   await writeIfChanged(join(newsDir, "README.md"), lines.join("\n"));
 }
 
+// ── Saved news (the archive) ────────────────────────────────────────────────────
+//
+// Stud.IP only serves an announcement until its publication end; after that the
+// copy in the workspace is the only one left. These read it back.
+
+const LEGACY_NEWS_FILE = /^[0-9a-f]{12}\.md$/;
+
+/** The 0.1.x export: `<12 id chars>.md`, no frontmatter — `# Title`, `_<ISO date>_`, HTML body. */
+export function parseLegacyNews(
+  text: string,
+  idPrefix: string,
+  ctx: { courseTitle?: string | null; courseId?: string | null } = {},
+): NewsItem | null {
+  if (text.startsWith("---\n")) return null;
+  const m = /^# (.+)\n+_([^_\n]+)_\n+([\s\S]*)$/.exec(text.replace(/\r\n/g, "\n"));
+  if (!m) return null;
+  const date = toIso(m[2]!.trim()) ?? m[2]!.trim();
+  const body = m[3]!.replace(/^<!--HTML-->/, "").trim();
+  return {
+    id: idPrefix,
+    title: m[1]!.trim(),
+    text: /<[a-z][\s\S]*>/i.test(body) ? htmlToText(body) : body,
+    date,
+    createdAt: date,
+    updatedAt: null,
+    expiresAt: null,
+    author: null,
+    scope: "course",
+    courseId: ctx.courseId ?? null,
+    courseTitle: ctx.courseTitle ?? null,
+    commentsAllowed: false,
+  };
+}
+
+/** One saved news file (current format) back into a NewsItem. */
+function savedNewsItem(text: string, ctx: { courseTitle?: string | null; courseId?: string | null }): NewsItem | null {
+  const fm = parseFrontmatter(text);
+  if (!fm.id || !fm.title) return null;
+  // Body: after the frontmatter, the `# Title` line and the `_meta_` line.
+  const body = text
+    .replace(/^---\n[\s\S]*?\n---\n/, "")
+    .replace(/^\s*# .*\n+(_.*_\n+)?/, "")
+    .trim();
+  return {
+    id: fm.id,
+    title: fm.title,
+    text: body === "_(no text)_" ? "" : body,
+    date: fm.date ?? "",
+    createdAt: null,
+    updatedAt: fm.updated ?? null,
+    expiresAt: fm.expires ?? null,
+    author: fm.author ? { id: null, name: fm.author } : null,
+    scope: "course",
+    courseId: fm.courseId ?? ctx.courseId ?? null,
+    courseTitle: fm.course ?? ctx.courseTitle ?? null,
+    commentsAllowed: false,
+  };
+}
+
+/** Every announcement saved in a course's `news/` folder, both formats. Read-only; missing folder → []. */
+export async function readSavedNews(
+  newsDir: string,
+  ctx: { courseTitle?: string | null; courseId?: string | null } = {},
+): Promise<NewsItem[]> {
+  let names: string[];
+  try {
+    names = (await readdir(newsDir)).filter((n) => n.endsWith(".md") && n !== "README.md");
+  } catch {
+    return [];
+  }
+  const out: NewsItem[] = [];
+  for (const name of names) {
+    const text = await readFile(join(newsDir, name), "utf-8").catch(() => "");
+    const item = LEGACY_NEWS_FILE.test(name) ? parseLegacyNews(text, name.slice(0, -3), ctx) : savedNewsItem(text, ctx);
+    if (item) out.push(item);
+  }
+  return out;
+}
+
+/** Live news first; a saved item is kept when Stud.IP no longer serves it (legacy ids are 12-char prefixes). */
+export function mergeLiveAndSavedNews(live: NewsItem[], saved: NewsItem[]): NewsItem[] {
+  const out = [...live];
+  for (const s of saved) {
+    if (live.some((l) => l.id === s.id || l.id.startsWith(s.id))) continue;
+    out.push({ ...s, archived: true });
+  }
+  return out;
+}
+
+/**
+ * Rewrite 0.1.x news files (`<12 id chars>.md`) in the current format, so the
+ * README index, `context` and search see them. Idempotent; returns how many moved.
+ */
+export async function upgradeLegacyNews(newsDir: string, courseTitle?: string, courseId?: string): Promise<number> {
+  let names: string[];
+  try {
+    names = (await readdir(newsDir)).filter((n) => LEGACY_NEWS_FILE.test(n));
+  } catch {
+    return 0;
+  }
+  let moved = 0;
+  for (const name of names) {
+    const legacyPath = join(newsDir, name);
+    const item = parseLegacyNews(await readFile(legacyPath, "utf-8").catch(() => ""), name.slice(0, -3), { courseTitle, courseId });
+    if (!item) continue;
+    await writeIfChanged(join(newsDir, `${newsFileBase(item)}.md`), newsMarkdown(item, courseTitle));
+    await unlink(legacyPath).catch(() => undefined);
+    moved++;
+  }
+  if (moved) await writeNewsIndex(newsDir, courseTitle);
+  return moved;
+}
+
 // ── Resource ──────────────────────────────────────────────────────────────────
 
 const MAX_NEWS = 500;
@@ -287,6 +403,7 @@ export class NewsResource {
     outDir: string,
     options: { courseTitle?: string } = {},
   ): Promise<NewsWriteResult> {
+    await upgradeLegacyNews(outDir, options.courseTitle, courseId);
     const items = await this.course(courseId, { courseTitle: options.courseTitle });
     return writeNewsMarkdown(outDir, items, options);
   }

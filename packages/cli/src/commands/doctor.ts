@@ -7,7 +7,8 @@ import type { Command } from "commander";
 import {
   detectTools,
   findCurrentSemester,
-
+  mathRuntimeStatus,
+  ocrRuntimeStatus,
   probeOAuthServer,
   readRouteCatalog,
   SDK_VERSION,
@@ -21,6 +22,7 @@ import { checkForUpdates, getCliVersion } from "../version.js";
 import { getSetupStatus, type SetupStatusReport } from "../setup.js";
 import { act, getSdk, output, type Sdk } from "../runtime.js";
 import { CLI_ENTRY } from "../entry.js";
+import { enrolledIn } from "./semester.js";
 import { outputOption, workspaceDir } from "../kit/args.js";
 import { berlinDateTime, cell } from "../kit/format.js";
 
@@ -165,15 +167,26 @@ export const DOCTOR_CHECKS: CheckDef[] = [
     id: "session.store",
     title: "Session",
     run: async ({ sdk }) => {
-      const store = await sdk.auth.sessionStore();
+      // Loading first: it moves a session out of the plain file when a keychain can take it.
       const session = await sdk.auth.loadSession();
+      const store = await sdk.auth.sessionStore();
       if (!session || store === "none") return failed("not signed in", "imstudium login", { store: "none" });
       const tier = store === "file" ? "a plain 0600 file (weakest tier)" : store === "keychain" ? "the system keychain" : "ImSicheren";
       const expired = session.expiresAt && Date.parse(session.expiresAt) < Date.now() && !session.refreshToken;
       if (expired) return warn(`${session.type} session in ${tier} expired ${berlinDateTime(session.expiresAt)}`, "imstudium login", { store, type: session.type });
-      return store === "file"
-        ? warn(`${session.type} session stored in ${tier}`, "Install keychain support (npm i -g keytar) or ImSicheren, then: imstudium login", { store, type: session.type })
-        : ok(`${session.type} session in ${tier}`, { store, type: session.type });
+      if (store !== "file") return ok(`${session.type} session in ${tier}`, { store, type: session.type });
+      if (process.env.IMSTUDIUM_SESSION_STORE === "file") return warn(`${session.type} session stored in ${tier} (IMSTUDIUM_SESSION_STORE=file)`, null, { store, type: session.type });
+      return (await sdk.auth.keychainAvailable())
+        ? warn(
+            `${session.type} session stored in ${tier}: the system keychain refused it`,
+            "Unlock the keychain (Linux: start a Secret Service such as gnome-keyring), then run any imstudium command to move it there",
+            { store, type: session.type, keychain: "refused" },
+          )
+        : warn(
+            `${session.type} session stored in ${tier}: the keychain module (keytar) does not load`,
+            "npm 11 skips keytar's install script unless allowed: npm install -g @imstudium/cli --allow-scripts=keytar (npm install-scripts approve doesn't work for global installs), or install ImSicheren. The session moves out of the file on the next command; until then the 0600 file is readable by your user only",
+            { store, type: session.type, keychain: "missing" },
+          );
     },
   },
   {
@@ -240,20 +253,27 @@ export const DOCTOR_CHECKS: CheckDef[] = [
       if (!ws) return skip("no workspace");
       const local = ws.activeSemester;
       const end = local.end ? Date.parse(local.end) : NaN;
-      if (Number.isFinite(end) && end < Date.now()) {
-        return warn(`workspace is on ${local.title}, which ended ${berlinDateTime(end)}`, "imstudium semester start", { workspace: local.slug });
-      }
-      if (offline) return ok(`workspace on ${local.title} (Stud.IP not asked: --offline)`, { workspace: local.slug });
+      const ended = Number.isFinite(end) && end < Date.now();
+      const data = { workspace: local.slug };
+      // Without Stud.IP we can't tell whether you have courses in the next semester yet: semester (status) asks.
+      const endedHere = () => warn(`workspace is on ${local.title}, which ended ${berlinDateTime(end)}`, "imstudium semester", data);
+      if (offline) return ended ? endedHere() : ok(`workspace on ${local.title} (Stud.IP not asked: --offline)`, data);
+      let cur: ReturnType<typeof findCurrentSemester>;
       try {
-        const cur = findCurrentSemester(await withBudget(sdk.courses.semesters.listAll(), NETWORK_BUDGET_MS, "semesters"));
-        const slug = cur ? semesterSlug(String(cur.attributes?.title)) : null;
-        if (slug && slug !== local.slug) {
-          return warn(`workspace on ${local.title}, Stud.IP is in ${cur!.attributes?.title}`, "imstudium semester start", { workspace: local.slug, studip: slug });
-        }
-        return ok(`${local.title} — matches Stud.IP`, { workspace: local.slug, studip: slug });
+        cur = findCurrentSemester(await withBudget(sdk.courses.semesters.listAll(), NETWORK_BUDGET_MS, "semesters"));
       } catch {
-        return ok(`workspace on ${local.title} (Stud.IP not reachable)`, { workspace: local.slug });
+        return ended ? endedHere() : ok(`workspace on ${local.title} (Stud.IP not reachable)`, data);
       }
+      const slug = cur ? semesterSlug(String(cur.attributes?.title)) : null;
+      if (!cur || !slug || slug === local.slug) return ended ? endedHere() : ok(`${local.title} — matches Stud.IP`, { ...data, studip: slug });
+      const title = String(cur.attributes?.title);
+      // Same rule as semester status: roll over once you have courses in the new semester, not before.
+      const enrolled = await withBudget(enrolledIn(sdk, cur.id), NETWORK_BUDGET_MS, "courses").catch(() => null);
+      if (enrolled === 0) {
+        return ok(`${local.title}: no courses in ${title} on Stud.IP yet, so the workspace stays (semester start once you enrol)`, { ...data, studip: slug, enrolled });
+      }
+      const count = enrolled === null ? "" : ` (${enrolled} course${enrolled === 1 ? "" : "s"} there)`;
+      return warn(`workspace on ${local.title}, Stud.IP is in ${title}${count}`, "imstudium semester start", { ...data, studip: slug, enrolled });
     },
   },
   {
@@ -277,16 +297,45 @@ export const DOCTOR_CHECKS: CheckDef[] = [
     },
   },
   {
+    id: "ocr",
+    title: "On-device OCR",
+    run: async () => {
+      const s = ocrRuntimeStatus();
+      const m = mathRuntimeStatus();
+      const data = { platform: s.platform, ready: s.ready, disabled: s.disabled, dir: s.dir, installed: s.installed, math: { ready: m.ready, disabled: m.disabled, reason: m.reason } };
+      if (!s.supported) return skip(`no pinned runtime for ${s.platform}; image-only pages stay marked, native text is unaffected`);
+      if (s.ready && s.disabled) return skip("installed, switched off by IMSTUDIUM_OCR=off");
+      const math = m.ready
+        ? m.disabled
+          ? " · math off (IMSTUDIUM_MATH=off)"
+          : " · math: formulas as LaTeX model readings, checked against the PDF; marked ones need a look (imstudium formulas list <file> --needs-look)"
+        : " · math not installed (opt-in: imstudium setup ocr --math)";
+      if (s.ready) return ok(`${s.model} · PDFium ${s.installed?.pdfium} · ONNX Runtime ${s.installed?.onnxruntime} (offline, on this machine)${math}`, data);
+      return warn(`${s.reason ?? "not ready"}: scanned pages and photos stay unread`, s.reason?.startsWith("runs under Node") ? "Run imstudium with Node: npm i -g @imstudium/cli" : "imstudium setup ocr", data);
+    },
+  },
+  {
     id: "agents",
     title: "Agent setup",
     run: async ({ setup }) => {
       const s = await setup;
       const detected = s.detected.map((a) => a.id);
-      if (!detected.length) return ok("no coding agent detected (skills are optional)", { detected });
-      if (!s.manifest) return warn(`detected ${detected.join(", ")} — skills not installed`, "imstudium setup all -y", { detected });
-      if (s.staleSkills.length) return warn(`stale skills: ${s.staleSkills.join(", ")}`, "imstudium setup all -y", { detected, stale: s.staleSkills });
-      if (!s.upToDate) return warn("setup is from another version or workspace", "imstudium setup all -y", { detected });
-      return ok(`skills current for ${detected.join(", ")}`, { detected });
+      const viaPlugin = s.detected.filter((a) => a.plugin).map((a) => a.id);
+      const rest = detected.filter((id) => !viaPlugin.includes(id));
+      const plugin = viaPlugin.length ? `imstudium plugin in ${viaPlugin.join(", ")}` : "";
+      const data = { detected, plugin: viaPlugin };
+      if (!detected.length) return ok("no coding agent detected (skills are optional)", data);
+      if (!rest.length) return ok(`skills come from the ${plugin}`, data);
+      const also = plugin ? ` (${plugin})` : "";
+      if (s.staleByAgent.length) {
+        // Name the harness, not every skill: "Cursor: skills not installed", with the command for that harness alone.
+        const what = s.staleByAgent.map((g) => `${g.labels.join(" / ")}: ${g.outdated.length ? `${g.outdated.length + g.missing.length} skill${g.outdated.length + g.missing.length === 1 ? "" : "s"} out of date` : "skills not installed"}`);
+        const fix = s.staleByAgent.length === 1 ? `imstudium setup all --agent ${s.staleByAgent[0]!.agents[0]} -y` : "imstudium setup all -y";
+        return warn(`${what.join("; ")}${also}`, fix, { ...data, stale: s.staleSkills, staleByAgent: s.staleByAgent });
+      }
+      if (!s.manifest) return warn(`detected ${rest.join(", ")}: skills not installed${also}`, "imstudium setup all -y", data);
+      if (!s.upToDate) return warn(`setup is from another version or workspace${also}`, "imstudium setup all -y", data);
+      return ok(`skills current for ${rest.join(", ")}${also}`, data);
     },
   },
   {

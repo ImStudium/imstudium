@@ -1,6 +1,7 @@
 import { access, cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { loadKeytar } from "./keytar.js";
 
 const CONFIG_DIR = join(homedir(), ".config", "imstudium");
 const DATA_DIR = join(homedir(), ".local", "share", "imstudium");
@@ -46,8 +47,8 @@ async function copyIfMissing(src: string, dest: string, label: string, result: M
 }
 
 async function migrateKeytarSession(result: MigrationResult): Promise<void> {
-  const keytar = await import("keytar").catch(() => null);
-  if (!keytar?.getPassword || !keytar.setPassword) {
+  const keytar = await loadKeytar();
+  if (!keytar) {
     result.skipped.push("keytar-session");
     return;
   }

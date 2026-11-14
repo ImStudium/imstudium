@@ -1,5 +1,6 @@
 import { renderCommandsDoc } from "./commands.ts";
 import { renderErrorsDoc } from "./errors.ts";
+import { pluginDocs } from "./plugin.ts";
 
 export interface GeneratedDoc {
   id: string;
@@ -11,4 +12,5 @@ export interface GeneratedDoc {
 export const GENERATED_DOCS: GeneratedDoc[] = [
   { id: "commands", path: "docs/COMMANDS.md", render: renderCommandsDoc },
   { id: "errors", path: "docs/ERRORS.md", render: renderErrorsDoc },
+  ...pluginDocs(),
 ];

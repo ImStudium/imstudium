@@ -271,6 +271,39 @@ export interface ExtractResult {
   skipped?: boolean;
   error?: string;
   hint?: string;
+  /** Pages (0-based) whose text came from on-device OCR. */
+  ocrPages?: number[];
+  /** Of the OCR pages, those below the confidence threshold. */
+  ocrLowConfidencePages?: number[];
+  /** Pages still without text. */
+  imageOnlyPages?: number[];
+  /** Pages whose own text layer was recovered through PDFium on the OCR path (not OCR). */
+  recoveredPages?: number[];
+  /** Display formulas read into LaTeX on this machine (set when math ran). */
+  mathFormulas?: number;
+  /** Those formulas by their check (corrections count as they checked): against the PDF's text, needing a look, or not fully checkable (scans, pictures, partly pictures). */
+  mathChecks?: { checked: number; needLook: number; unchecked: number };
+}
+
+export interface ExtractMathInfo {
+  model: string;
+  layoutModel: string;
+  /** Pages (0-based) the layout pass looked at. */
+  pages: number[];
+  formulas: number;
+  ms: number;
+  /** MATH_DECISION the file was read under; absent: one reading per box. */
+  decision?: number;
+}
+
+export interface ExtractOcrInfo {
+  model: string;
+  pages: number[];
+  lowConfidencePages: number[];
+  /** Pages whose own text layer the OCR call recovered through PDFium (not OCR). */
+  recoveredPages?: number[];
+  /** OCR_MERGE of the extraction; missing means 1, which dropped recovered text. */
+  merge?: number;
 }
 
 export interface ExtractManifest {
@@ -283,6 +316,18 @@ export interface ExtractManifest {
   extractedAt: string;
   sourceMtimeMs: number;
   sourceSize: number;
+  /** Pages (0-based) left without a text layer. */
+  imageOnlyPages?: number[];
+  /** Native page rule the PDF was extracted under (NATIVE_RULE); absent: 1. */
+  nativeRule?: number;
+  /** Set when on-device OCR ran for this file. */
+  ocr?: ExtractOcrInfo;
+  /** OCR was available but failed; the native text was kept. */
+  ocrError?: string;
+  /** Set when on-device math recognition ran (formulas in math.json). */
+  math?: ExtractMathInfo;
+  /** Math was available but failed; the text was kept. */
+  mathError?: string;
 }
 
 export interface FileTreeNode {

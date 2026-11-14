@@ -1,7 +1,7 @@
 {
   "name": "imstudium-monorepo",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ImStudium — extraction harness + study workspace for Stud.IP",
   "license": "MIT",
   "repository": {
@@ -22,10 +22,12 @@
     "docs": "bun scripts/gen-docs.ts",
     "docs:check": "bun scripts/gen-docs.ts --check",
     "docs:commands": "bun scripts/gen-docs.ts commands",
-    "docs:errors": "bun scripts/gen-docs.ts errors"
+    "docs:errors": "bun scripts/gen-docs.ts errors",
+    "bench": "turbo run build && node scripts/bench/run.ts"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
+    "katex": "^0.19.1",
     "turbo": "^2.11.10",
     "typescript": "^6.0.2",
     "vitest": "^4.1.12"

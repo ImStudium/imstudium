@@ -19,7 +19,7 @@ Shared flags mean the same everywhere: `-o, --output <dir>` is the Studium works
 - **Today and deadlines:** [`today`](#imstudium-today) · [`week`](#imstudium-week) · [`stundenplan`](#imstudium-stundenplan) · [`holidays`](#imstudium-holidays) · [`tasks`](#imstudium-tasks) · [`klausuren`](#imstudium-klausuren)
 - **What's new:** [`changes`](#imstudium-changes) · [`news`](#imstudium-news) · [`inbox`](#imstudium-inbox) · [`outbox`](#imstudium-outbox) · [`message`](#imstudium-message) · [`forum`](#imstudium-forum) · [`blubber`](#imstudium-blubber) · [`feed`](#imstudium-feed)
 - **Material and courses:** [`search`](#imstudium-search) · [`courseware`](#imstudium-courseware) · [`wiki`](#imstudium-wiki) · [`files`](#imstudium-files) · [`courses`](#imstudium-courses) · [`studium`](#imstudium-studium) · [`people`](#imstudium-people) · [`sprechstunden`](#imstudium-sprechstunden) · [`catalog`](#imstudium-catalog)
-- **Workspace and sync:** [`semester`](#imstudium-semester) · [`sync`](#imstudium-sync) · [`extract`](#imstudium-extract) · [`index`](#imstudium-index) · [`view`](#imstudium-view) · [`watch`](#imstudium-watch) · [`export`](#imstudium-export)
+- **Workspace and sync:** [`semester`](#imstudium-semester) · [`sync`](#imstudium-sync) · [`extract`](#imstudium-extract) · [`formulas`](#imstudium-formulas) · [`index`](#imstudium-index) · [`view`](#imstudium-view) · [`watch`](#imstudium-watch) · [`export`](#imstudium-export)
 - **Stud.IP API and contracts:** [`routes`](#imstudium-routes) · [`api`](#imstudium-api) · [`schema`](#imstudium-schema)
 - **Setup and health:** [`setup`](#imstudium-setup) · [`config`](#imstudium-config) · [`session`](#imstudium-session) · [`doctor`](#imstudium-doctor) · [`update`](#imstudium-update)
 - **Legacy:** [`module`](#imstudium-module) · [`semesters`](#imstudium-semesters) · [`discover`](#imstudium-discover)
@@ -804,7 +804,8 @@ imstudium semester <command> [options]
 | `current` | object \| null | The semester running now per Stud.IP; null offline |
 | `workspace` | object \| null |  |
 | `archive` | object[] |  |
-| `needsRollover` | boolean |  |
+| `enrolled`? | integer \| null | Your courses in the running semester on Stud.IP; null when signed out or offline |
+| `needsRollover` | boolean | A semester start is due: Stud.IP is on a newer semester you have courses in |
 | `next` | string |  |
 | `schemaVersion` | "1" |  |
 
@@ -822,6 +823,7 @@ imstudium semester start [options]
 | `--semester <label>` | Target semester (default: the one running now) |
 | `--extract` | Extract materials and build the search index after syncing |
 | `--dry-run` | Show what would move and download |
+| `--allow-empty` | Start the semester even when you have no courses in it on Stud.IP |
 
 **`--json`** — full JSON Schema: `imstudium schema semester start`
 
@@ -842,6 +844,7 @@ Shape 2 of 2:
 | `semester` | object |  |
 | `plan` | object |  |
 | `downloads` | integer |  |
+| `courses`? | integer | Your courses in the target semester |
 | `schemaVersion` | "1" |  |
 
 ### `imstudium sync`
@@ -862,6 +865,8 @@ imstudium sync [options]
 | `--dry-run` | List changes without downloading |
 | `--include <items>` | Comma-separated: calendar,wiki,news,forum,courseware,tasks (default: all) |
 | `--extract` | Extract new/changed files to markdown and rebuild the search index |
+| `--no-ocr` | With --extract: native text only, even when on-device OCR is installed |
+| `--no-math` | With --extract: no formula recognition, even when installed (setup ocr --math) |
 
 **`--json`** — full JSON Schema: `imstudium schema sync`
 
@@ -876,11 +881,12 @@ imstudium sync [options]
 | `semesters` | object[] |  |
 | `changes` | object[] |  |
 | `extracted`? | integer | Only with --extract |
+| `ocr`? | object | Only with --extract: pages read by on-device OCR |
 | `schemaVersion` | "1" |  |
 
 ### `imstudium extract`
 
-Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md; photos copied to pages/
+Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and photos once `setup ocr` ran
 
 ```
 imstudium extract [options]
@@ -893,8 +899,126 @@ Alias: `ingest`
 | `--course <name>` | Only one course (title fragment, shortcut, slug or id) |
 | `--file <path>` | Extract a single file to &lt;file&gt;-extracted/ |
 | `--no-images` | Don't copy photos into pages/ |
+| `--no-ocr` | Native text only, even when on-device OCR is installed (also: IMSTUDIUM_OCR=off) |
+| `--no-math` | No formula recognition, even when installed (also: IMSTUDIUM_MATH=off) |
 | `--force` | Re-extract even if unchanged |
 | `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema extract`
+
+| Key | Type | |
+|---|---|---|
+| `extracted` | integer |  |
+| `skipped` | integer |  |
+| `failed` | integer |  |
+| `hints` | string[] |  |
+| `ocr` | object |  |
+| `results` | object[] |  |
+| `searchIndex`? | any \| null |  |
+| `schemaVersion` | "1" |  |
+
+### `imstudium formulas`
+
+Formulas read from a file: each with its check against the PDF and its image; check or store a correction
+
+```
+imstudium formulas <command>
+```
+
+#### `imstudium formulas list`
+
+Every display formula of one extracted file, with its check against the PDF and the path of its image
+
+```
+imstudium formulas list <file> [options]
+```
+
+| Argument | |
+|---|---|
+| `<file>` | Extracted folder, its content.md, the original under files/, or a name fragment |
+
+| Option | |
+|---|---|
+| `--needs-look` | Only formulas that need a person: their check found a contradiction (a symbol the PDF has that the LaTeX lacks, an invented one, malformed LaTeX) or the readings disagreed; corrected ones left out |
+| `--unchecked` | Only formulas that can't be fully checked against the PDF: scans, pictures and partly pictures; corrected ones left out |
+| `--course <name>` | Search only this course for the name fragment |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema formulas list`
+
+| Key | Type | |
+|---|---|---|
+| `dir` | string | The extracted folder (content.md, math.json, formulas/) |
+| `source` | string | The original file |
+| `model` | string |  |
+| `layoutModel` | string |  |
+| `summary` | object |  |
+| `formulas` | object[] |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium formulas check`
+
+Check a reading of one formula against the PDF without storing it (letters and digits must match what the page has in that box)
+
+```
+imstudium formulas check <file> <id> [options]
+```
+
+| Argument | |
+|---|---|
+| `<file>` | Extracted folder, its content.md, the original, or a name fragment |
+| `<id>` | Formula id, e.g. p3-2 (imstudium formulas list) |
+
+| Option | |
+|---|---|
+| `--latex <latex>` | The LaTeX to check |
+| `--course <name>` | Search only this course for the name fragment |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema formulas check`
+
+| Key | Type | |
+|---|---|---|
+| `id` | string |  |
+| `latex` | string |  |
+| `modelLatex` | string |  |
+| `verdict` | object |  |
+| `why` | string \| null |  |
+| `accepted` | boolean | formulas fix would store it (check is not differs) |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium formulas fix`
+
+Store a correction of one formula, made from its image: refused unless it checks; content.md then shows it, marked as corrected
+
+```
+imstudium formulas fix <file> <id> [options]
+```
+
+| Argument | |
+|---|---|
+| `<file>` | Extracted folder, its content.md, the original, or a name fragment |
+| `<id>` | Formula id, e.g. p3-2 (imstudium formulas list) |
+
+| Option | |
+|---|---|
+| `--latex <latex>` | The corrected LaTeX: only what the image shows |
+| `--by <name>` | Who corrected it (the harness, e.g. claude-code or codex, or student) (default: `agent`) |
+| `--course <name>` | Search only this course for the name fragment |
+| `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
+
+**`--json`** — full JSON Schema: `imstudium schema formulas fix`
+
+| Key | Type | |
+|---|---|---|
+| `id` | string |  |
+| `latex` | string |  |
+| `modelLatex` | string |  |
+| `verdict` | object |  |
+| `by` | string |  |
+| `dir` | string |  |
+| `contentUpdated` | boolean | content.md now shows the correction |
+| `schemaVersion` | "1" |  |
 
 ### `imstudium index`
 
@@ -1076,6 +1200,33 @@ imstudium setup mcp [options]
 | `--force` | Rewrite MCP config even if identical |
 | `-o, --output <dir>` | Studium workspace path (default: config / IMSTUDIUM_WORKSPACE) |
 
+#### `imstudium setup ocr`
+
+Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified PDFium + ONNX Runtime + PP-OCRv6 (~60 MB, once)
+
+```
+imstudium setup ocr [options]
+```
+
+| Option | |
+|---|---|
+| `--math` | Opt in to reading display formulas as LaTeX (PP-DocLayoutV2 + UniRec-0.1B, ~1 GB once). Model readings: nearly all exact on the benchmark's lecture slides, each checked against the PDF and marked when it needs a look |
+| `--force` | Download and verify everything again, models included |
+| `--remove` | Delete the runtime and models (with --math: only the math part) |
+
+**`--json`** — full JSON Schema: `imstudium schema setup ocr`
+
+| Key | Type | |
+|---|---|---|
+| `action` | "installed" \| "unchanged" \| "removed" \| "absent" | installed: something was fetched · unchanged: all in place · removed / absent: --remove |
+| `runtime` | object |  |
+| `installed` | string[] | Pieces fetched in this run: PDFium, ONNX Runtime, models, and with --math the binding, renderer and math models |
+| `skipped` | string[] | Pieces already in place |
+| `downloadedBytes` | integer |  |
+| `diskBytes` | integer | Size on disk after the run (freed bytes with --remove) |
+| `durationMs` | integer |  |
+| `schemaVersion` | "1" |  |
+
 #### `imstudium setup migrate`
 
 Migrate DigiCampus config/skills/MCP to ImStudium (idempotent)
@@ -1145,7 +1296,7 @@ imstudium session <command>
 
 #### `imstudium session import`
 
-Store a Seminar_Session cookie (from --cookie or a Netscape cookie file)
+Store a Stud.IP session cookie (Studip_Session or Seminar_Session; from --cookie or a Netscape cookie file)
 
 ```
 imstudium session import [options]
@@ -1153,7 +1304,7 @@ imstudium session import [options]
 
 | Option | |
 |---|---|
-| `--cookie <value>` | Seminar_Session cookie value |
+| `--cookie <value>` | Session cookie value (checked against Stud.IP to find its name) |
 | `--file <path>` | Netscape cookie file |
 
 ### `imstudium doctor`

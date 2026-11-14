@@ -17,6 +17,25 @@ export function semesterSyncOptions(sdk: Sdk, opts: { semester?: string; allSeme
   return {};
 }
 
+/**
+ * The semester a sync of an existing workspace targets. Flags and a pinned config
+ * win; otherwise the semester the workspace is already on. Moving to a new semester
+ * is `imstudium semester start`'s job (it archives the old folder first) — a daily
+ * sync must never quietly re-point studium.json at a semester the workspace isn't on.
+ * Only a workspace without studium.json follows the calendar.
+ */
+export async function workspaceSyncOptions(
+  sdk: Sdk,
+  out: string,
+  opts: { semester?: string; allSemesters?: boolean },
+): Promise<ReturnType<typeof semesterSyncOptions>> {
+  const explicit = semesterSyncOptions(sdk, opts);
+  if (Object.keys(explicit).length) return explicit;
+  const ws = await sdk.studium.loadWorkspace(out);
+  const id = ws?.activeSemester?.id;
+  return id ? { semesterId: id } : {};
+}
+
 /** studium.json of the workspace, or WORKSPACE_MISSING. */
 export async function requireWorkspace(sdk: Sdk, dir: string): Promise<StudiumWorkspace> {
   const ws = await sdk.studium.loadWorkspace(dir);
@@ -70,7 +89,7 @@ export function registerWorkspace(program: Command): void {
           await runLogin(sdk, { chromeProfile: opts.chromeProfile });
         }
         await sdk.saveConfig({ workspacePath: out });
-        const result = await runSync(sdk, { out, ...semesterSyncOptions(sdk, {}), extract: opts.extract, onProgress: note });
+        const result = await runSync(sdk, { out, ...(await workspaceSyncOptions(sdk, out, {})), extract: opts.extract, onProgress: note });
         const workspace = result.workspace!;
         const { files: _files, ...report } = result.report;
         output(

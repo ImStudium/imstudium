@@ -8,21 +8,25 @@ import {
   buildSlideViewer,
   expandPath,
   extractSlug,
+  findCurrentSemester,
   ImstudiumError,
   rebuildSearchIndexes,
   resolveCourseDir,
+  semesterSlug,
+  summarizeOcr,
   toImstudiumError,
   toolHints,
   type SyncPart,
   type StudiumWorkspace,
 } from "@imstudium/sdk";
-import type { SyncOutput } from "@imstudium/contract";
+import type { ExtractOutput, SyncOutput } from "@imstudium/contract";
 import { runSync } from "../pipeline.js";
-import { act, getSdk, globalOpts, note, output } from "../runtime.js";
+import { act, getSdk, globalOpts, note, output, type Sdk } from "../runtime.js";
 import { workspaceCourse } from "../course-arg.js";
 import { courseOption, outputOption, parseDuration, workspaceDir } from "../kit/args.js";
 import { nowStamp } from "../kit/format.js";
-import { requireWorkspace, semesterSyncOptions } from "./workspace.js";
+import { requireWorkspace, workspaceSyncOptions } from "./workspace.js";
+import { ocrSummaryLine } from "../ocr.js";
 
 const SYNC_PARTS: SyncPart[] = ["calendar", "wiki", "news", "forum", "courseware", "tasks"];
 
@@ -56,21 +60,26 @@ export function registerSync(program: Command): void {
     .option("--dry-run", "List changes without downloading")
     .option("--include <items>", `Comma-separated: ${SYNC_PARTS.join(",")} (default: all)`)
     .option("--extract", "Extract new/changed files to markdown and rebuild the search index")
+    .option("--no-ocr", "With --extract: native text only, even when on-device OCR is installed")
+    .option("--no-math", "With --extract: no formula recognition, even when installed (setup ocr --math)")
     .action(
-      act(async (opts: { output?: string; course?: string; semester?: string; layout?: string; dryRun?: boolean; include?: string; extract?: boolean; allSemesters?: boolean }) => {
+      act(async (opts: { output?: string; course?: string; semester?: string; layout?: string; dryRun?: boolean; include?: string; extract?: boolean; ocr?: boolean; math?: boolean; allSemesters?: boolean }) => {
         const sdk = await getSdk();
         const out = workspaceDir(sdk, opts);
         if (opts.layout && opts.layout !== "tree" && opts.layout !== "flat") {
           throw new ImstudiumError(`--layout must be tree or flat, got "${opts.layout}"`, "BAD_ARGS");
         }
+        const semOpts = await workspaceSyncOptions(sdk, out, opts);
         const result = await runSync(sdk, {
           out,
-          ...semesterSyncOptions(sdk, opts),
+          ...semOpts,
           course: opts.course,
           layout: (opts.layout as "flat" | "tree") || "tree",
           dryRun: opts.dryRun,
           include: parseInclude(opts.include),
           extract: opts.extract,
+          ocr: opts.ocr,
+          math: opts.math,
           onProgress: note,
         });
         const { report } = result;
@@ -80,11 +89,20 @@ export function registerSync(program: Command): void {
         const lines = [
           `Sync: ${report.downloaded} downloaded (${fresh} new, ${updated} updated), ${report.skipped} unchanged, ${report.failed} failed${opts.extract ? `, ${result.extracted} extracted` : ""}`,
           where ? `      ${where}` : "",
+          opts.extract && ocrSummaryLine(result.ocr) ? `      ${ocrSummaryLine(result.ocr)}` : "",
+          await newerSemesterHint(sdk, result.workspace?.activeSemester?.slug),
           ...(report.courseErrors ?? []).map((e) => `      ⚠ ${e.courseTitle}: ${e.message}`),
+          ...failedFiles(report).map((f) => `      ✗ ${f.courseTitle ?? ""} · ${f.name ?? f.path}: ${f.message}`),
           result.changes.length ? "      What's new: imstudium changes · NEW.md" : "",
         ];
         const { files: _files, ...counts } = report;
-        const payload: SyncOutput = { ...counts, semesters: result.semesters, changes: result.changes, extracted: opts.extract ? result.extracted : undefined };
+        const payload: SyncOutput = {
+          ...counts,
+          semesters: result.semesters,
+          changes: result.changes,
+          extracted: opts.extract ? result.extracted : undefined,
+          ocr: opts.extract ? result.ocr : undefined,
+        };
         output(payload, lines.filter(Boolean).join("\n"));
       }),
     );
@@ -92,22 +110,25 @@ export function registerSync(program: Command): void {
   program
     .command("extract")
     .alias("ingest")
-    .description("Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md; photos copied to pages/")
+    .description("Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and photos once `setup ocr` ran")
     .addOption(courseOption("Only one course (title fragment, shortcut, slug or id)"))
     .option("--file <path>", "Extract a single file to <file>-extracted/")
     .option("--no-images", "Don't copy photos into pages/")
+    .option("--no-ocr", "Native text only, even when on-device OCR is installed (also: IMSTUDIUM_OCR=off)")
+    .option("--no-math", "No formula recognition, even when installed (also: IMSTUDIUM_MATH=off)")
     .option("--force", "Re-extract even if unchanged")
     .addOption(outputOption())
     .action(
-      act(async (opts: { course?: string; file?: string; images?: boolean; force?: boolean; output?: string }) => {
+      act(async (opts: { course?: string; file?: string; images?: boolean; ocr?: boolean; math?: boolean; force?: boolean; output?: string }) => {
         const sdk = await getSdk();
-        const extractOpts = { images: opts.images, force: opts.force };
+        const extractOpts = { images: opts.images, force: opts.force, ocr: opts.ocr, math: opts.math };
 
         if (opts.file) {
           const src = expandPath(opts.file);
           const outDir = src.replace(/\.[^.]+$/, "") + "-extracted";
           const result = await sdk.extractor.extractFile(src, outDir, extractOpts);
-          output(result, `Extracted ${result.pages} page(s) → ${result.outDir}${result.hint ? `\nHint: ${result.hint}` : ""}`);
+          const ocr = ocrSummaryLine(summarizeOcr([result]));
+          output(result, `Extracted ${result.pages} page(s) → ${result.outDir}${ocr ? `\n${ocr}` : ""}${result.error ? `\nError: ${result.error}` : ""}${result.hint ? `\nHint: ${result.hint}` : ""}`);
           return;
         }
 
@@ -137,9 +158,12 @@ export function registerSync(program: Command): void {
         const skipped = results.filter((r) => r.skipped).length;
         const failed = results.filter((r) => r.error).length;
         const hints = toolHints(tools);
+        const ocr = summarizeOcr(results);
+        const ocrLine = ocrSummaryLine(ocr);
+        const payload: ExtractOutput = { extracted: done, skipped, failed, hints, ocr, results, searchIndex };
         output(
-          { extracted: done, skipped, failed, hints, results, searchIndex },
-          `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}${hints.length ? `\n${hints.join("\n")}` : ""}`,
+          payload,
+          `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}${ocrLine ? `\n${ocrLine}` : ""}${hints.length ? `\n${hints.join("\n")}` : ""}`,
         );
       }),
     );
@@ -251,11 +275,11 @@ export function registerSync(program: Command): void {
         const sdk = await getSdk();
         const out = workspaceDir(sdk, opts);
         note(`Watching every ${opts.interval} → ${out} (Ctrl+C to stop)`);
-        const semOpts = semesterSyncOptions(sdk, {});
         for (;;) {
           try {
             // Same pipeline as sync: files, news, forum, courseware, wiki, Abgaben, change log, NEW.md.
-            const result = await runSync(sdk, { out, ...semOpts, extract: true });
+            // The workspace's own semester, re-read each round (a semester start may have moved it).
+            const result = await runSync(sdk, { out, ...(await workspaceSyncOptions(sdk, out, {})), extract: true });
             const round = { at: new Date().toISOString(), changes: result.changes, downloaded: result.report.downloaded, failed: result.report.failed };
             if (globalOpts.json) console.log(JSON.stringify({ schemaVersion: "1", ...round }));
             else if (!globalOpts.quiet) {
@@ -271,4 +295,25 @@ export function registerSync(program: Command): void {
         }
       }),
     );
+}
+
+/** One line when Stud.IP has moved on to a semester the workspace isn't on yet (cached /semesters; silent offline). */
+async function newerSemesterHint(sdk: Sdk, workspaceSlug: string | undefined): Promise<string> {
+  if (!workspaceSlug) return "";
+  try {
+    const now = findCurrentSemester(await sdk.courses.semesters.listAll());
+    const title = now ? String(now.attributes?.title ?? "") : "";
+    if (!title || semesterSlug(title) === workspaceSlug) return "";
+    return `      Stud.IP is in ${title} now; this workspace stays on its semester. See: imstudium semester`;
+  } catch {
+    return "";
+  }
+}
+
+/** Files that failed to download, with Stud.IP's reason — so "1 failed" names the file. */
+function failedFiles(report: { files?: Array<{ fileRefId: string; action: string; path: string; name?: string; courseTitle?: string }>; errors?: Array<{ fileRefId: string; message: string }> }) {
+  const why = new Map((report.errors ?? []).map((e) => [e.fileRefId, e.message]));
+  return (report.files ?? [])
+    .filter((f) => f.action === "fail")
+    .map((f) => ({ ...f, message: why.get(f.fileRefId) ?? "download failed" }));
 }

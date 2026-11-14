@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { getCliVersion } from "./version.js";
@@ -56,8 +56,8 @@ export const AGENT_REGISTRY: AgentProfile[] = [
     id: "claude-code",
     label: "Claude Code",
     detect: () =>
-      existsSync(join(homedir(), ".claude")) || Boolean(process.env.CLAUDE_CODE),
-    skillsDir: () => join(homedir(), ".claude", "skills"),
+      existsSync(claudeConfigDir()) || Boolean(process.env.CLAUDE_CODE),
+    skillsDir: () => join(claudeConfigDir(), "skills"),
     mcpFiles: () => [join(homedir(), ".claude.json")],
     mcpStyle: "claude-cli",
   },
@@ -69,7 +69,7 @@ export const AGENT_REGISTRY: AgentProfile[] = [
       const dir = join(cfg, "..");
       return existsSync(cfg) || existsSync(dir);
     },
-    skillsDir: () => join(homedir(), ".claude", "skills"),
+    skillsDir: () => join(claudeConfigDir(), "skills"),
     mcpFiles: () => [claudeDesktopConfigPath()],
     mcpStyle: "json",
   },
@@ -78,7 +78,7 @@ export const AGENT_REGISTRY: AgentProfile[] = [
     label: "OpenAI Codex",
     detect: () => existsSync(join(homedir(), ".codex")) || Boolean(process.env.CODEX_HOME),
     skillsDir: () => join(homedir(), ".codex", "skills"),
-    mcpFiles: () => [join(process.env.CODEX_HOME || join(homedir(), ".codex"), "config.toml")],
+    mcpFiles: () => [codexConfigFile()],
     mcpStyle: "codex-toml",
   },
   {
@@ -132,6 +132,88 @@ export function uniqueSkillsDirs(agents: AgentProfile[]): Map<string, AgentProfi
     map.set(dir, list);
   }
   return map;
+}
+
+/** Where Claude Code keeps its state (CLAUDE_CONFIG_DIR moves it). */
+export function claudeConfigDir(): string {
+  return process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+}
+
+function codexConfigFile(): string {
+  return join(process.env.CODEX_HOME || join(homedir(), ".codex"), "config.toml");
+}
+
+/** The imstudium agent plugin as one harness has it installed and enabled. */
+export interface PluginInstall {
+  agent: AgentId;
+  /** `imstudium@<marketplace>` */
+  key: string;
+  /** The file that says so. */
+  file: string;
+}
+
+const PLUGIN_KEY = /^imstudium@[^"\s]+$/;
+
+function readJson(file: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(readFileSync(file, "utf-8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Claude Code: a key `imstudium@…` under `plugins` in plugins/installed_plugins.json,
+ * not switched off in settings.json `enabledPlugins`.
+ */
+function claudePlugin(agent: AgentId): PluginInstall | null {
+  const dir = claudeConfigDir();
+  const file = join(dir, "plugins", "installed_plugins.json");
+  const installed = readJson(file)?.plugins;
+  if (!installed || typeof installed !== "object") return null;
+  const key = Object.keys(installed).find((k) => PLUGIN_KEY.test(k));
+  if (!key) return null;
+  const enabled = readJson(join(dir, "settings.json"))?.enabledPlugins as Record<string, unknown> | undefined;
+  if (enabled && enabled[key] === false) return null;
+  return { agent, key, file };
+}
+
+/** Codex: a `[plugins."imstudium@…"]` table in $CODEX_HOME/config.toml without `enabled = false`. */
+export function codexPluginFromToml(toml: string): string | null {
+  const lines = toml.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*\[plugins\.(?:"([^"]+)"|'([^']+)')\]\s*(?:#.*)?$/.exec(lines[i]!);
+    const key = m ? (m[1] ?? m[2])! : null;
+    if (!key || !PLUGIN_KEY.test(key)) continue;
+    let enabled = true;
+    for (let j = i + 1; j < lines.length && !/^\s*\[/.test(lines[j]!); j++) {
+      if (/^\s*enabled\s*=\s*false\b/.test(lines[j]!)) enabled = false;
+    }
+    if (enabled) return key;
+  }
+  return null;
+}
+
+function codexPlugin(): PluginInstall | null {
+  const file = codexConfigFile();
+  let toml: string;
+  try {
+    toml = readFileSync(file, "utf-8");
+  } catch {
+    return null;
+  }
+  const key = codexPluginFromToml(toml);
+  return key ? { agent: "codex", key, file } : null;
+}
+
+/**
+ * The installed imstudium plugin for a harness, or null. Claude Desktop's Code
+ * tab runs Claude Code and shares ~/.claude, so the Claude Code plugin covers it.
+ */
+export function installedPlugin(id: AgentId): PluginInstall | null {
+  if (id === "claude-code" || id === "claude-desktop") return claudePlugin(id);
+  if (id === "codex") return codexPlugin();
+  return null;
 }
 
 export function hashContent(content: string): string {

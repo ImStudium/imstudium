@@ -69,7 +69,11 @@ Commands:
   sync [options]                                 Sync files and rebuild the Studium workspace
                                                  (current semester by default)
   extract|ingest [options]                       Local ingest: pdf-inspector (PDF) + AnyDoc (Office)
-                                                 → content.md; photos copied to pages/
+                                                 → content.md, with on-device OCR for scans and
+                                                 photos once `setup ocr` ran
+  formulas                                       Formulas read from a file: each with its check
+                                                 against the PDF and its image; check or store a
+                                                 correction
   index [options]                                Build/rebuild page index (corpus.jsonl) — for agent
                                                  grep / semantic search, not a custom search engine
   view [options]                                 Build viewer.html for slide PNGs — fast path for
@@ -582,6 +586,7 @@ Options:
   --semester <label>  Target semester (default: the one running now)
   --extract           Extract materials and build the search index after syncing
   --dry-run           Show what would move and download
+  --allow-empty       Start the semester even when you have no courses in it on Stud.IP
   -h, --help          display help for command
 
 ### imstudium sync
@@ -598,18 +603,96 @@ Options:
   --dry-run           List changes without downloading
   --include <items>   Comma-separated: calendar,wiki,news,forum,courseware,tasks (default: all)
   --extract           Extract new/changed files to markdown and rebuild the search index
+  --no-ocr            With --extract: native text only, even when on-device OCR is installed
+  --no-math           With --extract: no formula recognition, even when installed (setup ocr --math)
   -h, --help          display help for command
 
 ### imstudium extract
 Usage: imstudium extract|ingest [options]
 
-Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md; photos copied to pages/
+Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and
+photos once `setup ocr` ran
 
 Options:
   --course <name>     Only one course (title fragment, shortcut, slug or id)
   --file <path>       Extract a single file to <file>-extracted/
   --no-images         Don't copy photos into pages/
+  --no-ocr            Native text only, even when on-device OCR is installed (also:
+                      IMSTUDIUM_OCR=off)
+  --no-math           No formula recognition, even when installed (also: IMSTUDIUM_MATH=off)
   --force             Re-extract even if unchanged
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium formulas
+Usage: imstudium formulas [options] [command]
+
+Formulas read from a file: each with its check against the PDF and its image; check or store a
+correction
+
+Options:
+  -h, --help                   display help for command
+
+Commands:
+  list [options] <file>        Every display formula of one extracted file, with its check against
+                               the PDF and the path of its image
+  check [options] <file> <id>  Check a reading of one formula against the PDF without storing it
+                               (letters and digits must match what the page has in that box)
+  fix [options] <file> <id>    Store a correction of one formula, made from its image: refused
+                               unless it checks; content.md then shows it, marked as corrected
+  help [command]               display help for command
+
+### imstudium formulas list
+Usage: imstudium formulas list [options] <file>
+
+Every display formula of one extracted file, with its check against the PDF and the path of its
+image
+
+Arguments:
+  file                Extracted folder, its content.md, the original under files/, or a name
+                      fragment
+
+Options:
+  --needs-look        Only formulas that need a person: their check found a contradiction (a symbol
+                      the PDF has that the LaTeX lacks, an invented one, malformed LaTeX) or the
+                      readings disagreed; corrected ones left out
+  --unchecked         Only formulas that can't be fully checked against the PDF: scans, pictures and
+                      partly pictures; corrected ones left out
+  --course <name>     Search only this course for the name fragment
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium formulas check
+Usage: imstudium formulas check [options] <file> <id>
+
+Check a reading of one formula against the PDF without storing it (letters and digits must match
+what the page has in that box)
+
+Arguments:
+  file                Extracted folder, its content.md, the original, or a name fragment
+  id                  Formula id, e.g. p3-2 (imstudium formulas list)
+
+Options:
+  --latex <latex>     The LaTeX to check
+  --course <name>     Search only this course for the name fragment
+  -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
+  -h, --help          display help for command
+
+### imstudium formulas fix
+Usage: imstudium formulas fix [options] <file> <id>
+
+Store a correction of one formula, made from its image: refused unless it checks; content.md then
+shows it, marked as corrected
+
+Arguments:
+  file                Extracted folder, its content.md, the original, or a name fragment
+  id                  Formula id, e.g. p3-2 (imstudium formulas list)
+
+Options:
+  --latex <latex>     The corrected LaTeX: only what the image shows
+  --by <name>         Who corrected it (the harness, e.g. claude-code or codex, or student)
+                      (default: "agent")
+  --course <name>     Search only this course for the name fragment
   -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
   -h, --help          display help for command
 
@@ -726,6 +809,8 @@ Commands:
   skills [options]     Install or refresh the bundled agent skills
   workflows [options]  Install or refresh agent workflows / slash commands
   mcp [options]        Register the imstudium MCP server with your agents (opt-in)
+  ocr [options]        Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified
+                       PDFium + ONNX Runtime + PP-OCRv6 (~60 MB, once)
   migrate [options]    Migrate DigiCampus config/skills/MCP to ImStudium (idempotent)
   all [options]        Skills + workflows (idempotent — skips unchanged). MCP is opt-in: setup mcp
   help [command]       display help for command
@@ -772,6 +857,20 @@ Options:
   --force             Rewrite MCP config even if identical
   -o, --output <dir>  Studium workspace path (default: config / IMSTUDIUM_WORKSPACE)
   -h, --help          display help for command
+
+### imstudium setup ocr
+Usage: imstudium setup ocr [options]
+
+Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified PDFium + ONNX Runtime +
+PP-OCRv6 (~60 MB, once)
+
+Options:
+  --math      Opt in to reading display formulas as LaTeX (PP-DocLayoutV2 + UniRec-0.1B, ~1 GB
+              once). Model readings: nearly all exact on the benchmark's lecture slides, each
+              checked against the PDF and marked when it needs a look
+  --force     Download and verify everything again, models included
+  --remove    Delete the runtime and models (with --math: only the math part)
+  -h, --help  display help for command
 
 ### imstudium setup migrate
 Usage: imstudium setup migrate [options]
@@ -835,16 +934,18 @@ Options:
   -h, --help        display help for command
 
 Commands:
-  import [options]  Store a Seminar_Session cookie (from --cookie or a Netscape cookie file)
+  import [options]  Store a Stud.IP session cookie (Studip_Session or Seminar_Session; from --cookie
+                    or a Netscape cookie file)
   help [command]    display help for command
 
 ### imstudium session import
 Usage: imstudium session import [options]
 
-Store a Seminar_Session cookie (from --cookie or a Netscape cookie file)
+Store a Stud.IP session cookie (Studip_Session or Seminar_Session; from --cookie or a Netscape
+cookie file)
 
 Options:
-  --cookie <value>  Seminar_Session cookie value
+  --cookie <value>  Session cookie value (checked against Stud.IP to find its name)
   --file <path>     Netscape cookie file
   -h, --help        display help for command
 

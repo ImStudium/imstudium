@@ -2,7 +2,9 @@ import type { Command } from "commander";
 import { join } from "node:path";
 import {
   ImstudiumError,
+  mergeLiveAndSavedNews,
   parseActivityTypes,
+  readSavedNews,
   selectNews,
   toMs,
   writeNewsMarkdown,
@@ -74,7 +76,12 @@ export function registerCommunication(program: Command): void {
           }
         }
 
-        const all: NewsItem[] = fetched.flatMap((f) => f.value);
+        // Stud.IP drops an announcement when its publication ends; the workspace keeps it.
+        const all: NewsItem[] = [];
+        for (const { course, value } of fetched) {
+          const kept = course.dir || query ? await readSavedNews(join(courseDir(course, sdk.workspacePath), "news"), { courseTitle: course.title, courseId: course.id }) : [];
+          all.push(...mergeLiveAndSavedNews(value, kept));
+        }
         const news = selectNews(all, { since, limit });
         const payload: NewsOutput = {
           scope: query ? "course" : "courses",

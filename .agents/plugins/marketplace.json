@@ -1,0 +1,20 @@
+{
+  "name": "imstudium",
+  "interface": {
+    "displayName": "ImStudium"
+  },
+  "plugins": [
+    {
+      "name": "imstudium",
+      "source": {
+        "source": "local",
+        "path": "./plugins/imstudium"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Education"
+    }
+  ]
+}

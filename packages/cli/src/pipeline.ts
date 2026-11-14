@@ -6,12 +6,14 @@ import {
   rebuildSearchIndexes,
   semesterIdFromRelationships,
   semesterSlug,
+  summarizeOcr,
   syncCommunication,
   syncContent,
   syncPlanning,
   contentDeps,
   type ContentPart,
   type CwTask,
+  type OcrSummary,
   type SyncPart,
   type CourseWithSemester,
   type SemesterResource,
@@ -32,6 +34,10 @@ export interface RunSyncOptions {
   layout?: "flat" | "tree";
   dryRun?: boolean;
   extract?: boolean;
+  /** false: native text only, even with the OCR runtime installed (sync --no-ocr). */
+  ocr?: boolean;
+  /** false: no formula recognition (sync --no-math). */
+  math?: boolean;
   include?: SyncPart[];
   onProgress?: (message: string) => void;
 }
@@ -63,6 +69,8 @@ export interface RunSyncResult {
   /** The current-semester workspace (studium.json) when it was rebuilt. */
   workspace?: StudiumWorkspace;
   extracted: number;
+  /** OCR totals of this run's extraction. */
+  ocr: OcrSummary;
   changes: ChangeEntry[];
 }
 
@@ -117,7 +125,7 @@ export function groupCoursesBySemester(
  */
 export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncResult> {
   const progress = opts.onProgress ?? (() => undefined);
-  const result: RunSyncResult = { report: emptyReport(), semesters: [], extracted: 0, changes: [], tasks: [] };
+  const result: RunSyncResult = { report: emptyReport(), semesters: [], extracted: 0, ocr: summarizeOcr([]), changes: [], tasks: [] };
   const include = opts.include ?? DEFAULT_INCLUDE;
   const layout = opts.layout ?? "tree";
   const origin = sdk.config.instanceOrigin;
@@ -302,8 +310,22 @@ async function extractAndIndex(
     const results = await sdk.extractor.extractDir(join(courseDir, "files"), join(courseDir, "extracted"), {
       course: { title: course.title, path: course.path },
       workspaceRoot: opts.out,
+      ocr: opts.ocr,
+      math: opts.math,
     });
     result.extracted += results.filter((r) => !r.error && !r.skipped).length;
+    const ocr = summarizeOcr(results);
+    result.ocr = {
+      files: result.ocr.files + ocr.files,
+      pages: result.ocr.pages + ocr.pages,
+      lowConfidencePages: result.ocr.lowConfidencePages + ocr.lowConfidencePages,
+      imageOnlyPages: result.ocr.imageOnlyPages + ocr.imageOnlyPages,
+      recoveredPages: result.ocr.recoveredPages + ocr.recoveredPages,
+      formulas: result.ocr.formulas + ocr.formulas,
+      formulasChecked: result.ocr.formulasChecked + ocr.formulasChecked,
+      formulasNeedLook: result.ocr.formulasNeedLook + ocr.formulasNeedLook,
+      formulasUnchecked: result.ocr.formulasUnchecked + ocr.formulasUnchecked,
+    };
   }
   await rebuildSearchIndexes(opts.out, ws);
   if (ws.activeSemester.isCurrent !== false) await sdk.studium.refreshSearchArtifacts(opts.out, ws);
