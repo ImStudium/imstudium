@@ -148,8 +148,8 @@ After installing, the next `sync --extract` reads the scanned pages it skipped b
 What to expect ([docs/BENCHMARKS.md](docs/BENCHMARKS.md), reproducible with `bun run bench`):
 
 - Synthetic prose scans come back almost character-perfect, and slide scans keep about 98 % of their words.
-- Display formulas come back exactly as typeset on the benchmark's clean pages, and on its synthetic Beamer slides, formulas inside bullets included, 143 of 144 do. Real lecture slides are harder.
-- On born-digital pages every formula is checked against the PDF's own letters, digits, accents, bars and, where the font names it, bold. The ones that fail are marked, and so are readings that came out differently at a lower resolution.
+- Display formulas come back exactly as typeset on the benchmark's clean pages, and on its synthetic Beamer slides, formulas inside bullets included, all 144 do. Real lecture slides are harder.
+- On born-digital pages every formula is checked against the PDF's own letters, digits, accents and bars, whatever their font. The ones that fail are marked, and so are readings that came out differently at a lower resolution. Formulas the PDF has as pictures, like those on scans, are unchecked.
 - An agent following the `imstudium-visual` skill looks at each formula's image and corrects the rest. On the six benchmark Beamer decks it left none wrong in meaning and invented nothing.
 
 Formula recognition finds display formulas only: math inside a sentence stays plain text with garbled sub- and superscripts. Recognised LaTeX can still be wrong where the check can't see it (an exponent's place, a scanned page), so check formulas and diagrams against the original in `files/`; `math.json` gives each formula's page, box and check, and `formulas/<id>.png` its image.

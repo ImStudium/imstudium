@@ -29,12 +29,12 @@ Everything is extracted on the student's machine. The header line says what ran 
 | PPTX / DOCX | AnyDoc native conversion |
 | `.tex` source files | LaTeX passthrough as-is |
 
-The `$$…$$` blocks are model output. On the benchmark's synthetic Beamer slides nearly all come back exactly right, and real slides are harder. A wrong reading can draw a bar over the whole formula from a Beamer block's frame, misread an index (`\sum_{n}` for `\sum_{x}`), set a plain letter in bold or drop a bold one, or, on a scan, invent a whole line. Every reading is checked on the machine, and the note under a formula says what the check found:
+The `$$…$$` blocks are model output. On the benchmark's synthetic Beamer slides nearly all come back exactly right, and real slides are harder. A wrong reading can draw a bar over the whole formula from a Beamer block's frame, misread an index (`\sum_{n}` for `\sum_{x}`), or, on a scan, invent a whole line. Bold or another font for a letter (`\mathbf{x}` for x) is a difference in look and is not marked: set it as the image shows. Every reading is checked on the machine, and the note under a formula says what the check found:
 
 | Note under the formula | Meaning |
 |---|---|
-| none | Well-formed, and every letter and digit is one the PDF has in that box. Positions (exponent or index, numerator or denominator) are not compared, and bold only where the PDF's font says it (not in Beamer's sans-serif math) |
-| `_(formula p3-2 needs a look: …)_` | Malformed, letters, digits or bold differ from the PDF, or the model read the box differently at lower resolution: the note says which, and names the other reading |
+| none | Well-formed, and every letter and digit is one the PDF has in that box. Positions (exponent or index, numerator or denominator) and fonts (bold, sans-serif) are not compared |
+| `_(formula p3-2 needs a look: …)_` | Malformed, letters or digits differ from the PDF, or the model read the box differently at lower resolution: the note says which, and names the other reading |
 | `_(formula p3-2 unchecked: …)_` | Scanned page or picture: nothing to compare with, only the image can tell |
 | `_(formula p3-2 corrected by … from its image …)_` | An agent or the student corrected it from the image, and the correction checks |
 

@@ -64,7 +64,7 @@ async function resolveExtracted(sdk: Sdk, target: string, opts: { course?: strin
 }
 
 function item(x: ExtractedFormulas, f: FormulaEntry): FormulasListOutput["formulas"][number] {
-  const verdict = f.corrected?.verdict ?? { issues: f.issues, glyphs: f.glyphs, check: f.check };
+  const verdict = f.corrected?.verdict ?? { issues: f.issues, glyphs: f.glyphs, check: f.check, ...(f.picture ? { picture: true as const } : {}) };
   return {
     id: f.id,
     page: f.page + 1,
@@ -152,7 +152,7 @@ export function registerFormulas(program: Command): void {
           verdict.check === "match"
             ? `${id}: checks. Every letter and digit matches the PDF (positions are not compared: compare the image).`
             : verdict.check === "unchecked"
-              ? `${id}: well-formed; the page has no text to compare with, so only the image can tell.`
+              ? `${id}: well-formed; ${verdict.picture ? "the formula is a picture in the PDF" : "the page has no text to compare with"}, so only the image can tell.`
               : `${id}: doesn't check: ${payload.why}`;
         output(payload, head);
       }),
@@ -183,7 +183,7 @@ export function registerFormulas(program: Command): void {
         };
         output(
           payload,
-          `${id} corrected${verdict.check === "match" ? " (letters and digits match the PDF)" : " (no text on the page to compare with)"}; ${contentUpdated ? "content.md shows it" : "content.md not changed (formula block not found)"}. Search sees it after: imstudium index`,
+          `${id} corrected${verdict.check === "match" ? " (letters and digits match the PDF)" : verdict.picture ? " (the formula is a picture in the PDF)" : " (no text on the page to compare with)"}; ${contentUpdated ? "content.md shows it" : "content.md not changed (formula block not found)"}. Search sees it after: imstudium index`,
         );
       }),
     );

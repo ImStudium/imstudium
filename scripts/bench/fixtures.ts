@@ -8,7 +8,9 @@
  *                    blurred and tilted, wrapped one image per page (no text)
  *
  * Sets: prose (A4 lecture-script pages), slides (16:9, bullets, a table and a
- * box-and-arrow diagram), formulas (A4 pages with display formulas). The
+ * box-and-arrow diagram), formulas (A4 pages with display formulas),
+ * picture-formulas (16:9 slides whose formulas are pasted-in pictures next
+ * to real slide text, the way PowerPoint decks often have them). The
  * ground truth (truth.json) is the text Chromium laid out, read back from the
  * DOM, and the LaTeX source of every formula.
  */
@@ -84,6 +86,20 @@ const FORMULAS = [
   "\\int_0^1 x^2\\,dx = \\frac{1}{3}",
 ];
 
+/** Formulas of the picture-formulas slides: each pasted in as an image, two per slide. */
+const PICTURE_FORMULAS = [
+  "\\operatorname{conf}(X \\to Y) = \\frac{s(X \\cup Y)}{s(X)}",
+  "\\operatorname{lift}(X \\to Y) = \\frac{p(Y \\mid X)}{p(Y)}",
+  "H(X) = -\\sum_{i=1}^{n} p_i \\log_2 p_i",
+  "\\operatorname{Gini}(D) = 1 - \\sum_{k=1}^{K} p_k^2",
+  "\\sigma(z) = \\frac{1}{1 + e^{-z}}",
+  "d(x, y) = \\sqrt{\\sum_{i=1}^{n} (x_i - y_i)^2}",
+  "w_{t+1} = w_t - \\eta \\, \\nabla L(w_t)",
+  "F_1 = \\frac{2 \\, P \\, R}{P + R}",
+];
+/** Typeset as text on the last picture slide, so one slide mixes both. */
+const TYPESET_ON_PICTURE_SLIDE = "P = \\frac{TP}{TP + FP}";
+
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 function generator(seed: number) {
@@ -108,6 +124,7 @@ const PAGE_CSS = (w: number, h: number, scan: boolean) => `
   .row { display: flex; gap: 40px; align-items: flex-start }
   table { border-collapse: collapse; font-size: 20px } td, th { border: 1.5px solid #333; padding: 6px 14px } th { background: ${scan ? "#ddd" : "#e8eef7"} }
   .formula { margin: 18px 0; font-size: 21px }
+  .slide .formula { margin: 10px 0 10px 28px; font-size: 30px } .slide .note { font-size: 20px; margin: 4px 0 8px 28px }
 `;
 
 function proseHtml(g: ReturnType<typeof generator>, n: number): string {
@@ -135,6 +152,32 @@ function formulaHtml(g: ReturnType<typeof generator>, n: number, latex: string[]
     parts.push(`<p>${esc(g.sentence())}</p>`, `<div class="formula" data-latex="${esc(f)}">${katex.renderToString(f, { displayMode: true, throwOnError: true, output: "html" })}</div>`);
   }
   return `<div class="page prose">${parts.join("")}</div>`;
+}
+
+/** A formula typeset by KaTeX and cut out as a PNG at 2× (a pasted picture: no text in the PDF), with its size on the slide in CSS pixels. */
+async function formulaPicture(browser: Browser, katex: { renderToString(s: string, o: object): string }, katexCss: string, dir: string, latex: string, n: number): Promise<{ png: string; width: number; height: number }> {
+  const tab = await browser.newPage({ viewport: { width: 1200, height: 400 }, deviceScaleFactor: 2 });
+  const f = join(dir, `picture-formula-${n}.html`);
+  await writeFile(
+    f,
+    `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="file://${katexCss}"><style>body{margin:0;background:#fff} #f{display:inline-block;padding:4px 8px;font-size:30px} .katex-display{margin:0}</style></head><body><div id="f">${katex.renderToString(latex, { displayMode: true, throwOnError: true, output: "html" })}</div></body></html>`,
+  );
+  await tab.goto(`file://${f}`);
+  const clip = await tab.evaluate<{ x: number; y: number; width: number; height: number }>(
+    `(() => { const b = document.getElementById("f").getBoundingClientRect(); return { x: Math.floor(b.x), y: Math.floor(b.y), width: Math.ceil(b.width), height: Math.ceil(b.height) }; })()`,
+  );
+  const png = await tab.screenshot({ type: "png", clip });
+  await tab.close();
+  return { png: Buffer.from(png).toString("base64"), width: clip.width, height: clip.height };
+}
+
+function pictureSlideHtml(g: ReturnType<typeof generator>, n: number, pictures: Array<{ latex: string; png: string; width: number; height: number }>, typeset: string | null, katex: { renderToString(s: string, o: object): string }): string {
+  const parts = [`<h1>${n}. ${esc(g.pick(TOPICS))}</h1>`, `<ul><li>${esc(g.bullet())}</li></ul>`];
+  for (const p of pictures) {
+    parts.push(`<div class="formula" data-latex="${esc(p.latex)}"><img alt="" src="data:image/png;base64,${p.png}" style="width:${p.width}px;height:${p.height}px"></div>`, `<p class="note">${esc(g.sentence())}</p>`);
+  }
+  if (typeset) parts.push(`<div class="formula" data-latex="${esc(typeset)}">${katex.renderToString(typeset, { displayMode: true, throwOnError: true, output: "html" })}</div>`);
+  return `<div class="page slide">${parts.join("")}</div>`;
 }
 
 /** Playwright's Chromium, or the newest one in the Playwright cache when the pinned revision isn't installed. */
@@ -197,6 +240,18 @@ export async function generateFixtures(root: string, dir: string, tools: Fixture
   sets.push({ name: "slides", kind: "slides", w: 1280, h: 720, dpr: 1.5, pages: Array.from({ length: 8 }, (_, i) => slideHtml(g, i + 1)), formulas: [] });
   const groups = Array.from({ length: 6 }, (_, i) => FORMULAS.slice(i * 4, i * 4 + 4));
   sets.push({ name: "formulas", kind: "formulas", w: 794, h: 1123, dpr: 2, pages: groups.map((f, i) => formulaHtml(g, i + 1, f, katex)), formulas: groups });
+  const pictures: Array<{ latex: string; png: string; width: number; height: number }> = [];
+  for (const [i, latex] of PICTURE_FORMULAS.entries()) pictures.push({ latex, ...(await formulaPicture(browser, katex, katexCss, dir, latex, i + 1)) });
+  const pairs = Array.from({ length: PICTURE_FORMULAS.length / 2 }, (_, i) => pictures.slice(i * 2, i * 2 + 2));
+  sets.push({
+    name: "picture-formulas",
+    kind: "formulas",
+    w: 1280,
+    h: 720,
+    dpr: 1.5,
+    pages: pairs.map((p, i) => pictureSlideHtml(g, i + 1, p, i === pairs.length - 1 ? TYPESET_ON_PICTURE_SLIDE : null, katex)),
+    formulas: pairs.map((p, i) => [...p.map((x) => x.latex), ...(i === pairs.length - 1 ? [TYPESET_ON_PICTURE_SLIDE] : [])]),
+  });
 
   const truth: Truth = { seed: SEED, generatedAt: new Date().toISOString(), chromium: version, sets: [] };
   try {

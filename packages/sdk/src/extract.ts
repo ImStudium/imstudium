@@ -292,7 +292,17 @@ export class Extractor {
       ...(ocrLowConfidencePages.length ? { ocrLowConfidencePages } : {}),
       ...(recoveredPages.length ? { recoveredPages } : {}),
       imageOnlyPages: converted.pages.filter((p) => p.imageOnly).map((p) => p.index),
-      ...(this.lastMath ? { mathFormulas: formulas } : {}),
+      ...(this.lastMath ? { mathFormulas: formulas, mathChecks: this.mathChecks() } : {}),
+    };
+  }
+
+  /** The last file's formulas by their check; a stored correction counts as it checked. */
+  private mathChecks(): NonNullable<ExtractResult["mathChecks"]> {
+    const checks = this.lastFormulas.map((f) => f.corrected?.verdict.check ?? f.check);
+    return {
+      checked: checks.filter((c) => c === "match").length,
+      needLook: checks.filter((c) => c === "differs").length,
+      unchecked: checks.filter((c) => c === "unchecked").length,
     };
   }
 
@@ -318,7 +328,7 @@ export class Extractor {
       return {
         source: src, outDir, kind: "image", pages: 1, hasImages: true, tool: ocr.engine, ocrPages: [0],
         ...(low ? { ocrLowConfidencePages: [0] } : {}),
-        ...(math ? { mathFormulas: formulas } : {}),
+        ...(math ? { mathFormulas: formulas, mathChecks: this.mathChecks() } : {}),
       };
     }
     if (ocr && !ocr.ok) this.lastOcrError = ocr.error.message;
@@ -409,9 +419,15 @@ export interface OcrSummary {
   recoveredPages: number;
   /** Display formulas read into LaTeX by on-device math recognition. */
   formulas: number;
+  /** Of those, checked against the PDF's own text (or corrected so they check). */
+  formulasChecked: number;
+  /** Of those, whose check didn't pass: they need a look at their image. */
+  formulasNeedLook: number;
+  /** Of those, with nothing in the PDF to compare with: scanned pages and formulas that are pictures. */
+  formulasUnchecked: number;
 }
 
-export function summarizeOcr(results: Array<Pick<ExtractResult, "ocrPages" | "ocrLowConfidencePages" | "imageOnlyPages" | "recoveredPages" | "mathFormulas" | "skipped" | "error">>): OcrSummary {
+export function summarizeOcr(results: Array<Pick<ExtractResult, "ocrPages" | "ocrLowConfidencePages" | "imageOnlyPages" | "recoveredPages" | "mathFormulas" | "mathChecks" | "skipped" | "error">>): OcrSummary {
   const done = results.filter((r) => !r.skipped && !r.error);
   return {
     files: done.filter((r) => r.ocrPages?.length).length,
@@ -420,6 +436,9 @@ export function summarizeOcr(results: Array<Pick<ExtractResult, "ocrPages" | "oc
     imageOnlyPages: done.reduce((n, r) => n + (r.imageOnlyPages?.length ?? 0), 0),
     recoveredPages: done.reduce((n, r) => n + (r.recoveredPages?.length ?? 0), 0),
     formulas: done.reduce((n, r) => n + (r.mathFormulas ?? 0), 0),
+    formulasChecked: done.reduce((n, r) => n + (r.mathChecks?.checked ?? 0), 0),
+    formulasNeedLook: done.reduce((n, r) => n + (r.mathChecks?.needLook ?? 0), 0),
+    formulasUnchecked: done.reduce((n, r) => n + (r.mathChecks?.unchecked ?? 0), 0),
   };
 }
 

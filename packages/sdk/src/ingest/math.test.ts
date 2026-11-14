@@ -21,9 +21,8 @@ import {
   displayLikeInline,
   katexError,
   assetUpToDate,
-  boldIssues,
-  fontIsBold,
-  latexBoldLetters,
+  stripMathDelimiters,
+  isPictureFormula,
   sameMeaning,
   decideReading,
   decidedVerdict,
@@ -144,6 +143,21 @@ describe("unirecLatex", () => {
     expect(unirecLatex("(a+b)^{2}=(a+b)(a+b)\\]\\[=a^{2}+2ab+b^{2}")).toBe("\\begin{aligned}(a+b)^{2}&=(a+b)(a+b)\\\\&=a^{2}+2ab+b^{2}\\end{aligned}");
     expect(unirecLatex("\\sum_{i=1}^{n}x_{i}\\]\\[\\le n")).toBe("\\begin{aligned}\\sum_{i=1}^{n}x_{i}&\\\\&\\le n\\end{aligned}");
     expect(unirecLatex("a+b\\]\\[c+d")).toBe("\\begin{gathered}a+b\\\\c+d\\end{gathered}");
+    // A number between two displays belongs to the first line, and goes like the last one.
+    expect(unirecLatex("\\[a=b\\] (2) \\[=c\\](3a)")).toBe("\\begin{aligned}a&=b\\\\&=c\\end{aligned}");
+  });
+  it("leaves no math delimiter inside the formula, so KaTeX and the check see the formula itself", () => {
+    // A crop that caught text with inline math, a display opened twice, a stray dollar.
+    expect(unirecLatex("\\(p(Y|X)\\) und \\(p(Y)\\)")).toBe("p(Y|X) und p(Y)");
+    expect(unirecLatex("lift(X\\to Y)=\\frac{s(X\\cup Y)}{s(X)}\\]")).toBe("lift(X\\to Y)=\\frac{s(X\\cup Y)}{s(X)}");
+    expect(unirecLatex("\\[x^{2}\\[")).toBe("x^{2}");
+    expect(unirecLatex("$a+b$ = $c$")).toBe("a+b = c");
+    for (const raw of ["\\(p(Y|X)\\) und \\(p(Y)\\)", "\\[x^{2}\\[", "$a+b$ = $c$", "a=b$"]) expect(katexError(unirecLatex(raw))).toBeNull();
+  });
+  it("keeps what only looks like a delimiter", () => {
+    expect(stripMathDelimiters("a\\\\[4pt]b")).toBe("a\\\\[4pt]b");
+    expect(stripMathDelimiters("\\left(x\\right]+\\$5")).toBe("\\left(x\\right]+\\$5");
+    expect(stripMathDelimiters("\\(x\\)\\[y\\]$z$")).toBe("x y z");
   });
 });
 
@@ -207,40 +221,42 @@ describe("latexIssues", () => {
   });
 });
 
-describe("bold against the PDF's faces", () => {
-  it("collects the letters a formula sets in bold", () => {
-    expect(latexBoldLetters("\\mathbf{w}^{\\top}\\boldsymbol{x}+{\\bf b}+\\bm{\\mu}+y")).toEqual(["w", "x", "b", "μ"]);
-    expect(latexBoldLetters("\\|x\\|_{2}")).toEqual([]);
+describe("font variants and pictures", () => {
+  it("compares letters whatever their font: bold, sans or blackboard against the PDF's plain letters is a match", () => {
+    expect(judgeFormula("\\mathbf{w}^{\\top}\\mathbf{x}+b=0", ["w", "x", "b", "0"]).check).toBe("match");
+    expect(judgeFormula("w^{\\top}x+b=0", ["w", "x", "b", "0"]).check).toBe("match");
+    expect(judgeFormula("\\bar{\\bm{x}}=\\mathsf{y}", { inside: ["¯", "x", "y"], visible: ["¯", "x", "y"] }).check).toBe("match");
   });
 
-  it("reads the face from the font name, and nothing from a Type 3 resource name", () => {
-    expect(fontIsBold("VVXXKS+CMMIB10")).toBe(true);
-    expect(fontIsBold("ABCDEF+CMBX12")).toBe(true);
-    expect(fontIsBold("Arial-BoldMT")).toBe(true);
-    expect(fontIsBold("YEBDBI+CMMI10")).toBe(false);
-    expect(fontIsBold("DMIHVY+CMSS10")).toBe(false);
-    expect(fontIsBold("KaTeX_Math-Italic")).toBe(false);
-    // pdfTeX's bitmap fonts: Beamer's sans math, bold or not, says nothing.
-    expect(fontIsBold("F59")).toBeNull();
-    expect(fontIsBold("T3")).toBeNull();
-    expect(fontIsBold("")).toBeNull();
+  // The lift formula of a PowerPoint deck whose formulas are one pasted image: the PDF has one label letter in the box.
+  const lift = "lift(X\\to Y)=\\frac{s(X\\cup Y)}{s(X)\\times s(Y)}=\\frac{p(Y|X)}{p(Y)}";
+
+  it("a formula that is a picture in the PDF is unchecked like a scan, not marked", () => {
+    const picture = { inside: ["X"], visible: ["X"], cover: { image: 0.97, shapes: 0 } };
+    expect(isPictureFormula(lift, picture)).toBe(true);
+    expect(judgeFormula(lift, picture)).toEqual({ issues: [], glyphs: null, check: "unchecked", picture: true });
+    // Without the picture under it, the same letters are what the reading added.
+    expect(judgeFormula(lift, { ...picture, cover: { image: 0, shapes: 0 } }).check).toBe("differs");
+    // Text turned into outlines: many small shapes in the box.
+    expect(isPictureFormula(lift, { inside: [], visible: [], cover: { image: 0, shapes: 30 } })).toBe(true);
+    // Malformed LaTeX is still marked.
+    expect(judgeFormula(`${lift}}`, picture)).toMatchObject({ check: "differs", picture: true, issues: ["unbalanced braces"] });
   });
 
-  it("marks bold the PDF doesn't have and bold the LaTeX dropped, not a match", () => {
-    // Sans-serif x read as \mathbf{x}; the PDF sets x in regular type.
-    expect(boldIssues("\\|\\mathbf{x}\\|_{1}=\\sum_{i=1}^{n}|\\mathbf{x}_{i}|", { bold: [], regular: ["x", "1", "i", "n", "x", "i"] })).toEqual(["the LaTeX sets x in bold, the PDF in regular type"]);
-    // Bold vectors read plain.
-    expect(boldIssues("w^{\\top}x+b=0", { bold: ["w", "x"], regular: ["b", "0"] })).toEqual(["the PDF sets w x in bold, the LaTeX doesn't"]);
-    expect(boldIssues("\\mathbf{w}^{\\top}\\mathbf{x}+b=0", { bold: ["w", "x"], regular: ["b", "0"] })).toEqual([]);
-    // A letter both bold and plain on the page (x and \mathbf{x}) is no conflict.
-    expect(boldIssues("\\mathbf{x}=x", { bold: ["x"], regular: ["x"] })).toEqual([]);
+  it("a formula set as text on a picture (a slide's background) is still checked", () => {
+    const letters = latexGlyphs(lift);
+    const onBackground = { inside: letters, visible: letters, cover: { image: 1, shapes: 0 } };
+    expect(isPictureFormula(lift, onBackground)).toBe(false);
+    expect(judgeFormula(lift, onBackground).check).toBe("match");
+    expect(judgeFormula(lift.replace("s(X)\\times", "t(X)\\times"), onBackground).check).toBe("differs");
   });
 
-  it("judgeFormula compares bold only where the PDF names the faces", () => {
-    const pdf = { inside: ["x", "2"], visible: ["x", "2"], bold: [], regular: ["x", "2"] };
-    expect(judgeFormula("\\mathbf{x}^{2}", pdf)).toMatchObject({ check: "differs", issues: ["the LaTeX sets x in bold, the PDF in regular type"] });
-    expect(judgeFormula("\\mathbf{x}^{2}", ["x", "2"]).check).toBe("match");
-    expect(judgeFormula("x^{2}", pdf).check).toBe("match");
+  it("the decision model doesn't give up on picture formulas", () => {
+    const picture = { inside: ["X"], visible: ["X"], cover: { image: 1, shapes: 0 } };
+    const rs: Reading[] = [1, 0.75, 0.5].map((factor) => ({ latex: lift, factor, ...judgeFormula(lift, picture) }));
+    const d = decideReading(rs);
+    expect(d.confidence).toBeGreaterThan(DECISION_FLAG_BELOW);
+    expect(decidedVerdict(rs, d.index, d.confidence)).toEqual({ issues: [], glyphs: null, check: "unchecked", picture: true });
   });
 });
 

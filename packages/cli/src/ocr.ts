@@ -52,7 +52,14 @@ export function ocrSummaryLine(ocr: OcrSummary, status: Pick<OcrRuntimeStatus, "
     );
   }
   if (ocr.recoveredPages) parts.push(`${ocr.recoveredPages} page${ocr.recoveredPages === 1 ? "" : "s"} of text recovered from the PDF's own text layer`);
-  if (ocr.formulas) parts.push(`${ocr.formulas} formula${ocr.formulas === 1 ? "" : "s"} read as LaTeX`);
+  if (ocr.formulas) {
+    const checks = [
+      ocr.formulasChecked ? `${ocr.formulasChecked} checked against the PDF` : "",
+      ocr.formulasNeedLook ? `${ocr.formulasNeedLook} need${ocr.formulasNeedLook === 1 ? "s" : ""} a look` : "",
+      ocr.formulasUnchecked ? `${ocr.formulasUnchecked} can't be checked (scans and picture formulas)` : "",
+    ].filter(Boolean);
+    parts.push(`${ocr.formulas} formula${ocr.formulas === 1 ? "" : "s"} read as LaTeX${checks.length ? `: ${checks.join(", ")}` : ""}`);
+  }
   if (ocr.imageOnlyPages) {
     const tip = !status.ready && status.supported && !status.disabled ? ": imstudium setup ocr reads them on this machine" : "";
     parts.push(`${ocr.imageOnlyPages} page${ocr.imageOnlyPages === 1 ? "" : "s"} without text${tip}`);

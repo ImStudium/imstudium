@@ -53,6 +53,7 @@ describe("formula notes", () => {
       "unbalanced braces; the PDF has p here, the LaTeX doesn't; the LaTeX has k k, the PDF doesn't",
     );
     expect(describeVerdict({ issues: [], glyphs: null, check: "unchecked" })).toBe("no text on the page to compare with");
+    expect(describeVerdict({ issues: [], glyphs: null, check: "unchecked", picture: true })).toBe("the formula is a picture in the PDF, with no text to compare with");
   });
 
   it("formulaNote: none for a passing check, the reason and image otherwise, and who corrected it", () => {

@@ -12,6 +12,7 @@ export const FormulaVerdict = z.object({
   check: z
     .enum(["match", "differs", "unchecked"])
     .describe("match: well-formed, and every letter and digit agrees with the PDF (positions are not compared) · differs: it doesn't · unchecked: nothing to compare with, only the image can tell"),
+  picture: z.boolean().optional().describe("The formula is a picture (or outlines) in the PDF, with too little text in its box to compare: unchecked like a scan"),
 });
 
 export const FormulaItem = z.object({

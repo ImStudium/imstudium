@@ -132,6 +132,8 @@ export {
   renderPdfPages,
   checkFormula,
   judgeFormula,
+  isPictureFormula,
+  type FormulaPdf,
   latexIssues,
   latexGlyphs,
   type FormulaVerdict,

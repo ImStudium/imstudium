@@ -331,6 +331,13 @@ interface PdfiumModule {
   _FPDFText_GetCharBox(textPage: number, index: number, left: number, right: number, bottom: number, top: number): number;
   _FPDFText_GetFontInfo(textPage: number, index: number, buffer: number, buflen: number, flags: number): number;
   _FPDF_PageToDevice(page: number, startX: number, startY: number, sizeX: number, sizeY: number, rotate: number, pageX: number, pageY: number, deviceX: number, deviceY: number): number;
+  _FPDFPage_CountObjects(page: number): number;
+  _FPDFPage_GetObject(page: number, index: number): number;
+  _FPDFPageObj_GetType(obj: number): number;
+  _FPDFPageObj_GetBounds(obj: number, left: number, bottom: number, right: number, top: number): number;
+  _FPDFPageObj_GetMatrix(obj: number, matrix: number): number;
+  _FPDFFormObj_CountObjects(form: number): number;
+  _FPDFFormObj_GetObject(form: number, index: number): number;
   wasmExports: { malloc(n: number): number; free(p: number): void };
   HEAPU8: Uint8Array;
 }
@@ -514,14 +521,39 @@ const LEADING_RELATION = /^(=|<|>|\\(?:leq?|geq?|approx|equiv|sim|neq?|Rightarro
  * Nothing inside a line is changed.
  */
 export function unirecLatex(raw: string): string {
-  let s = raw.trim().replace(/^\$\$([\s\S]*)\$\$$/, "$1").trim();
-  s = s.replace(/\\\]\s*\(\s*\d+(?:\.\d+)*\s*\)\s*$/, "\\]");
+  // $$ … $$ and $ … $ are the same displays and inline spans as \[ … \] and \( … \).
+  let s = raw
+    .trim()
+    .replace(/(?<!\\)\$\$([\s\S]*?)(?<!\\)\$\$/g, "\\[$1\\]")
+    .replace(/(?<!\\)\$([^$]*?)(?<!\\)\$/g, "\\($1\\)");
+  s = s.replace(EQUATION_NUMBER_AT_END, "\\]");
   if (s.startsWith("\\[") && s.endsWith("\\]")) s = s.slice(2, -2).trim();
   else if (s.startsWith("\\(") && s.endsWith("\\)")) s = s.slice(2, -2).trim();
-  const lines = s.split(/\\\]\s*\\\[/).map((l) => l.trim()).filter(Boolean);
+  const lines = s
+    .split(LINE_BREAK_BETWEEN_DISPLAYS)
+    .map((l) => stripMathDelimiters(l))
+    .filter(Boolean);
   if (lines.length < 2) return lines[0] ?? "";
   if (!lines.slice(1).every((l) => LEADING_RELATION.test(l))) return `\\begin{gathered}${lines.join("\\\\")}\\end{gathered}`;
   return `\\begin{aligned}${[alignAtRelation(lines[0]!), ...lines.slice(1).map((l) => `&${l}`)].join("\\\\")}\\end{aligned}`;
+}
+
+/** An equation number after a display's end: `\](1)`, `\] (2.3a)`. */
+const EQUATION_NUMBER_AT_END = /\\\]\s*\(\s*\d+(?:\.\d+)*[a-z]?\s*\)\s*$/;
+/** One display ending and the next one starting, maybe with the first one's number between them. */
+const LINE_BREAK_BETWEEN_DISPLAYS = /\\\]\s*(?:\(\s*\d+(?:\.\d+)*[a-z]?\s*\)\s*)?\\\[/;
+
+/**
+ * Removes math delimiters left inside a formula (`\(`, `\)`, `\[`, `\]`,
+ * an unescaped `$`): KaTeX, and LaTeX, reject them in math mode, and a reader
+ * writes them when its crop catches text with inline math or a second display.
+ * A line break with spacing (`\\[4pt]`) and an escaped dollar (`\$`) stay.
+ */
+export function stripMathDelimiters(latex: string): string {
+  return latex
+    .replace(/\\\\|\\[a-zA-Z]+|\\\$|\\[()[\]]|\$/g, (t) => (/^\\[()[\]]$|^\$$/.test(t) ? " " : t))
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 /** `&` before the first relation outside braces (`\\sum_{i=1}` keeps its `=`), or at the end when there is none. */
@@ -716,65 +748,6 @@ interface PageGlyph {
   g: string;
   /** The character's own box [left, top, right, bottom]. */
   box: [number, number, number, number];
-  /** Set in a bold face (by its font's name: Bold, Black, CM's bx/mib/bsy, …); null when the name doesn't tell (a Type 3 font named F59). */
-  bold: boolean | null;
-}
-
-/** A font name that says nothing about the face: empty, or a resource name like F59 (pdfTeX's Type 3 bitmap fonts). */
-const FACELESS_FONT = /^([A-Z]{6}\+)?([A-Z]{1,2}\d+(\.\d+)?)?$/;
-
-/** A bold face by its PDF font name (subset prefix and all): Bold/Black/Heavy/Semibold, CM's bx, mib and bsy. */
-const BOLD_FONT = /bold|black|heavy|semibold|demi|(^|[+_-]|\b)(cm|lm|cmss|lmss)?(bx|mib|bsy)\d*(\b|$)/i;
-
-/**
- * Whether a PDF font name says bold (true), regular (false) or nothing
- * (null): pdfTeX's Type 3 bitmap fonts carry only a resource name like F59,
- * and Beamer's sans-serif math sets its letters in them.
- */
-export function fontIsBold(font: string): boolean | null {
-  const name = font.trim();
-  return FACELESS_FONT.test(name) ? null : BOLD_FONT.test(name);
-}
-
-/**
- * The letters a LaTeX formula shows in bold: inside `\mathbf`, `\boldsymbol`,
- * `\bm`, `\mathbfit`, `\pmb`, `\textbf`, or a `{\bf …}` group.
- */
-export function latexBoldLetters(latex: string): string[] {
-  const out: string[] = [];
-  const re = /\\(mathbf|boldsymbol|bm|mathbfit|pmb|textbf)\s*\{|\{\s*\\bf(?![a-zA-Z])/g;
-  for (let m = re.exec(latex); m; m = re.exec(latex)) {
-    let depth = 1;
-    let i = m.index + m[0].length;
-    const start = i;
-    for (; i < latex.length && depth > 0; i++) {
-      if (latex[i] === "\\") i++;
-      else if (latex[i] === "{") depth++;
-      else if (latex[i] === "}") depth--;
-    }
-    out.push(...latexGlyphs(latex.slice(start, i - 1)).filter(isLetter));
-  }
-  return out;
-}
-
-const isLetter = (g: string) => /^[a-zA-Z\u0370-\u03ff]$/.test(g);
-
-/**
- * Bold that the LaTeX and the PDF don't share, letter by letter: bold in the
- * LaTeX where the PDF sets that letter in regular type only (an invented
- * vector), or bold in the PDF where the LaTeX writes it plain (a dropped one).
- */
-export function boldIssues(latex: string, pdf: { bold: string[]; regular: string[] }): string[] {
-  const latexBold = new Set(latexBoldLetters(latex));
-  const plainInLatex = new Set(latexGlyphs(latex).filter(isLetter));
-  const pdfBold = new Set(pdf.bold.filter(isLetter));
-  const pdfRegular = new Set(pdf.regular.filter(isLetter));
-  const invented = [...latexBold].filter((g) => !pdfBold.has(g) && pdfRegular.has(g));
-  const dropped = [...pdfBold].filter((g) => !latexBold.has(g) && plainInLatex.has(g));
-  const issues: string[] = [];
-  if (invented.length) issues.push(`the LaTeX sets ${invented.join(" ")} in bold, the PDF in regular type`);
-  if (dropped.length) issues.push(`the PDF sets ${dropped.join(" ")} in bold, the LaTeX doesn't`);
-  return issues;
 }
 
 /**
@@ -809,7 +782,6 @@ function pageGlyphs(page: PdfiumPage): PageGlyph[] {
       const len = m._FPDFText_GetFontInfo(tp, i, fontBuf, 240, buf + 40);
       const font = len > 1 ? new TextDecoder().decode(new Uint8Array(m.HEAPU8.buffer, fontBuf, len - 1)) : "";
       if (m._FPDFText_HasUnicodeMapError(tp, i) && EXTENSION_FONT.test(font)) continue;
-      const bold = fontIsBold(font);
       const code = m._FPDFText_GetUnicode(tp, i);
       if (!code) continue;
       const folded = foldGlyph(String.fromCodePoint(code));
@@ -825,7 +797,7 @@ function pageGlyphs(page: PdfiumPage): PageGlyph[] {
       const [ax, ay] = toDevice(left, top);
       const [bx, by] = toDevice(right, bottom);
       const box: PageGlyph["box"] = [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
-      for (const g of folded) out.push({ x, y, g, box, bold });
+      for (const g of folded) out.push({ x, y, g, box });
     }
   } finally {
     m.wasmExports.free(buf);
@@ -835,21 +807,114 @@ function pageGlyphs(page: PdfiumPage): PageGlyph[] {
   return out;
 }
 
+/** An image or a drawn shape on the page, in the same top-left point space as the glyphs. */
+interface PageMark {
+  kind: "image" | "path";
+  box: [number, number, number, number];
+}
+
+const OBJ_PATH = 2;
+const OBJ_IMAGE = 3;
+const OBJ_FORM = 5;
+
+/**
+ * The page's images and drawn shapes (paths), form XObjects opened up:
+ * what a formula is when it isn't text, a picture pasted in (PowerPoint,
+ * Word's old equation objects) or text turned into outlines.
+ */
+function pageMarks(page: PdfiumPage): PageMark[] {
+  const m = page.module;
+  if (!m || page.pageIdx === undefined) return [];
+  const { originalWidth, originalHeight } = page.getOriginalSize();
+  const buf = m.wasmExports.malloc(64);
+  const out: PageMark[] = [];
+  const K = 10;
+  const toDevice = (x: number, y: number) => {
+    m._FPDF_PageToDevice(page.pageIdx!, 0, 0, Math.round(originalWidth * K), Math.round(originalHeight * K), 0, x, y, buf + 56, buf + 60);
+    const dv = new Int32Array(m.HEAPU8.buffer, buf + 56, 2);
+    return [dv[0]! / K, dv[1]! / K] as const;
+  };
+  // A form's objects are in the form's space: map their corners through the form matrices on the way down.
+  type Matrix = [number, number, number, number, number, number];
+  const apply = (t: Matrix, x: number, y: number) => [t[0] * x + t[2] * y + t[4], t[1] * x + t[3] * y + t[5]] as const;
+  const compose = (inner: Matrix, outer: Matrix): Matrix => [
+    inner[0] * outer[0] + inner[1] * outer[2],
+    inner[0] * outer[1] + inner[1] * outer[3],
+    inner[2] * outer[0] + inner[3] * outer[2],
+    inner[2] * outer[1] + inner[3] * outer[3],
+    inner[4] * outer[0] + inner[5] * outer[2] + outer[4],
+    inner[4] * outer[1] + inner[5] * outer[3] + outer[5],
+  ];
+  const visit = (obj: number, toPage: Matrix | null, depth: number) => {
+    const type = m._FPDFPageObj_GetType(obj);
+    if (type === OBJ_FORM && depth < 4) {
+      let inner: Matrix = [1, 0, 0, 1, 0, 0];
+      if (m._FPDFPageObj_GetMatrix(obj, buf + 32)) inner = [...new Float32Array(m.HEAPU8.buffer, buf + 32, 6)] as Matrix;
+      const next = toPage ? compose(inner, toPage) : inner;
+      const n = m._FPDFFormObj_CountObjects(obj);
+      for (let i = 0; i < n; i++) visit(m._FPDFFormObj_GetObject(obj, i), next, depth + 1);
+      return;
+    }
+    if (type !== OBJ_IMAGE && type !== OBJ_PATH) return;
+    if (!m._FPDFPageObj_GetBounds(obj, buf, buf + 4, buf + 8, buf + 12)) return;
+    const [l, b, r, t] = [...new Float32Array(m.HEAPU8.buffer, buf, 4)] as [number, number, number, number];
+    const corners = [apply(toPage ?? [1, 0, 0, 1, 0, 0], l, b), apply(toPage ?? [1, 0, 0, 1, 0, 0], r, t)].map(([x, y]) => toDevice(x, y));
+    const [ax, ay] = corners[0]!;
+    const [bx, by] = corners[1]!;
+    out.push({ kind: type === OBJ_IMAGE ? "image" : "path", box: [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)] });
+  };
+  try {
+    const n = m._FPDFPage_CountObjects(page.pageIdx);
+    for (let i = 0; i < n; i++) visit(m._FPDFPage_GetObject(page.pageIdx, i), null, 0);
+  } finally {
+    m.wasmExports.free(buf);
+  }
+  return out;
+}
+
 /** Margin around the detector's box in a formula's crop and stored bbox, in points. */
 const CROP_PAD_PT = 4;
+
+/** What the PDF has for one formula's box: its letters and digits, and how much of the box is picture or drawn shapes. */
+export interface FormulaPdf {
+  /** Letters and digits with their centre in the detector's own box. */
+  inside: string[];
+  /** Those at least partly in the crop the reader saw (a superset). */
+  visible: string[];
+  /**
+   * `image`: the largest share of the box one image covers (0–1).
+   * `shapes`: drawn shapes (paths) inside the box, each smaller than it,
+   * the way text turned into outlines draws a formula.
+   */
+  cover?: { image: number; shapes: number };
+}
 
 /**
  * The PDF's letters and digits for the formula stored with `bbox` (the
  * padded crop): `inside` have their centre in the detector's own box (bbox
- * less the padding), `visible` overlap the crop at all.
+ * less the padding), `visible` overlap the crop at all. With the page's
+ * marks, also how much of the box is a picture or drawn shapes.
  */
-function glyphsFor(glyphs: PageGlyph[], bbox: readonly number[]): { inside: string[]; visible: string[]; bold: string[]; regular: string[] } {
+function glyphsFor(glyphs: PageGlyph[], bbox: readonly number[], marks: PageMark[] = []): FormulaPdf {
   const [x0, y0, x1, y1] = bbox as [number, number, number, number];
   const pad = Math.min(CROP_PAD_PT, (x1 - x0) / 4, (y1 - y0) / 4);
   const tol = 0.5;
   const inside = glyphs.filter((p) => p.x >= x0 + pad - tol && p.x <= x1 - pad + tol && p.y >= y0 + pad - tol && p.y <= y1 - pad + tol);
   const visible = glyphs.filter((p) => p.box[0] < x1 && p.box[2] > x0 && p.box[1] < y1 && p.box[3] > y0);
-  return { inside: inside.map((p) => p.g), visible: visible.map((p) => p.g), bold: inside.filter((p) => p.bold === true).map((p) => p.g), regular: inside.filter((p) => p.bold === false).map((p) => p.g) };
+  const [ix0, iy0, ix1, iy1] = [x0 + pad, y0 + pad, x1 - pad, y1 - pad];
+  const area = Math.max(1e-6, (ix1 - ix0) * (iy1 - iy0));
+  const overlap = (b: PageMark["box"]) => Math.max(0, Math.min(b[2], ix1) - Math.max(b[0], ix0)) * Math.max(0, Math.min(b[3], iy1) - Math.max(b[1], iy0));
+  let image = 0;
+  let shapes = 0;
+  for (const mk of marks) {
+    if (mk.kind === "image") image = Math.max(image, overlap(mk.box) / area);
+    else {
+      const own = (mk.box[2] - mk.box[0]) * (mk.box[3] - mk.box[1]);
+      // A glyph outline: mostly inside the box and well smaller than it (not a block's frame or background).
+      if (own > 0 && own < area / 4 && overlap(mk.box) >= own * 0.8) shapes++;
+    }
+  }
+  return { inside: inside.map((p) => p.g), visible: visible.map((p) => p.g), ...(marks.length ? { cover: { image: Math.min(1, image), shapes } } : {}) };
 }
 
 export type FormulaCheck = "match" | "differs" | "unchecked";
@@ -866,18 +931,37 @@ export interface FormulaVerdict {
    * unchecked: nothing to compare with; only the image can tell.
    */
   check: FormulaCheck;
+  /** The formula is a picture (or outlines) in the PDF, with too little text in its box to compare: unchecked like a scan. */
+  picture?: true;
+}
+
+const isLetterOrDigit = (g: string) => /^[a-zA-Z0-9\u0370-\u03ff]$/.test(g);
+
+/**
+ * A formula the PDF has as a picture, not as text: an image covers at least
+ * half its box, or drawn shapes fill it the way outlined text does, and the
+ * box holds fewer than half the letters and digits the reading shows (what
+ * is there is a label or a caption on top). Comparing then says nothing.
+ */
+export function isPictureFormula(latex: string, pdf: FormulaPdf): boolean {
+  if (!pdf.cover) return false;
+  const letters = latexGlyphs(latex).filter(isLetterOrDigit).length;
+  if (letters < 2) return false;
+  const drawn = pdf.cover.image >= 0.5 || pdf.cover.shapes >= Math.max(4, letters / 3);
+  return drawn && pdf.inside.filter(isLetterOrDigit).length * 2 < letters;
 }
 
 /**
  * Judges `latex` against the PDF's glyphs for the formula: an array is both
- * inside and visible; `{ inside, visible }` as glyphsFor gives them. Null or
- * nothing visible: unchecked.
+ * inside and visible; a FormulaPdf as glyphsFor gives it. Null or nothing
+ * visible: unchecked, and so is a formula that is a picture in the PDF.
+ * Letters are compared whatever their font: `\mathbf{x}` against a regular
+ * x is a difference in look, not in meaning.
  */
-export function judgeFormula(latex: string, pdf: string[] | { inside: string[]; visible: string[]; bold?: string[]; regular?: string[] } | null): FormulaVerdict {
+export function judgeFormula(latex: string, pdf: string[] | FormulaPdf | null): FormulaVerdict {
   const issues = latexIssues(latex);
   const { inside, visible } = Array.isArray(pdf) ? { inside: pdf, visible: pdf } : (pdf ?? { inside: [], visible: [] });
-  // Bold is compared where the PDF says which face each letter is in (glyphsFor gives it).
-  if (pdf && !Array.isArray(pdf) && pdf.bold && pdf.regular && !issues.length) issues.push(...boldIssues(latex, { bold: pdf.bold, regular: pdf.regular }));
+  if (pdf && !Array.isArray(pdf) && isPictureFormula(latex, pdf)) return { issues, glyphs: null, check: issues.length ? "differs" : "unchecked", picture: true };
   const glyphs = visible.length ? { ...compareGlyphs(latexGlyphs(latex), inside, visible, latexOptionalGlyphs(latex)), pdf: inside.length } : null;
   const differs = issues.length > 0 || (glyphs !== null && (glyphs.missing.length > 0 || glyphs.extra.length > 0));
   return { issues, glyphs, check: differs ? "differs" : glyphs ? "match" : "unchecked" };
@@ -895,7 +979,7 @@ export async function checkFormula(pdf: Uint8Array, page: number, bbox: readonly
     if (page < 0 || page >= doc.getPageCount()) throw new ImstudiumError(`page ${page + 1} is not in the document`, "BAD_ARGS");
     const p = doc.getPage(page);
     try {
-      return judgeFormula(latex, glyphsFor(pageGlyphs(p), bbox));
+      return judgeFormula(latex, glyphsFor(pageGlyphs(p), bbox, pageMarks(p)));
     } finally {
       p.close();
     }
@@ -1241,7 +1325,7 @@ export const READING_FACTORS = [1, 0.75, 0.5] as const;
  * (up to 3), share of the other readings with the same LaTeX, share with the
  * same symbols, read at the full scale, read at 3/4, log(1 + length).
  */
-export const DECISION_WEIGHTS = [-2.338, 2.141, 0.382, -0.948, -3.351, 1.145, 4.652, 0.905, 0.883, -0.21];
+export const DECISION_WEIGHTS = [-2.819, 2.88, 0.351, -2.842, -2.894, 1.309, 4.45, 0.919, 0.857, -0.244];
 /** How a box's readings become one, kept in the manifest: 1 = READING_FACTORS and the decision model (before: one reading). */
 export const MATH_DECISION = 1;
 /** Below this, a reading whose check passed is still marked for a look. */
@@ -1291,7 +1375,7 @@ export function decideReading(readings: readonly Reading[], weights: readonly nu
  */
 export function decidedVerdict(readings: readonly Reading[], index: number, confidence: number): FormulaVerdict {
   const r = readings[index]!;
-  const verdict: FormulaVerdict = { issues: r.issues, glyphs: r.glyphs, check: r.check };
+  const verdict: FormulaVerdict = { issues: r.issues, glyphs: r.glyphs, check: r.check, ...(r.picture ? { picture: true as const } : {}) };
   if (confidence >= DECISION_FLAG_BELOW || r.check === "differs") return verdict;
   const others = [...new Set(readings.filter((o, j) => j !== index && !sameMeaning(o.latex, r.latex)).map((o) => o.latex))];
   const why = others.length ? `read differently at lower resolution: ${others.map((o) => `\`${o}\``).join(", ")}` : "the model is unsure of this reading";
@@ -1479,12 +1563,13 @@ export async function recognizeMath(pdf: Uint8Array, options: { pages?: number[]
         const flat = crops.flatMap((c) => c.inputs.filter((x): x is Input => !!x));
         const read = await readCrops(e, flat);
         const glyphs = crops.length ? pageGlyphs(page) : [];
+        const marks = crops.length ? pageMarks(page) : [];
         let n = 0;
         let at = 0;
         for (const c of crops) {
           const bbox = c.box.map((v) => Math.round(v * k * 10) / 10) as [number, number, number, number];
           // From the stored box, so `imstudium formulas check` later judges exactly the same way.
-          const pdfGlyphs = glyphsFor(glyphs, bbox);
+          const pdfGlyphs = glyphsFor(glyphs, bbox, marks);
           const readings: Reading[] = [];
           c.inputs.forEach((input, j) => {
             if (!input) return;

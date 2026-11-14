@@ -243,12 +243,12 @@ describe("summarizeOcr", () => {
   it("counts OCR files and pages of this run only", () => {
     expect(
       summarizeOcr([
-        { ocrPages: [0, 3], ocrLowConfidencePages: [3], imageOnlyPages: [], recoveredPages: [4], mathFormulas: 2 },
-        { ocrPages: [], imageOnlyPages: [1, 2], mathFormulas: 1 },
-        { ocrPages: [5], skipped: true, mathFormulas: 9 },
+        { ocrPages: [0, 3], ocrLowConfidencePages: [3], imageOnlyPages: [], recoveredPages: [4], mathFormulas: 2, mathChecks: { checked: 1, needLook: 0, unchecked: 1 } },
+        { ocrPages: [], imageOnlyPages: [1, 2], mathFormulas: 1, mathChecks: { checked: 0, needLook: 1, unchecked: 0 } },
+        { ocrPages: [5], skipped: true, mathFormulas: 9, mathChecks: { checked: 9, needLook: 0, unchecked: 0 } },
         { error: "broken" },
       ]),
-    ).toEqual({ files: 1, pages: 2, lowConfidencePages: 1, imageOnlyPages: 2, recoveredPages: 1, formulas: 3 });
+    ).toEqual({ files: 1, pages: 2, lowConfidencePages: 1, imageOnlyPages: 2, recoveredPages: 1, formulas: 3, formulasChecked: 1, formulasNeedLook: 1, formulasUnchecked: 1 });
   });
 });
 

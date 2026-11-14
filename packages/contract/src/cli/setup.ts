@@ -54,5 +54,8 @@ export const OcrSummary = z.object({
   imageOnlyPages: z.number().int().describe("Pages that still have no text"),
   recoveredPages: z.number().int().default(0).describe("Pages whose own text layer was recovered through PDFium on the OCR path (the PDF's text, not OCR)"),
   formulas: z.number().int().describe("Display formulas read into LaTeX on this machine ($$…$$ in content.md, boxes in math.json)"),
+  formulasChecked: z.number().int().default(0).describe("Of those, checked against the PDF's own text (or corrected so they check)"),
+  formulasNeedLook: z.number().int().default(0).describe("Of those, whose check didn't pass: imstudium formulas list <file> --needs-look"),
+  formulasUnchecked: z.number().int().default(0).describe("Of those, with nothing to compare with in the PDF: scanned pages and formulas that are pictures"),
 });
 export type OcrSummary = z.infer<typeof OcrSummary>;

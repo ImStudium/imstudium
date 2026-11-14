@@ -98,6 +98,7 @@ isAuthError
 isChromeRunning
 isDateKey
 isOfflineError
+isPictureFormula
 isoDay
 isoMinute
 judgeFormula

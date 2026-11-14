@@ -322,6 +322,9 @@ async function extractAndIndex(
       imageOnlyPages: result.ocr.imageOnlyPages + ocr.imageOnlyPages,
       recoveredPages: result.ocr.recoveredPages + ocr.recoveredPages,
       formulas: result.ocr.formulas + ocr.formulas,
+      formulasChecked: result.ocr.formulasChecked + ocr.formulasChecked,
+      formulasNeedLook: result.ocr.formulasNeedLook + ocr.formulasNeedLook,
+      formulasUnchecked: result.ocr.formulasUnchecked + ocr.formulasUnchecked,
     };
   }
   await rebuildSearchIndexes(opts.out, ws);

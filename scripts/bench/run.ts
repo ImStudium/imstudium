@@ -184,6 +184,7 @@ const FORMULA_SETS: Record<string, string> = {
   "beamer-sans": "Beamer slides, sans-serif math (hard)",
   "beamer-serif": "Beamer slides, serif math (hard)",
   "beamer-bullets": "Beamer slides 4:3, formulas in bullets, sans-serif math",
+  "picture-formulas": "Slides whose formulas are pasted-in pictures",
 };
 const CASES = [
   { label: "Born-digital lecture notes", set: "prose", variant: "text layer" },
@@ -231,7 +232,7 @@ if (mathRows.length) {
     "",
     "### Does the check catch the wrong ones?",
     "",
-    "Every recognised formula is checked on the machine: its LaTeX must be well-formed, and on born-digital pages its letters and digits must be the ones the PDF has in that box. A formula whose meaning is wrong and that passes this check would reach the student unflagged, so that column has to stay at 0. Look only = the same symbols in the same structure, rendered a little differently (`\\left|x\\right|` for `|x|`, an alignment point moved). Scans have no text to compare with, so their formulas stay unchecked and go to the agent's visual check.",
+    "Every recognised formula is checked on the machine: its LaTeX must be well-formed, and on born-digital pages its letters and digits must be the ones the PDF has in that box. A formula whose meaning is wrong and that passes this check would reach the student unflagged, so that column has to stay at 0. Look only = the same symbols in the same structure, rendered a little differently (`\\left|x\\right|` for `|x|`, an alignment point moved). Scans have no text to compare with, and neither have formulas the PDF has as pictures, so those stay unchecked and go to the agent's visual check.",
     "",
     "| Fixture | Right, check passes | Right, flagged | Right, unchecked | Look only, check passes | **Meaning wrong, check passes** | Wrong, flagged | Wrong, unchecked |",
     "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
