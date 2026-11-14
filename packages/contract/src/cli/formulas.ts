@@ -10,8 +10,8 @@ export const FormulaVerdict = z.object({
   issues: z.array(z.string()).describe("Structural problems in the LaTeX (unbalanced braces, \\left without \\right, a bare command name, …)"),
   glyphs: GlyphDiff.nullable().describe("Against the PDF's own text in the box; null when the box has none (scan, picture)"),
   check: z
-    .enum(["match", "differs", "unchecked"])
-    .describe("match: well-formed, and every letter and digit agrees with the PDF (positions are not compared) · differs: it doesn't · unchecked: nothing to compare with, only the image can tell"),
+    .enum(["match", "differs", "partial", "unchecked"])
+    .describe("match: well-formed, and every letter and digit agrees with the PDF (positions are not compared) · differs: it doesn't, needs a look · partial: partly a picture in the PDF, the characters that are there agree · unchecked: nothing to compare with, only the image can tell"),
   picture: z.boolean().optional().describe("The formula is a picture (or outlines) in the PDF, with too little text in its box to compare: unchecked like a scan"),
 });
 
@@ -39,7 +39,8 @@ export const FormulasListOutput = z
       total: z.number().int(),
       match: z.number().int(),
       differs: z.number().int(),
-      unchecked: z.number().int(),
+      unchecked: z.number().int().describe("Nothing in the PDF to compare with: scans and picture formulas"),
+      partial: z.number().int().default(0).describe("Partly a picture in the PDF; the characters that are there agree"),
       corrected: z.number().int(),
     }),
     formulas: z.array(FormulaItem),

@@ -6,7 +6,7 @@ The one measure of how well ImStudium reads documents on the student's machine, 
 
 - **Born-digital PDFs lose no words**, with or without OCR installed. Prose comes out character-perfect; slides keep every word, in a different reading order. Installing OCR never touches pages that have a text layer.
 - **Scans go from nothing to readable.** Without OCR a scanned page is an image-only marker. With on-device OCR, synthetic scans come back nearly character-perfect for prose and with almost all words for slides, at about half a second per page.
-- **Display formulas come back as LaTeX, and every reading is checked.** On the clean A4 pages, on Beamer slides typeset by pdflatex, the way maths lecturers make them, and on slides whose formulas are pasted-in pictures, all 210 formulas are found, formulas inside bullets included, and all render exactly as the source. The decision model that picks among three readings was fitted on these decks; scored on decks it wasn't fitted on, the result is the same. No reading whose meaning is wrong passes the check, and two right readings are marked for a look. Scans have no text to check against, and neither have formulas the PDF has as pictures, so those are marked unchecked, not as needing a look. These are synthetic slides; real ones are harder.
+- **Display formulas come back as LaTeX, and every reading is checked.** On the clean A4 pages, on Beamer slides typeset by pdflatex, the way maths lecturers make them, and on slides whose formulas are pasted-in pictures or partly drawn as outlines, all 216 formulas are found, formulas inside bullets included, and all render exactly as the source. The decision model that picks among three readings was fitted on these decks; scored on decks it wasn't fitted on, the result is the same. No reading whose meaning is wrong passes the check, and two right readings are marked for a look. Scans have no text to check against, and neither have formulas the PDF has as pictures, so those are marked unchecked; formulas partly drawn as outlines are partly checked. Neither is marked as needing a look. These are synthetic slides; real ones are harder.
 - **After the agent's look, nothing was wrong and nothing invented.** This was measured with PP-FormulaNet+ L, the formula reader pinned before UniRec-0.1B. A coding agent with the `imstudium-visual` skill and the CLI, and no ground truth, looked at every formula's image on the six Beamer decks. Its answers render exactly for 140 of 144 formulas; the other 4 differ only in look, and none has a wrong meaning. It invented no formula and no symbol, and all 36 corrections it stored are right. UniRec-0.1B alone now reads all 144 exactly, so far less is left for the agent; the run has not been repeated with it.
 
 ## Results
@@ -20,20 +20,20 @@ What a student gets from each kind of document, without and with the on-device r
 
 | Document | Pages | Without OCR | With on-device OCR and math | Time per page |
 | --- | ---: | --- | --- | ---: |
-| Born-digital lecture notes | 8 | 100.0 % of words · 0.0 % CER | 100.0 % of words · 0.0 % CER | 1.6 ms |
-| Born-digital slides | 8 | 100.0 % of words · 18.0 % CER | 100.0 % of words · 18.0 % CER | 1.0 ms |
-| Scanned lecture notes | 8 | nothing (image-only page marker) | 100.0 % of words · 0.0 % CER | 0.59 s |
-| Scanned slides | 8 | nothing (image-only page marker) | 97.6 % of words · 13.8 % CER | 0.52 s |
-| Display formulas on A4 pages, born-digital | 6 | not read as LaTeX | 24 of 24 formulas render exactly as the source · 24 found | 5.08 s |
-| Display formulas on A4 pages, scanned | 6 | not read as LaTeX | 24 of 24 formulas render exactly as the source · 24 found | 4.50 s |
-| Slides whose formulas are pasted-in pictures, born-digital | 4 | not read as LaTeX | 9 of 9 formulas render exactly as the source · 9 found | 2.98 s |
-| Slides whose formulas are pasted-in pictures, scanned | 4 | not read as LaTeX | 9 of 9 formulas render exactly as the source · 9 found | 3.03 s |
-| Beamer slides, sans-serif math (hard), born-digital | 10 | not read as LaTeX | 28 of 28 formulas render exactly as the source · 28 found | 4.37 s |
-| Beamer slides, sans-serif math (hard), scanned | 10 | not read as LaTeX | 28 of 28 formulas render exactly as the source · 28 found | 4.44 s |
-| Beamer slides, serif math (hard), born-digital | 10 | not read as LaTeX | 28 of 28 formulas render exactly as the source · 28 found | 4.31 s |
-| Beamer slides, serif math (hard), scanned | 10 | not read as LaTeX | 28 of 28 formulas render exactly as the source · 28 found | 4.28 s |
-| Beamer slides 4:3, formulas in bullets, sans-serif math, born-digital | 8 | not read as LaTeX | 16 of 16 formulas render exactly as the source · 16 found | 2.55 s |
-| Beamer slides 4:3, formulas in bullets, sans-serif math, scanned | 8 | not read as LaTeX | 16 of 16 formulas render exactly as the source · 16 found | 2.70 s |
+| Born-digital lecture notes | 8 | 100.0 % of words · 0.0 % CER | 100.0 % of words · 0.0 % CER | 2.0 ms |
+| Born-digital slides | 8 | 100.0 % of words · 18.0 % CER | 100.0 % of words · 18.0 % CER | 1.3 ms |
+| Scanned lecture notes | 8 | nothing (image-only page marker) | 100.0 % of words · 0.0 % CER | 0.56 s |
+| Scanned slides | 8 | nothing (image-only page marker) | 97.6 % of words · 13.8 % CER | 0.53 s |
+| Display formulas on A4 pages, born-digital | 6 | not read as LaTeX | 24 of 24 formulas render exactly as the source · 24 found | 5.95 s |
+| Display formulas on A4 pages, scanned | 6 | not read as LaTeX | 24 of 24 formulas render exactly as the source · 24 found | 5.27 s |
+| Slides whose formulas are pasted-in pictures, born-digital | 5 | not read as LaTeX | 12 of 12 formulas render exactly as the source · 12 found | 3.38 s |
+| Slides whose formulas are pasted-in pictures, scanned | 5 | not read as LaTeX | 12 of 12 formulas render exactly as the source · 12 found | 3.51 s |
+| Beamer slides, sans-serif math (hard), born-digital | 10 | not read as LaTeX | 28 of 28 formulas render exactly as the source · 28 found | 5.34 s |
+| Beamer slides, sans-serif math (hard), scanned | 10 | not read as LaTeX | 28 of 28 formulas render exactly as the source · 28 found | 5.18 s |
+| Beamer slides, serif math (hard), born-digital | 10 | not read as LaTeX | 28 of 28 formulas render exactly as the source · 28 found | 4.63 s |
+| Beamer slides, serif math (hard), scanned | 10 | not read as LaTeX | 28 of 28 formulas render exactly as the source · 28 found | 4.81 s |
+| Beamer slides 4:3, formulas in bullets, sans-serif math, born-digital | 8 | not read as LaTeX | 16 of 16 formulas render exactly as the source · 16 found | 2.89 s |
+| Beamer slides 4:3, formulas in bullets, sans-serif math, scanned | 8 | not read as LaTeX | 16 of 16 formulas render exactly as the source · 16 found | 2.95 s |
 
 Words = share of the page's words found, order ignored (higher is better). CER = character error rate against the laid-out text (lower is better). A formula renders exactly as the source when KaTeX turns both into the same MathML.
 
@@ -42,45 +42,45 @@ Words = share of the page's words found, order ignored (higher is better). CER =
 | Fixture | Pages | Engine | CER | Word recall | Time per page | Pages via OCR |
 | --- | ---: | --- | ---: | ---: | ---: | ---: |
 | prose · text layer | 8 | native | 0.0 % | 100.0 % | 1.7 ms | 0 |
-| prose · text layer | 8 | native + OCR | 0.0 % | 100.0 % | 1.6 ms | 0 |
-| prose · scan | 8 | native | 100.0 % | 0.0 % | 0.5 ms | 0 |
-| prose · scan | 8 | native + OCR | 0.0 % | 100.0 % | 0.59 s | 8 |
-| slides · text layer | 8 | native | 18.0 % | 100.0 % | 1.1 ms | 0 |
-| slides · text layer | 8 | native + OCR | 18.0 % | 100.0 % | 1.0 ms | 0 |
+| prose · text layer | 8 | native + OCR | 0.0 % | 100.0 % | 2.0 ms | 0 |
+| prose · scan | 8 | native | 100.0 % | 0.0 % | 0.6 ms | 0 |
+| prose · scan | 8 | native + OCR | 0.0 % | 100.0 % | 0.56 s | 8 |
+| slides · text layer | 8 | native | 18.0 % | 100.0 % | 1.7 ms | 0 |
+| slides · text layer | 8 | native + OCR | 18.0 % | 100.0 % | 1.3 ms | 0 |
 | slides · scan | 8 | native | 100.0 % | 0.0 % | 0.2 ms | 0 |
-| slides · scan | 8 | native + OCR | 13.8 % | 97.6 % | 0.52 s | 8 |
+| slides · scan | 8 | native + OCR | 13.8 % | 97.6 % | 0.53 s | 8 |
 
 ### Display formulas
 
 | Fixture | Formulas | Found | Same rendering | Exact LaTeX | Similarity | Extra boxes | Time per page |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| formulas · text layer | 24 | 24 | 24 | 22 | 100.0 % | 0 | 5.08 s |
-| formulas · scan | 24 | 24 | 24 | 21 | 100.0 % | 0 | 4.50 s |
-| picture-formulas · text layer | 9 | 9 | 9 | 5 | 100.0 % | 0 | 2.98 s |
-| picture-formulas · scan | 9 | 9 | 9 | 9 | 100.0 % | 0 | 3.03 s |
-| beamer-sans · text layer | 28 | 28 | 28 | 23 | 100.0 % | 0 | 4.37 s |
-| beamer-sans · scan | 28 | 28 | 28 | 23 | 100.0 % | 0 | 4.44 s |
-| beamer-serif · text layer | 28 | 28 | 28 | 27 | 100.0 % | 0 | 4.31 s |
-| beamer-serif · scan | 28 | 28 | 28 | 27 | 100.0 % | 0 | 4.28 s |
-| beamer-bullets · text layer | 16 | 16 | 16 | 8 | 100.0 % | 0 | 2.55 s |
-| beamer-bullets · scan | 16 | 16 | 16 | 7 | 100.0 % | 0 | 2.70 s |
+| formulas · text layer | 24 | 24 | 24 | 22 | 100.0 % | 0 | 5.95 s |
+| formulas · scan | 24 | 24 | 24 | 21 | 100.0 % | 0 | 5.27 s |
+| picture-formulas · text layer | 12 | 12 | 12 | 8 | 100.0 % | 0 | 3.38 s |
+| picture-formulas · scan | 12 | 12 | 12 | 11 | 100.0 % | 0 | 3.51 s |
+| beamer-sans · text layer | 28 | 28 | 28 | 23 | 100.0 % | 0 | 5.34 s |
+| beamer-sans · scan | 28 | 28 | 28 | 23 | 100.0 % | 0 | 5.18 s |
+| beamer-serif · text layer | 28 | 28 | 28 | 27 | 100.0 % | 0 | 4.63 s |
+| beamer-serif · scan | 28 | 28 | 28 | 27 | 100.0 % | 0 | 4.81 s |
+| beamer-bullets · text layer | 16 | 16 | 16 | 8 | 100.0 % | 0 | 2.89 s |
+| beamer-bullets · scan | 16 | 16 | 16 | 7 | 100.0 % | 0 | 2.95 s |
 
 ### Does the check catch the wrong ones?
 
-Every recognised formula is checked on the machine: its LaTeX must be well-formed, and on born-digital pages its letters and digits must be the ones the PDF has in that box. A formula whose meaning is wrong and that passes this check would reach the student unflagged, so that column has to stay at 0. Look only = the same symbols in the same structure, rendered a little differently (`\left|x\right|` for `|x|`, an alignment point moved). Scans have no text to compare with, and neither have formulas the PDF has as pictures, so those stay unchecked and go to the agent's visual check.
+Every recognised formula is checked on the machine: its LaTeX must be well-formed, and on born-digital pages its letters and digits must be the ones the PDF has in that box. A formula whose meaning is wrong and that passes this check would reach the student unflagged, so that column has to stay at 0. Look only = the same symbols in the same structure, rendered a little differently (`\left|x\right|` for `|x|`, an alignment point moved). Scans have no text to compare with, and neither have formulas the PDF has as pictures, so those stay unchecked and go to the agent's visual check. Partly checked = partly a picture in the PDF: its own letters and digits agree, the rest it draws as shapes; not marked, so a wrong one counts as passing.
 
-| Fixture | Right, check passes | Right, flagged | Right, unchecked | Look only, check passes | **Meaning wrong, check passes** | Wrong, flagged | Wrong, unchecked |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| formulas · text layer | 24 | 0 | 0 | 0 | **0** | 0 | 0 |
-| formulas · scan | 0 | 0 | 24 | 0 | **0** | 0 | 0 |
-| picture-formulas · text layer | 1 | 0 | 8 | 0 | **0** | 0 | 0 |
-| picture-formulas · scan | 0 | 0 | 9 | 0 | **0** | 0 | 0 |
-| beamer-sans · text layer | 28 | 0 | 0 | 0 | **0** | 0 | 0 |
-| beamer-sans · scan | 0 | 0 | 28 | 0 | **0** | 0 | 0 |
-| beamer-serif · text layer | 26 | 2 | 0 | 0 | **0** | 0 | 0 |
-| beamer-serif · scan | 0 | 0 | 28 | 0 | **0** | 0 | 0 |
-| beamer-bullets · text layer | 16 | 0 | 0 | 0 | **0** | 0 | 0 |
-| beamer-bullets · scan | 0 | 0 | 16 | 0 | **0** | 0 | 0 |
+| Fixture | Right, check passes | Right, partly checked | Right, flagged | Right, unchecked | Look only, check passes | **Meaning wrong, check passes** | Wrong, flagged | Wrong, unchecked |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| formulas · text layer | 24 | 0 | 0 | 0 | 0 | **0** | 0 | 0 |
+| formulas · scan | 0 | 0 | 0 | 24 | 0 | **0** | 0 | 0 |
+| picture-formulas · text layer | 1 | 3 | 0 | 8 | 0 | **0** | 0 | 0 |
+| picture-formulas · scan | 0 | 0 | 0 | 12 | 0 | **0** | 0 | 0 |
+| beamer-sans · text layer | 28 | 0 | 0 | 0 | 0 | **0** | 0 | 0 |
+| beamer-sans · scan | 0 | 0 | 0 | 28 | 0 | **0** | 0 | 0 |
+| beamer-serif · text layer | 26 | 0 | 2 | 0 | 0 | **0** | 0 | 0 |
+| beamer-serif · scan | 0 | 0 | 0 | 28 | 0 | **0** | 0 | 0 |
+| beamer-bullets · text layer | 16 | 0 | 0 | 0 | 0 | **0** | 0 | 0 |
+| beamer-bullets · scan | 0 | 0 | 0 | 16 | 0 | **0** | 0 | 0 |
 
 ### Every formula that did not render as its source
 
@@ -106,7 +106,7 @@ A third deck, **beamer-bullets**, is the everyday lecture slide: 4:3, Beamer's d
 
 The decks are built when pdflatex with beamer is installed, and skipped otherwise.
 
-A fourth set, **picture-formulas**, is four 16:9 slides with a title, a bullet and a sentence as text, and two formulas each pasted in as pictures (KaTeX cut out at 2×), the way PowerPoint decks often carry them; the last slide also has one typeset formula. Its formulas must come back right and unchecked, not marked.
+A fourth set, **picture-formulas**, is five 16:9 slides with a title, a bullet and a sentence as text. On four, two formulas each are pasted in as pictures (KaTeX cut out at 2×), the way PowerPoint decks often carry them, and the fourth also has one typeset formula. On the fifth, three formulas draw their italic letters as outlines (KaTeX's own glyphs as SVG paths, `scripts/bench/glyph-outlines.ts`) while digits and upright words stay text. Its formulas must come back right, the pictures unchecked and the outlined ones partly checked, none marked.
 
 Every set exists twice. The **text layer** variant is the PDF itself, as a born-digital lecture PDF would be. The **scan** variant is the same pages as JPEG images, grey, slightly blurred and tilted by 0.35°, one image per page with no text layer. The Beamer pages are rendered at 200 dpi first.
 
@@ -136,7 +136,9 @@ The ground truth is the text Chromium laid out, read back from the page, and the
 
   Letters are compared whatever their font: `\mathbf{x}`, `\mathsf{x}` or `\bm{x}` against the PDF's plain x is a difference in look, like the rendered comparison in the tables, and is not marked. Stray math delimiters a reading carries (`\(`, `\]`, `$`, from a crop that caught inline math or a second display) are removed before the check.
 
-  A formula the PDF has as a picture is unchecked, like one on a scan: an image covers at least half its box, or small drawn shapes fill it the way text turned into outlines does, and the box holds fewer than half the letters and digits the reading shows. PowerPoint decks often paste formulas in that way, and comparing their few stray glyphs would mark every one of them.
+  A formula the PDF has as a picture is unchecked, like one on a scan: an image covers at least half its box, or letters drawn as shapes fill it the way text turned into outlines does, and the box holds fewer than half the letters and digits the reading shows. PowerPoint decks often paste formulas in that way, and comparing their few stray glyphs would mark every one of them.
+
+  A formula that is partly a picture is partly checked, not marked: the PDF has some of it as text (digits, upright words like `max`) and draws the rest, often the italic letters, as outlines. Every letter and digit the PDF has must be in the reading. The reading may have more only where the box has that many letters drawn as shapes: outlines the size of a letter, lying where the PDF has no text. Rules, frames, tall delimiters and a surd over its radicand don't count. Without drawn letters an added letter stays an invented one, as `\sum_{n}` for `\sum_{x}` on the serif deck shows. Across all 648 readings of the benchmark at three resolutions, no wrong reading is partly checked; the only partly checked ones are the outlined slide's, all right.
 
   It cannot see a misplaced exponent, a swapped fraction, an invented operator such as `\int` or `\stackrel` (TeX sets those from its extension font, which a text layer doesn't name), or a letter dropped from just outside the box. Scans have no text to compare with, so their formulas stay unchecked. Either way, the image of every formula is saved for the agent's look.
 - **Three readings and a decision model.** UniRec-0.1B makes different mistakes at different resolutions, and where it is right its readings tend to agree. Each box is read at the page's render scale and again at 3/4 and 1/2 of it (288, 216 and 144 dpi on slides). A logistic model then keeps the reading most likely to be right. Its inputs are signals the check already computes: whether the check passes, whether the letters and digits match, issues, glyphs the PDF doesn't have, how many of the other readings have the same LaTeX or the same symbols, the scale and the length. When some readings pass their check, it chooses among those only. A reading it gives less than 0.8 is marked for a look even when its check passed, and the note names the other reading. The weights were fitted on these decks, so they are scored leave-one-deck-out: fitted on three decks, scored on the fourth.
@@ -146,7 +148,7 @@ The ground truth is the text Chromium laid out, read back from the page, and the
   | One reading at 288 dpi | 70 | 0 | 0 | 72 | 47 |
   | Three readings and the model | **72** | **0** | 2 | 72 | **48** |
 
-  The full-scale reading gets three formulas wrong, and the check marks each: a bar over a whole integral, drawn from the frame of the block it sits in; `\sum_{n}` for `\sum_{x}`; and a matrix with unbalanced braces. A lower resolution reads each of them right, and the model takes that reading. In the first two the other two readings agreed on the wrong one, so the right reading is marked for a look with the other one named. The picture slides read 18 of 18 right with one reading or three. With PP-FormulaNet+ L, the reader pinned before, the same model lifted born-digital Beamer slides from 53 to 61 of 72 and scans from 62 to 63. The cost is three formula reads per box, about three times the math time. `IMSTUDIUM_MATH_READINGS=1` reads once, to compare.
+  The full-scale reading gets three formulas wrong, and the check marks each: a bar over a whole integral, drawn from the frame of the block it sits in; `\sum_{n}` for `\sum_{x}`; and a matrix with unbalanced braces. A lower resolution reads each of them right, and the model takes that reading. In the first two the other two readings agreed on the wrong one, so the right reading is marked for a look with the other one named. The picture slides read 24 of 24 right with one reading or three. With PP-FormulaNet+ L, the reader pinned before, the same model lifted born-digital Beamer slides from 53 to 61 of 72 and scans from 62 to 63. The cost is three formula reads per box, about three times the math time. `IMSTUDIUM_MATH_READINGS=1` reads once, to compare.
 - **Look only is not wrong.** A reading that renders differently from the source but has the same symbols in the same structure counts as look only, for example `\left|x\right|` for `|x|`, `aligned` in a brace for `cases`, or an alignment point on the other side of `=`. The tables keep it apart from readings whose meaning differs.
 - **The agent is the last check, and it is measured.** The agent runs were made with PP-FormulaNet+ L, the reader pinned before UniRec-0.1B. That model alone got 24 of the 144 Beamer formulas wrong in meaning, including a whole invented line on a scan and hats over every TP and FN of an accuracy formula. In the agent runs the skill's rule held: look at the image of every formula, write only what it shows, and store a correction only if it checks. The agents removed every invented box, brace, bar and line, read `y` where the model had `\gamma`, and left look-only differences alone. One agent's correct reading was refused because the check then compared only the detector's box. The agent kept the subscript rather than drop it to pass, which led to the visible-glyph rule above.
 - **Formulas in bullets.** The layout model calls a formula that follows an item's text, or is an item of its own, an inline formula. Reading display formulas only, the bullets deck lost half of its 16. Inline formulas taller than 1.3 text lines or alone in their item are now read too, and 15–16 of 16 are found. Math inside a sentence is still not read as LaTeX: it stays pdf-inspector's text, with garbled sub- and superscripts (`*x<sub>i</sub>*`).
@@ -173,7 +175,7 @@ Before UniRec-0.1B was pinned, the current formula readers that run fully on a C
 - **GLM-OCR and TexTeller 3** were stopped part of the way, to free the machine; the counts are on the crops they reached. GLM-OCR writes `\dots` for the slides' `\cdots` in matrices. TexTeller writes notation KaTeX can't typeset (`\mbox{\boldmath$…$}`) and typewriter digits on sans-serif slides.
 - **Not run to the end:** UniMERNet base (Apache-2.0, 1.3 GB) and MinerU2.5-Pro-2605-1.2B (Apache-2.0, 2.3 GB) were stopped before their first ten crops when the machine ran out of memory. Neither has an ONNX build Node could load without a port.
 - **Left out for their licence:** texify (CC BY-NC-SA 4.0, non-commercial), Surya (OpenRAIL-M, with use restrictions), MinerU2.5-2509-1.2B (AGPL-3.0).
-- **Speed in the product.** Pages are read with three readings per formula box, layout included. With PP-FormulaNet+ L a Beamer page took 4.4 to 6.5 s and an A4 page 8.7 to 9.9 s; with UniRec-0.1B a Beamer page takes 2.6 to 4.4 s and an A4 page 4.5 to 5.1 s on the same machine.
+- **Speed in the product.** Pages are read with three readings per formula box, layout included. With PP-FormulaNet+ L a Beamer page took 4.4 to 6.5 s and an A4 page 8.7 to 9.9 s; with UniRec-0.1B a Beamer page takes 2.9 to 5.3 s and an A4 page 5.3 to 6.0 s on the same machine.
 
 Every model ran from a pinned revision with its SHA-256 recorded, on synthetic crops only.
 

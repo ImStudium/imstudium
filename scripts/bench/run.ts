@@ -83,7 +83,7 @@ interface MathRow {
    * Recognised formulas by the SDK's own check, split by whether they are right (render as the source),
    * differ only in their look (same symbols in the same structure), or differ in meaning.
    */
-  checks: { rightMatch: number; rightFlagged: number; rightUnchecked: number; lookMatch: number; wrongMatch: number; wrongFlagged: number; wrongUnchecked: number };
+  checks: { rightMatch: number; rightPartial: number; rightFlagged: number; rightUnchecked: number; lookMatch: number; wrongMatch: number; wrongFlagged: number; wrongUnchecked: number };
 }
 
 const textRows: TextRow[] = [];
@@ -144,10 +144,12 @@ for (const set of truth.sets) {
       let extra = 0;
       let n = 0;
       const misses: MathRow["misses"] = [];
-      const checks = { rightMatch: 0, rightFlagged: 0, rightUnchecked: 0, lookMatch: 0, wrongMatch: 0, wrongFlagged: 0, wrongUnchecked: 0 };
+      const checks = { rightMatch: 0, rightPartial: 0, rightFlagged: 0, rightUnchecked: 0, lookMatch: 0, wrongMatch: 0, wrongFlagged: 0, wrongUnchecked: 0 };
       const tally = (right: boolean, check: string, lookOnly = false) => {
-        if (!right && lookOnly && check === "match") return void checks.lookMatch++;
-        const key = `${right ? "right" : "wrong"}${check === "match" ? "Match" : check === "differs" ? "Flagged" : "Unchecked"}` as keyof typeof checks;
+        // Partly checked is not marked: a wrong reading there counts with the ones whose check passes.
+        if (!right && lookOnly && (check === "match" || check === "partial")) return void checks.lookMatch++;
+        if (right && check === "partial") return void checks.rightPartial++;
+        const key = `${right ? "right" : "wrong"}${check === "match" || check === "partial" ? "Match" : check === "differs" ? "Flagged" : "Unchecked"}` as keyof typeof checks;
         checks[key]++;
       };
       set.pages.forEach((p, i) => {
@@ -232,11 +234,11 @@ if (mathRows.length) {
     "",
     "### Does the check catch the wrong ones?",
     "",
-    "Every recognised formula is checked on the machine: its LaTeX must be well-formed, and on born-digital pages its letters and digits must be the ones the PDF has in that box. A formula whose meaning is wrong and that passes this check would reach the student unflagged, so that column has to stay at 0. Look only = the same symbols in the same structure, rendered a little differently (`\\left|x\\right|` for `|x|`, an alignment point moved). Scans have no text to compare with, and neither have formulas the PDF has as pictures, so those stay unchecked and go to the agent's visual check.",
+    "Every recognised formula is checked on the machine: its LaTeX must be well-formed, and on born-digital pages its letters and digits must be the ones the PDF has in that box. A formula whose meaning is wrong and that passes this check would reach the student unflagged, so that column has to stay at 0. Look only = the same symbols in the same structure, rendered a little differently (`\\left|x\\right|` for `|x|`, an alignment point moved). Scans have no text to compare with, and neither have formulas the PDF has as pictures, so those stay unchecked and go to the agent's visual check. Partly checked = partly a picture in the PDF: its own letters and digits agree, the rest it draws as shapes; not marked, so a wrong one counts as passing.",
     "",
-    "| Fixture | Right, check passes | Right, flagged | Right, unchecked | Look only, check passes | **Meaning wrong, check passes** | Wrong, flagged | Wrong, unchecked |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ...mathRows.map((r) => `| ${r.set} · ${r.variant} | ${r.checks.rightMatch} | ${r.checks.rightFlagged} | ${r.checks.rightUnchecked} | ${r.checks.lookMatch} | **${r.checks.wrongMatch}** | ${r.checks.wrongFlagged} | ${r.checks.wrongUnchecked} |`),
+    "| Fixture | Right, check passes | Right, partly checked | Right, flagged | Right, unchecked | Look only, check passes | **Meaning wrong, check passes** | Wrong, flagged | Wrong, unchecked |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...mathRows.map((r) => `| ${r.set} · ${r.variant} | ${r.checks.rightMatch} | ${r.checks.rightPartial} | ${r.checks.rightFlagged} | ${r.checks.rightUnchecked} | ${r.checks.lookMatch} | **${r.checks.wrongMatch}** | ${r.checks.wrongFlagged} | ${r.checks.wrongUnchecked} |`),
     "",
     "### Every formula that did not render as its source",
     "",

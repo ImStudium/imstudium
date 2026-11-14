@@ -653,7 +653,11 @@ Arguments:
                       fragment
 
 Options:
-  --needs-look        Only formulas whose check didn't pass and that aren't corrected yet
+  --needs-look        Only formulas that need a person: their check found a contradiction (a symbol
+                      the PDF has that the LaTeX lacks, an invented one, malformed LaTeX) or the
+                      readings disagreed; corrected ones left out
+  --unchecked         Only formulas that can't be fully checked against the PDF: scans, pictures and
+                      partly pictures; corrected ones left out
   --course <name>     Search only this course for the name fragment
   -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
   -h, --help          display help for command

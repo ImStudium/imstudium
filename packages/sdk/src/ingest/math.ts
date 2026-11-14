@@ -883,11 +883,21 @@ export interface FormulaPdf {
   visible: string[];
   /**
    * `image`: the largest share of the box one image covers (0–1).
-   * `shapes`: drawn shapes (paths) inside the box, each smaller than it,
-   * the way text turned into outlines draws a formula.
+   * `drawn`: about how many letters the box has as shapes instead of text:
+   * outlines (or small pictures) the size of a letter, lying where the PDF
+   * has no text, counted by their width in letters. Rules, frames, tall
+   * delimiters and a surd over its radicand don't count.
    */
-  cover?: { image: number; shapes: number };
+  cover?: { image: number; drawn: number };
 }
+
+const median = (xs: number[]) => {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)]!;
+};
+const boxOverlap = (a: readonly number[], b: readonly number[]) =>
+  Math.max(0, Math.min(a[2]!, b[2]!) - Math.max(a[0]!, b[0]!)) * Math.max(0, Math.min(a[3]!, b[3]!) - Math.max(a[1]!, b[1]!));
 
 /**
  * The PDF's letters and digits for the formula stored with `bbox` (the
@@ -901,23 +911,29 @@ function glyphsFor(glyphs: PageGlyph[], bbox: readonly number[], marks: PageMark
   const tol = 0.5;
   const inside = glyphs.filter((p) => p.x >= x0 + pad - tol && p.x <= x1 - pad + tol && p.y >= y0 + pad - tol && p.y <= y1 - pad + tol);
   const visible = glyphs.filter((p) => p.box[0] < x1 && p.box[2] > x0 && p.box[1] < y1 && p.box[3] > y0);
-  const [ix0, iy0, ix1, iy1] = [x0 + pad, y0 + pad, x1 - pad, y1 - pad];
-  const area = Math.max(1e-6, (ix1 - ix0) * (iy1 - iy0));
-  const overlap = (b: PageMark["box"]) => Math.max(0, Math.min(b[2], ix1) - Math.max(b[0], ix0)) * Math.max(0, Math.min(b[3], iy1) - Math.max(b[1], iy0));
+  const inner = [x0 + pad, y0 + pad, x1 - pad, y1 - pad] as const;
+  const area = Math.max(1e-6, (inner[2] - inner[0]) * (inner[3] - inner[1]));
+  // A letter's size here, from the PDF's own letters and digits in the box (none: the box's height).
+  const letters = inside.filter((p) => isLetterOrDigit(p.g));
+  const letterH = letters.length ? Math.max(...letters.map((p) => p.box[3] - p.box[1])) : inner[3] - inner[1];
+  const letterW = median(letters.map((p) => p.box[2] - p.box[0]));
   let image = 0;
-  let shapes = 0;
+  let drawn = 0;
   for (const mk of marks) {
-    if (mk.kind === "image") image = Math.max(image, overlap(mk.box) / area);
-    else {
-      const own = (mk.box[2] - mk.box[0]) * (mk.box[3] - mk.box[1]);
-      // A glyph outline: mostly inside the box and well smaller than it (not a block's frame or background).
-      if (own > 0 && own < area / 4 && overlap(mk.box) >= own * 0.8) shapes++;
-    }
+    const [w, h] = [mk.box[2] - mk.box[0], mk.box[3] - mk.box[1]];
+    const own = w * h;
+    if (mk.kind === "image") image = Math.max(image, boxOverlap(mk.box, inner) / area);
+    // Mostly inside the box (not a slide's background or a block's frame), a letter's size (not a rule, a dot, a tall delimiter or surd),
+    // and where the PDF has no text (not a box, highlight or radical around it).
+    if (own <= 0 || boxOverlap(mk.box, inner) < own * 0.8) continue;
+    if (Math.min(w, h) < Math.max(0.8, letterH * 0.15) || h > letterH * 1.5) continue;
+    if (visible.reduce((sum, p) => sum + boxOverlap(mk.box, p.box), 0) > own * 0.3) continue;
+    drawn += Math.max(1, Math.round(w / (letterW || h * 0.6)));
   }
-  return { inside: inside.map((p) => p.g), visible: visible.map((p) => p.g), ...(marks.length ? { cover: { image: Math.min(1, image), shapes } } : {}) };
+  return { inside: inside.map((p) => p.g), visible: visible.map((p) => p.g), ...(marks.length ? { cover: { image: Math.min(1, image), drawn } } : {}) };
 }
 
-export type FormulaCheck = "match" | "differs" | "unchecked";
+export type FormulaCheck = "match" | "differs" | "partial" | "unchecked";
 
 export interface FormulaVerdict {
   /** Problems in the LaTeX itself (latexIssues). */
@@ -927,7 +943,11 @@ export interface FormulaVerdict {
   /**
    * match: no issues, and every letter and digit agrees with the PDF (their
    * positions, sub/superscripts and fraction parts are not compared).
-   * differs: issues, or letters/digits that don't agree.
+   * differs: issues, a letter or digit of the PDF's the LaTeX lacks, or one
+   * the LaTeX adds that nothing in the PDF accounts for.
+   * partial: partly a picture in the PDF: the PDF's own letters and digits
+   * all agree, and the ones the LaTeX has beyond them are drawn as shapes
+   * there (outlined italic letters next to text digits). Not marked.
    * unchecked: nothing to compare with; only the image can tell.
    */
   check: FormulaCheck;
@@ -947,7 +967,7 @@ export function isPictureFormula(latex: string, pdf: FormulaPdf): boolean {
   if (!pdf.cover) return false;
   const letters = latexGlyphs(latex).filter(isLetterOrDigit).length;
   if (letters < 2) return false;
-  const drawn = pdf.cover.image >= 0.5 || pdf.cover.shapes >= Math.max(4, letters / 3);
+  const drawn = pdf.cover.image >= 0.5 || pdf.cover.drawn >= Math.max(4, letters / 3);
   return drawn && pdf.inside.filter(isLetterOrDigit).length * 2 < letters;
 }
 
@@ -963,8 +983,12 @@ export function judgeFormula(latex: string, pdf: string[] | FormulaPdf | null): 
   const { inside, visible } = Array.isArray(pdf) ? { inside: pdf, visible: pdf } : (pdf ?? { inside: [], visible: [] });
   if (pdf && !Array.isArray(pdf) && isPictureFormula(latex, pdf)) return { issues, glyphs: null, check: issues.length ? "differs" : "unchecked", picture: true };
   const glyphs = visible.length ? { ...compareGlyphs(latexGlyphs(latex), inside, visible, latexOptionalGlyphs(latex)), pdf: inside.length } : null;
-  const differs = issues.length > 0 || (glyphs !== null && (glyphs.missing.length > 0 || glyphs.extra.length > 0));
-  return { issues, glyphs, check: differs ? "differs" : glyphs ? "match" : "unchecked" };
+  if (!glyphs) return { issues, glyphs, check: issues.length ? "differs" : "unchecked" };
+  if (issues.length || glyphs.missing.length) return { issues, glyphs, check: "differs" };
+  if (!glyphs.extra.length) return { issues, glyphs, check: "match" };
+  // Letters the PDF lacks: invented, unless the PDF draws that many letters as shapes in the box.
+  const drawn = !Array.isArray(pdf) && pdf?.cover ? pdf.cover.drawn : 0;
+  return { issues, glyphs, check: drawn >= glyphs.extra.length ? "partial" : "differs" };
 }
 
 /**
@@ -1325,13 +1349,14 @@ export const READING_FACTORS = [1, 0.75, 0.5] as const;
  * (up to 3), share of the other readings with the same LaTeX, share with the
  * same symbols, read at the full scale, read at 3/4, log(1 + length).
  */
-export const DECISION_WEIGHTS = [-2.819, 2.88, 0.351, -2.842, -2.894, 1.309, 4.45, 0.919, 0.857, -0.244];
+export const DECISION_WEIGHTS = [-2.787, 2.882, 0.334, -2.837, -2.894, 1.266, 4.5, 0.898, 0.84, -0.25];
 /**
  * How a box's readings become one and are judged, kept in the manifest:
  * 1 = READING_FACTORS and the decision model (before: one reading);
- * 2 = picture formulas unchecked, fonts not compared, stray delimiters removed.
+ * 2 = picture formulas unchecked, fonts not compared, stray delimiters removed;
+ * 3 = partly-picture formulas partial (letters drawn as shapes), not marked.
  */
-export const MATH_DECISION = 2;
+export const MATH_DECISION = 3;
 /** Below this, a reading whose check passed is still marked for a look. */
 export const DECISION_FLAG_BELOW = 0.8;
 
@@ -1345,7 +1370,8 @@ export function readingFeatures(readings: readonly Reading[], i: number): number
     r.check !== "differs" ? 1 : 0,
     r.check === "match" ? 1 : 0,
     r.issues.length ? 1 : 0,
-    Math.min(3, r.glyphs?.extra.length ?? 0),
+    // Letters the PDF draws as shapes are accounted for, not invented.
+    r.check === "partial" ? 0 : Math.min(3, r.glyphs?.extra.length ?? 0),
     share((o) => flat(o.latex) === flat(r.latex)),
     share((o) => sameMeaning(o.latex, r.latex)),
     r.factor === 1 ? 1 : 0,

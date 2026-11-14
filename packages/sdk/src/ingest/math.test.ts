@@ -232,27 +232,61 @@ describe("font variants and pictures", () => {
   const lift = "lift(X\\to Y)=\\frac{s(X\\cup Y)}{s(X)\\times s(Y)}=\\frac{p(Y|X)}{p(Y)}";
 
   it("a formula that is a picture in the PDF is unchecked like a scan, not marked", () => {
-    const picture = { inside: ["X"], visible: ["X"], cover: { image: 0.97, shapes: 0 } };
+    const picture = { inside: ["X"], visible: ["X"], cover: { image: 0.97, drawn: 0 } };
     expect(isPictureFormula(lift, picture)).toBe(true);
     expect(judgeFormula(lift, picture)).toEqual({ issues: [], glyphs: null, check: "unchecked", picture: true });
     // Without the picture under it, the same letters are what the reading added.
-    expect(judgeFormula(lift, { ...picture, cover: { image: 0, shapes: 0 } }).check).toBe("differs");
+    expect(judgeFormula(lift, { ...picture, cover: { image: 0, drawn: 0 } }).check).toBe("differs");
     // Text turned into outlines: many small shapes in the box.
-    expect(isPictureFormula(lift, { inside: [], visible: [], cover: { image: 0, shapes: 30 } })).toBe(true);
+    expect(isPictureFormula(lift, { inside: [], visible: [], cover: { image: 0, drawn: 30 } })).toBe(true);
     // Malformed LaTeX is still marked.
     expect(judgeFormula(`${lift}}`, picture)).toMatchObject({ check: "differs", picture: true, issues: ["unbalanced braces"] });
   });
 
   it("a formula set as text on a picture (a slide's background) is still checked", () => {
     const letters = latexGlyphs(lift);
-    const onBackground = { inside: letters, visible: letters, cover: { image: 1, shapes: 0 } };
+    const onBackground = { inside: letters, visible: letters, cover: { image: 1, drawn: 0 } };
     expect(isPictureFormula(lift, onBackground)).toBe(false);
     expect(judgeFormula(lift, onBackground).check).toBe("match");
     expect(judgeFormula(lift.replace("s(X)\\times", "t(X)\\times"), onBackground).check).toBe("differs");
   });
 
+  // Italic letters drawn as outlines (PowerPoint), digits and upright words as text: the PDF has 3 2 2 7 in the box.
+  const poly = "f(x)=3x^{2}+2x-7";
+  const digits = ["3", "2", "2", "7"];
+
+  it("partly a picture: the PDF's characters agree and it draws the rest as shapes, so the reading is partial, not marked", () => {
+    expect(judgeFormula(poly, { inside: digits, visible: digits, cover: { image: 0, drawn: 4 } })).toEqual({
+      issues: [],
+      glyphs: { missing: [], extra: ["f", "x", "x", "x"], pdf: 4 },
+      check: "partial",
+    });
+    // Fewer letters drawn than the reading adds: one is invented.
+    expect(judgeFormula(poly, { inside: digits, visible: digits, cover: { image: 0, drawn: 2 } }).check).toBe("differs");
+    // A digit of the PDF's the reading lacks contradicts it, drawn letters or not.
+    expect(judgeFormula("f(x)=3x^{2}+2x", { inside: digits, visible: digits, cover: { image: 0, drawn: 4 } }).check).toBe("differs");
+  });
+
+  it("an invented letter on a page that draws nothing stays marked (\\sum_{n} for \\sum_{x})", () => {
+    // As on the benchmark slide: the sum's subscript x sits just outside the detector's own box, so nothing is missing.
+    const visible = latexGlyphs("E[X\\mid Y=y]=\\sum_{x}x~P(X=x\\mid Y=y)");
+    const inside = [...visible];
+    inside.splice(inside.indexOf("x"), 1);
+    const wrong = "E[X\\mid Y=y]=\\sum_{n}x~P(X=x\\mid Y=y)";
+    expect(judgeFormula(wrong, { inside, visible, cover: { image: 0, drawn: 0 } })).toMatchObject({ check: "differs", glyphs: { missing: [], extra: ["n"] } });
+    expect(judgeFormula(wrong, { inside, visible }).check).toBe("differs");
+  });
+
+  it("the decision model counts drawn letters as accounted for, not invented", () => {
+    const rs: Reading[] = [1, 0.75, 0.5].map((factor) => ({ latex: poly, factor, ...judgeFormula(poly, { inside: digits, visible: digits, cover: { image: 0, drawn: 4 } }) }));
+    expect(readingFeatures(rs, 0)[3]).toBe(0);
+    const d = decideReading(rs);
+    expect(d.confidence).toBeGreaterThan(DECISION_FLAG_BELOW);
+    expect(decidedVerdict(rs, d.index, d.confidence).check).toBe("partial");
+  });
+
   it("the decision model doesn't give up on picture formulas", () => {
-    const picture = { inside: ["X"], visible: ["X"], cover: { image: 1, shapes: 0 } };
+    const picture = { inside: ["X"], visible: ["X"], cover: { image: 1, drawn: 0 } };
     const rs: Reading[] = [1, 0.75, 0.5].map((factor) => ({ latex: lift, factor, ...judgeFormula(lift, picture) }));
     const d = decideReading(rs);
     expect(d.confidence).toBeGreaterThan(DECISION_FLAG_BELOW);

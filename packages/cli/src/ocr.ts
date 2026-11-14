@@ -56,7 +56,7 @@ export function ocrSummaryLine(ocr: OcrSummary, status: Pick<OcrRuntimeStatus, "
     const checks = [
       ocr.formulasChecked ? `${ocr.formulasChecked} checked against the PDF` : "",
       ocr.formulasNeedLook ? `${ocr.formulasNeedLook} need${ocr.formulasNeedLook === 1 ? "s" : ""} a look` : "",
-      ocr.formulasUnchecked ? `${ocr.formulasUnchecked} can't be checked (scans and picture formulas)` : "",
+      ocr.formulasUnchecked ? `${ocr.formulasUnchecked} can't be fully checked (scans and pictures)` : "",
     ].filter(Boolean);
     parts.push(`${ocr.formulas} formula${ocr.formulas === 1 ? "" : "s"} read as LaTeX${checks.length ? `: ${checks.join(", ")}` : ""}`);
   }

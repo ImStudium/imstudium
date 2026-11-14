@@ -90,15 +90,20 @@ export function registerFormulas(program: Command): void {
     .command("list")
     .description("Every display formula of one extracted file, with its check against the PDF and the path of its image")
     .argument("<file>", "Extracted folder, its content.md, the original under files/, or a name fragment")
-    .option("--needs-look", "Only formulas whose check didn't pass and that aren't corrected yet")
+    .option("--needs-look", "Only formulas that need a person: their check found a contradiction (a symbol the PDF has that the LaTeX lacks, an invented one, malformed LaTeX) or the readings disagreed; corrected ones left out")
+    .option("--unchecked", "Only formulas that can't be fully checked against the PDF: scans, pictures and partly pictures; corrected ones left out")
     .addOption(courseOption("Search only this course for the name fragment"))
     .addOption(outputOption())
     .action(
-      act(async (target: string, opts: { needsLook?: boolean; course?: string; output?: string }) => {
+      act(async (target: string, opts: { needsLook?: boolean; unchecked?: boolean; course?: string; output?: string }) => {
         const sdk = await getSdk();
         const x = await resolveExtracted(sdk, target, opts);
         const all = x.formulas.map((f) => item(x, f));
-        const shown = opts.needsLook ? all.filter((f) => !f.corrected && f.verdict.check !== "match") : all;
+        const notFully = (c: string) => c === "unchecked" || c === "partial";
+        const shown =
+          opts.needsLook || opts.unchecked
+            ? all.filter((f) => !f.corrected && ((opts.needsLook && f.verdict.check === "differs") || (opts.unchecked && notFully(f.verdict.check))))
+            : all;
         const payload: FormulasListOutput = {
           dir: x.dir,
           source: x.source,
@@ -109,19 +114,21 @@ export function registerFormulas(program: Command): void {
             match: all.filter((f) => !f.corrected && f.verdict.check === "match").length,
             differs: all.filter((f) => !f.corrected && f.verdict.check === "differs").length,
             unchecked: all.filter((f) => !f.corrected && f.verdict.check === "unchecked").length,
+            partial: all.filter((f) => !f.corrected && f.verdict.check === "partial").length,
             corrected: all.filter((f) => f.corrected).length,
           },
           formulas: shown,
         };
         const s = payload.summary;
         const lines = [
-          `${basename(x.source)}: ${s.total} formula(s) · ${s.match} check against the PDF · ${s.differs} need a look · ${s.unchecked} unchecked · ${s.corrected} corrected`,
+          `${basename(x.source)}: ${s.total} formula(s) · ${s.match} checked against the PDF · ${s.differs} need a look · ${s.unchecked + s.partial} can't be fully checked · ${s.corrected} corrected`,
           ...shown.map((f) => {
-            const state = f.corrected ? `corrected by ${f.corrected.by}` : f.verdict.check === "match" ? "checks" : f.verdict.check === "differs" ? "NEEDS A LOOK" : "unchecked";
+            const c = f.verdict.check;
+            const state = f.corrected ? `corrected by ${f.corrected.by}` : c === "match" ? "checks" : c === "differs" ? "NEEDS A LOOK" : c === "partial" ? "partly checked" : "unchecked";
             return `  ${f.id.padEnd(7)} ${state.padEnd(22)} ${short(f.latex)}${f.why && !f.corrected ? `\n          ${f.why}` : ""}${f.crop && !f.corrected && f.verdict.check !== "match" ? `\n          image: ${f.crop}` : ""}`;
           }),
         ];
-        if (s.differs + s.unchecked > 0) lines.push("", "Look at each image, write only what it shows, then: imstudium formulas check <file> <id> --latex '…'");
+        if (s.differs + s.unchecked + s.partial > 0) lines.push("", "Look at each image, write only what it shows, then: imstudium formulas check <file> <id> --latex '…'");
         output(payload, lines.join("\n"));
       }),
     );
@@ -153,6 +160,8 @@ export function registerFormulas(program: Command): void {
             ? `${id}: checks. Every letter and digit matches the PDF (positions are not compared: compare the image).`
             : verdict.check === "unchecked"
               ? `${id}: well-formed; ${verdict.picture ? "the formula is a picture in the PDF" : "the page has no text to compare with"}, so only the image can tell.`
+              : verdict.check === "partial"
+                ? `${id}: the characters the PDF has agree; the rest is drawn as shapes in the PDF, so compare it with the image.`
               : `${id}: doesn't check: ${payload.why}`;
         output(payload, head);
       }),
@@ -183,7 +192,7 @@ export function registerFormulas(program: Command): void {
         };
         output(
           payload,
-          `${id} corrected${verdict.check === "match" ? " (letters and digits match the PDF)" : verdict.picture ? " (the formula is a picture in the PDF)" : " (no text on the page to compare with)"}; ${contentUpdated ? "content.md shows it" : "content.md not changed (formula block not found)"}. Search sees it after: imstudium index`,
+          `${id} corrected${verdict.check === "match" ? " (letters and digits match the PDF)" : verdict.check === "partial" ? " (the characters the PDF has agree)" : verdict.picture ? " (the formula is a picture in the PDF)" : " (no text on the page to compare with)"}; ${contentUpdated ? "content.md shows it" : "content.md not changed (formula block not found)"}. Search sees it after: imstudium index`,
         );
       }),
     );

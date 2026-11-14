@@ -407,7 +407,7 @@ function checksOf(formulas: FormulaEntry[]): NonNullable<ExtractResult["mathChec
   return {
     checked: checks.filter((c) => c === "match").length,
     needLook: checks.filter((c) => c === "differs").length,
-    unchecked: checks.filter((c) => c === "unchecked").length,
+    unchecked: checks.filter((c) => c === "unchecked" || c === "partial").length,
   };
 }
 

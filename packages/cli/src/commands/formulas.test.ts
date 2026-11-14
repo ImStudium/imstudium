@@ -28,7 +28,13 @@ beforeEach(async () => {
   await writeFile(join(dir, "manifest.json"), JSON.stringify({ source: join(fx.workspace, "WS2026-27", "statistik-i", "files", "tafel.png"), kind: "image" }));
   await writeFile(
     join(dir, "math.json"),
-    JSON.stringify({ model: "unirec-0.1b (topdu/unirec_0_1b_onnx e8f55f7)", layoutModel: "pp-doclayoutv2 (oar-ocr v0.3.0)", formulas: [formula("p1-1", "a^{2}+b^{2}", "unchecked"), formula("p1-2", "|x|=\\left\\{x\\right", "differs")] }),
+    JSON.stringify({ model: "unirec-0.1b (topdu/unirec_0_1b_onnx e8f55f7)", layoutModel: "pp-doclayoutv2 (oar-ocr v0.3.0)", formulas: [
+        formula("p1-1", "a^{2}+b^{2}", "unchecked"),
+        formula("p1-2", "|x|=\\left\\{x\\right", "differs"),
+        // Italic letters drawn as outlines, the digits text: they agree.
+        formula("p1-3", "f(x)=3x^{2}", "partial", { glyphs: { missing: [], extra: ["f", "x", "x"], pdf: 2 } }),
+      ],
+    }),
   );
   await writeFile(
     join(dir, "content.md"),
@@ -37,13 +43,19 @@ beforeEach(async () => {
 });
 
 describe("imstudium formulas", () => {
-  it("list: every formula with its check and absolute image path; --needs-look filters", () => {
+  it("list: every formula with its check and absolute image path; --needs-look and --unchecked filter", () => {
     const out = FormulasListOutput.parse(runCli(fx, ["--json", "formulas", "list", dir]).json());
-    expect(out.summary).toEqual({ total: 2, match: 0, differs: 1, unchecked: 1, corrected: 0 });
+    expect(out.summary).toEqual({ total: 3, match: 0, differs: 1, unchecked: 1, partial: 1, corrected: 0 });
     expect(out.formulas[1]).toMatchObject({ id: "p1-2", page: 1, why: "\\right without a delimiter", crop: join(dir, "formulas", "p1-2.png") });
+    expect(out.formulas[2]).toMatchObject({ id: "p1-3", verdict: { check: "partial" }, why: "partly a picture in the PDF: the characters that are there agree, and it draws f x x as shapes" });
     const human = runCli(fx, ["formulas", "list", join(dir, "content.md")]);
+    expect(human.stdout).toContain("3 formula(s) · 0 checked against the PDF · 1 need a look · 2 can't be fully checked · 0 corrected");
     expect(human.stdout).toContain("p1-2    NEEDS A LOOK");
+    expect(human.stdout).toContain("p1-3    partly checked");
     expect(human.stdout).toContain("imstudium formulas check");
+    // Only what needs a person; what can't be fully checked has its own filter.
+    expect(FormulasListOutput.parse(runCli(fx, ["--json", "formulas", "list", dir, "--needs-look"]).json()).formulas.map((f) => f.id)).toEqual(["p1-2"]);
+    expect(FormulasListOutput.parse(runCli(fx, ["--json", "formulas", "list", dir, "--unchecked"]).json()).formulas.map((f) => f.id)).toEqual(["p1-1", "p1-3"]);
   });
 
   it("check never writes; fix refuses what doesn't check and stores what does", async () => {
@@ -64,7 +76,7 @@ describe("imstudium formulas", () => {
     expect(content).toContain(`$$${latex}$$\n_(formula p1-2 corrected by claude-code from its image;`);
     expect(content).toContain("$$a^{2}+b^{2}$$\n_(formula p1-1 unchecked");
     const list = FormulasListOutput.parse(runCli(fx, ["--json", "formulas", "list", dir, "--needs-look"]).json());
-    expect(list.formulas.map((f) => f.id)).toEqual(["p1-1"]);
+    expect(list.formulas.map((f) => f.id)).toEqual([]);
     expect(list.summary.corrected).toBe(1);
   });
 

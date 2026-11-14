@@ -35,6 +35,7 @@ The `$$…$$` blocks are model output. On the benchmark's synthetic Beamer slide
 |---|---|
 | none | Well-formed, and every letter and digit is one the PDF has in that box. Positions (exponent or index, numerator or denominator) and fonts (bold, sans-serif) are not compared |
 | `_(formula p3-2 needs a look: …)_` | Malformed, letters or digits differ from the PDF, or the model read the box differently at lower resolution: the note says which, and names the other reading |
+| `_(formula p3-2 partly checked: …)_` | Partly a picture in the PDF (italic letters drawn as outlines): the characters the PDF has agree, the rest only the image can tell |
 | `_(formula p3-2 unchecked: …)_` | Scanned page or picture: nothing to compare with, only the image can tell |
 | `_(formula p3-2 corrected by … from its image …)_` | An agent or the student corrected it from the image, and the correction checks |
 
@@ -55,8 +56,8 @@ Use the `$$…$$` LaTeX as a draft to check against the page, and say when the p
 
 When you write formulas down for the student (notes, a summary, exam prep) or they ask you to fix the extraction:
 
-1. **List them.** `imstudium formulas list <file> --json` gives each formula's `id`, `page`, `latex`, `verdict.check`, the absolute path of its image (`crop`), and `otherReadings`: what the model read in the same box at lower resolutions where that differs. Another reading is a hint where to look, not an answer: only the image decides. `--needs-look` lists only the ones whose check didn't pass. `<file>` is the extracted folder, its `content.md`, the original under `files/`, or a name fragment.
-2. **Look at the image of every formula you write down**, those whose check is `differs` or `unchecked` first. A `match` proves the letters and digits, not where they sit: exponents, indices, limits, numerator and denominator, brackets and line breaks need your eyes. Open its `crop` image with your image reader and compare it symbol by symbol with `latex`.
+1. **List them.** `imstudium formulas list <file> --json` gives each formula's `id`, `page`, `latex`, `verdict.check`, the absolute path of its image (`crop`), and `otherReadings`: what the model read in the same box at lower resolutions where that differs. Another reading is a hint where to look, not an answer: only the image decides. `--needs-look` lists only the ones that need a person: a contradiction with the PDF, malformed LaTeX, or readings that disagreed. `--unchecked` lists the ones that can't be fully checked (scans, pictures, partly pictures). `<file>` is the extracted folder, its `content.md`, the original under `files/`, or a name fragment.
+2. **Look at the image of every formula you write down**, those whose check is `differs`, `partial` or `unchecked` first. A `match` proves the letters and digits, not where they sit: exponents, indices, limits, numerator and denominator, brackets and line breaks need your eyes. Open its `crop` image with your image reader and compare it symbol by symbol with `latex`.
 3. **Transcribe only what the image shows.**
    - Don't complete, simplify, normalise or "improve" the math. Keep the lecturer's names, indices and notation. A typo on the slide stays a typo; say that it looks like one.
    - Don't fill in from what the formula usually is (a textbook version, the previous slide, memory).
@@ -64,9 +65,10 @@ When you write formulas down for the student (notes, a summary, exam prep) or th
 4. **Check your reading.** `imstudium formulas check <file> <id> --latex '<LaTeX>'`. On a born-digital page the check compares every letter and digit with what the PDF has in that box:
    - `match`: no letter or digit added or dropped. It does not prove positions, so you still compare with the image.
    - `differs`: the PDF disagrees, and the output says which letters or digits. Look at the image again. Never change a symbol just to make the check pass without seeing it there.
-   - `unchecked`: a scan, so only your look at the image vouches for it. Say so when you hand it over.
+   - `partial`: partly a picture in the PDF; the letters and digits it has agree, the drawn ones only your look vouches for.
+   - `unchecked`: a scan or a picture, so only your look at the image vouches for it. Say so when you hand it over.
 5. **Store a correction when the student asked for corrected notes:** `imstudium formulas fix <file> <id> --latex '<LaTeX>' --by <your harness>`. It is refused unless it checks. content.md then shows the correction with a note saying who made it and from what, and `imstudium index` refreshes search.
-6. **Write it down** with its citation (`Vorlesung 3 · p.12`). Use the corrected or checked LaTeX. If a formula is still `unchecked` or `differs` and you couldn't look at its image, say so next to it instead of presenting it as certain.
+6. **Write it down** with its citation (`Vorlesung 3 · p.12`). Use the corrected or checked LaTeX. If a formula is still `unchecked`, `partial` or `differs` and you couldn't look at its image, say so next to it instead of presenting it as certain.
 
 ## Fast paths by harness
 

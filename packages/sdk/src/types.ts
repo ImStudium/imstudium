@@ -281,7 +281,7 @@ export interface ExtractResult {
   recoveredPages?: number[];
   /** Display formulas read into LaTeX on this machine (set when math ran). */
   mathFormulas?: number;
-  /** Those formulas by their check (corrections count as they checked): against the PDF's text, needing a look, or with nothing to compare (scans, pictures). */
+  /** Those formulas by their check (corrections count as they checked): against the PDF's text, needing a look, or not fully checkable (scans, pictures, partly pictures). */
   mathChecks?: { checked: number; needLook: number; unchecked: number };
 }
 

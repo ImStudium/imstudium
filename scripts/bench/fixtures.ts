@@ -10,7 +10,9 @@
  * Sets: prose (A4 lecture-script pages), slides (16:9, bullets, a table and a
  * box-and-arrow diagram), formulas (A4 pages with display formulas),
  * picture-formulas (16:9 slides whose formulas are pasted-in pictures next
- * to real slide text, the way PowerPoint decks often have them). The
+ * to real slide text, the way PowerPoint decks often have them, and one
+ * whose formulas draw their italic letters as outlines while digits and
+ * upright words stay text). The
  * ground truth (truth.json) is the text Chromium laid out, read back from the
  * DOM, and the LaTeX source of every formula.
  */
@@ -20,6 +22,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { buildBeamerDecks, hasBeamer } from "./beamer.ts";
+import { loadOutlineFont, outlineMathItalic, type OutlineFont } from "./glyph-outlines.ts";
 
 export interface PageTruth {
   text: string;
@@ -97,6 +100,8 @@ const PICTURE_FORMULAS = [
   "w_{t+1} = w_t - \\eta \\, \\nabla L(w_t)",
   "F_1 = \\frac{2 \\, P \\, R}{P + R}",
 ];
+/** On the last picture-formulas slide: italic letters drawn as outlines, digits and upright words text (partly checked). */
+const OUTLINE_FORMULAS = ["f(x) = 3x^2 + 2x - 7", "\\log_2 n \\le \\max(n, 16)", "x_1 + x_2 = 10"];
 /** Typeset as text on the last picture slide, so one slide mixes both. */
 const TYPESET_ON_PICTURE_SLIDE = "P = \\frac{TP}{TP + FP}";
 
@@ -180,6 +185,12 @@ function pictureSlideHtml(g: ReturnType<typeof generator>, n: number, pictures: 
   return `<div class="page slide">${parts.join("")}</div>`;
 }
 
+function outlineSlideHtml(g: ReturnType<typeof generator>, n: number, latex: string[], katex: { renderToString(s: string, o: object): string }, font: OutlineFont): string {
+  const parts = [`<h1>${n}. ${esc(g.pick(TOPICS))}</h1>`, `<ul><li>${esc(g.bullet())}</li></ul>`];
+  for (const f of latex) parts.push(`<div class="formula" data-latex="${esc(f)}">${outlineMathItalic(katex.renderToString(f, { displayMode: true, throwOnError: true, output: "html" }), font)}</div>`);
+  return `<div class="page slide">${parts.join("")}</div>`;
+}
+
 /** Playwright's Chromium, or the newest one in the Playwright cache when the pinned revision isn't installed. */
 async function launchChromium(chromium: { launch(o?: object): Promise<unknown> }): Promise<{ browser: Browser; version: string }> {
   const tryLaunch = async (executablePath?: string) => {
@@ -243,14 +254,18 @@ export async function generateFixtures(root: string, dir: string, tools: Fixture
   const pictures: Array<{ latex: string; png: string; width: number; height: number }> = [];
   for (const [i, latex] of PICTURE_FORMULAS.entries()) pictures.push({ latex, ...(await formulaPicture(browser, katex, katexCss, dir, latex, i + 1)) });
   const pairs = Array.from({ length: PICTURE_FORMULAS.length / 2 }, (_, i) => pictures.slice(i * 2, i * 2 + 2));
+  const outlines = loadOutlineFont(new Uint8Array(await readFile(join(root, "node_modules", "katex", "dist", "fonts", "KaTeX_Math-Italic.ttf"))));
   sets.push({
     name: "picture-formulas",
     kind: "formulas",
     w: 1280,
     h: 720,
     dpr: 1.5,
-    pages: pairs.map((p, i) => pictureSlideHtml(g, i + 1, p, i === pairs.length - 1 ? TYPESET_ON_PICTURE_SLIDE : null, katex)),
-    formulas: pairs.map((p, i) => [...p.map((x) => x.latex), ...(i === pairs.length - 1 ? [TYPESET_ON_PICTURE_SLIDE] : [])]),
+    pages: [
+      ...pairs.map((p, i) => pictureSlideHtml(g, i + 1, p, i === pairs.length - 1 ? TYPESET_ON_PICTURE_SLIDE : null, katex)),
+      outlineSlideHtml(g, pairs.length + 1, OUTLINE_FORMULAS, katex, outlines),
+    ],
+    formulas: [...pairs.map((p, i) => [...p.map((x) => x.latex), ...(i === pairs.length - 1 ? [TYPESET_ON_PICTURE_SLIDE] : [])]), OUTLINE_FORMULAS],
   });
 
   const truth: Truth = { seed: SEED, generatedAt: new Date().toISOString(), chromium: version, sets: [] };

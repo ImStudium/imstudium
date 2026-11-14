@@ -56,6 +56,6 @@ export const OcrSummary = z.object({
   formulas: z.number().int().describe("Display formulas read into LaTeX on this machine ($$…$$ in content.md, boxes in math.json)"),
   formulasChecked: z.number().int().default(0).describe("Of those, checked against the PDF's own text (or corrected so they check)"),
   formulasNeedLook: z.number().int().default(0).describe("Of those, whose check didn't pass: imstudium formulas list <file> --needs-look"),
-  formulasUnchecked: z.number().int().default(0).describe("Of those, with nothing to compare with in the PDF: scanned pages and formulas that are pictures"),
+  formulasUnchecked: z.number().int().default(0).describe("Of those, not fully checkable against the PDF: scanned pages, formulas that are pictures, and formulas partly drawn as pictures"),
 });
 export type OcrSummary = z.infer<typeof OcrSummary>;

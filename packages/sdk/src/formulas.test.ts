@@ -54,11 +54,17 @@ describe("formula notes", () => {
     );
     expect(describeVerdict({ issues: [], glyphs: null, check: "unchecked" })).toBe("no text on the page to compare with");
     expect(describeVerdict({ issues: [], glyphs: null, check: "unchecked", picture: true })).toBe("the formula is a picture in the PDF, with no text to compare with");
+    expect(describeVerdict({ issues: [], glyphs: { missing: [], extra: ["a", "n"], pdf: 4 }, check: "partial" })).toBe(
+      "partly a picture in the PDF: the characters that are there agree, and it draws a n as shapes",
+    );
   });
 
   it("formulaNote: none for a passing check, the reason and image otherwise, and who corrected it", () => {
     expect(formulaNote(f("p1-1", "x", { check: "match", glyphs: { missing: [], extra: [], pdf: 1 } }))).toBeNull();
     expect(formulaNote(f("p1-1", "x", { crop: "formulas/p1-1.png" }))).toBe("_(formula p1-1 unchecked: no text on the page to compare with. Image: formulas/p1-1.png)_");
+    expect(formulaNote(f("p1-1", "x_{1}", { check: "partial", glyphs: { missing: [], extra: ["x"], pdf: 1 } }))).toBe(
+      "_(formula p1-1 partly checked: partly a picture in the PDF: the characters that are there agree, and it draws x as shapes.)_",
+    );
     const corrected = f("p1-1", "x", { corrected: { latex: "y", by: "codex", at: "t", verdict: { issues: [], glyphs: null, check: "unchecked" } } });
     expect(formulaNote(corrected)).toBe("_(formula p1-1 corrected by codex from its image; the page has no text to compare with.)_");
   });

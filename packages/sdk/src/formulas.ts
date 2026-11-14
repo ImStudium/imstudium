@@ -67,6 +67,7 @@ export function applyFormulaFixes<T extends Formula>(formulas: T[], fixes: Formu
 export function describeVerdict(v: FormulaVerdict): string | null {
   if (v.check === "match") return null;
   if (v.check === "unchecked") return v.issues.length ? v.issues.join("; ") : v.picture ? "the formula is a picture in the PDF, with no text to compare with" : "no text on the page to compare with";
+  if (v.check === "partial") return `partly a picture in the PDF: the characters that are there agree, and it draws ${v.glyphs?.extra.join(" ") ?? "the rest"} as shapes`;
   const parts = [...v.issues];
   if (v.glyphs?.missing.length) parts.push(`the PDF has ${v.glyphs.missing.join(" ")} here, the LaTeX doesn't`);
   if (v.glyphs?.extra.length) parts.push(`the LaTeX has ${v.glyphs.extra.join(" ")}, the PDF doesn't`);
@@ -77,12 +78,15 @@ export function describeVerdict(v: FormulaVerdict): string | null {
 export function formulaNote(f: FormulaEntry): string | null {
   const image = f.crop ? ` Image: ${f.crop}` : "";
   if (f.corrected) {
-    const how = f.corrected.verdict.check === "match" ? "its letters and digits match the PDF" : f.corrected.verdict.picture ? "the formula is a picture in the PDF" : "the page has no text to compare with";
+    const v = f.corrected.verdict;
+    const how = v.check === "match" ? "its letters and digits match the PDF" : v.check === "partial" ? "the characters the PDF has agree" : v.picture ? "the formula is a picture in the PDF" : "the page has no text to compare with";
     return `_(formula ${f.id} corrected by ${f.corrected.by} from its image; ${how}.${image})_`;
   }
   const why = describeVerdict(f);
   if (!why) return null;
-  return f.check === "unchecked" ? `_(formula ${f.id} unchecked: ${why}.${image})_` : `_(formula ${f.id} needs a look: ${why}.${image})_`;
+  if (f.check === "unchecked") return `_(formula ${f.id} unchecked: ${why}.${image})_`;
+  if (f.check === "partial") return `_(formula ${f.id} partly checked: ${why}.${image})_`;
+  return `_(formula ${f.id} needs a look: ${why}.${image})_`;
 }
 
 // ── One extracted folder: list, check and correct its formulas ─────────────────
