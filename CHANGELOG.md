@@ -38,7 +38,7 @@ Written work: a citation registry per Hausarbeit, Seminararbeit or thesis that c
 
 ## [0.3.0] - 2026-11-14
 
-The first npm release since 0.1.3. Installing it also brings everything under 0.2.0 below, which was cut in the repository but never published.
+The first release since 0.1.3, and the first on GitHub Packages (`npm.pkg.github.com`) instead of npmjs.com, for now. Installing needs a one-time `npm login` there with a GitHub token that has `read:packages` (README, Get started); npmjs.com keeps 0.1.3. This release also brings everything under 0.2.0 below, which was cut in the repository but never published.
 
 Stud.IP 6 support, a daily sync that never switches semesters on its own, one agent plugin for Claude Code and Codex, and on-device OCR and formula recognition.
 
@@ -103,7 +103,7 @@ Stud.IP 6 support, a daily sync that never switches semesters on its own, one ag
 
 ## [0.2.0] - 2026-10-26
 
-Never published to npm: these changes first reached npm with 0.3.0.
+Never published: these changes were first released with 0.3.0.
 
 "Semester start": the whole Stud.IP within reach of one CLI, with a workspace that knows what's new, what's due and which semester it is.
 

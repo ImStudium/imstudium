@@ -50,11 +50,13 @@ ImStudium install — Node.js 20+.
   bash scripts/install.sh [--no-global] [-o ~/Studium]
 
 Options:
-  --global          npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar (default)
+  --global          npm install -g @imstudium/cli @imstudium/mcp from GitHub Packages (default)
   --no-global       Use npx only (no global imstudium on PATH)
   -o, --workspace   Studium workspace path (default: ~/Studium)
 
-Falls back to building from GitHub when @imstudium/cli is not on npm yet.
+Releases are on GitHub Packages for now, which needs a one-time
+  npm login --scope=@imstudium --auth-type=legacy --registry=https://npm.pkg.github.com
+with a GitHub token (read:packages). Without it, ImStudium is built from source.
 EOF
       exit 0
       ;;
@@ -76,8 +78,11 @@ fi
 
 log "Node $(node -v)"
 
+# Releases are on GitHub Packages for now; npmjs.com still has 0.1.3.
+IMSTUDIUM_REGISTRY="https://npm.pkg.github.com"
+
 npm_package_available() {
-  npm view @imstudium/cli version >/dev/null 2>&1
+  npm view @imstudium/cli version --registry "$IMSTUDIUM_REGISTRY" >/dev/null 2>&1
 }
 
 install_optional_tools() {
@@ -85,9 +90,9 @@ install_optional_tools() {
 }
 
 install_from_npm() {
-  log "Installing @imstudium/cli + @imstudium/mcp from npm..."
+  log "Installing @imstudium/cli + @imstudium/mcp from GitHub Packages..."
   # npm 11 skips install scripts unless allowed; keytar needs its own to reach the OS keychain.
-  npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar
+  npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar "--@imstudium:registry=$IMSTUDIUM_REGISTRY"
 }
 
 install_from_source() {
@@ -125,7 +130,7 @@ install_cli() {
     return
   fi
 
-  warn "@imstudium/cli not on npm yet — installing from source."
+  warn "GitHub Packages needs npm login (see the README) — installing from source."
   if [[ -f "${IMSTUDIUM_SOURCE:-$HOME/Documents/GitHub/imstudium}/packages/cli/dist/cli.js" ]]; then
     install_from_source "${IMSTUDIUM_SOURCE:-$HOME/Documents/GitHub/imstudium}"
   else

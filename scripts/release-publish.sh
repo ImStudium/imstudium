@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Publish one workspace package with npm trusted publishing (OIDC, no token)
-# and fail unless the registry shows a provenance attestation for it.
+# Publish one workspace package to the registry its publishConfig names.
+#
+#   GitHub Packages (npm.pkg.github.com, for now): with the workflow's own
+#   GITHUB_TOKEN as NODE_AUTH_TOKEN. That registry has no provenance.
+#   npmjs.com: with npm trusted publishing (OIDC, no token) and provenance;
+#   the script fails unless npm shows an attestation for the package.
+#
 # Used by .github/workflows/release.yml; never run it from a laptop.
 #
 #   bash scripts/release-publish.sh <contract|sdk|cli|mcp>
@@ -10,9 +15,39 @@ cd "$(dirname "$0")/.."
 dir="${1:?package dir under packages/}"
 name=$(node -p "require('./packages/$dir/package.json').name")
 version=$(node -p "require('./packages/$dir/package.json').version")
+registry=$(node -p "require('./packages/$dir/package.json').publishConfig.registry")
+
+case "$registry" in
+  https://npm.pkg.github.com*)
+    if [ -z "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then
+      echo "refusing: GitHub Packages publishes with the workflow's GITHUB_TOKEN only" >&2
+      exit 1
+    fi
+    if npm view "$name@$version" version --registry "$registry" >/dev/null 2>&1; then
+      echo "$name@$version is already on GitHub Packages — not publishing again"
+    else
+      (cd "packages/$dir" && npm publish --registry "$registry")
+    fi
+    for attempt in 1 2 3 4 5 6; do
+      if npm view "$name@$version" version --registry "$registry" >/dev/null 2>&1; then
+        echo "$name@$version: on GitHub Packages"
+        exit 0
+      fi
+      echo "waiting for $name@$version on GitHub Packages (attempt $attempt)…"
+      sleep 10
+    done
+    echo "$name@$version is not visible on GitHub Packages" >&2
+    exit 1
+    ;;
+  https://registry.npmjs.org*) ;;
+  *)
+    echo "refusing: unknown registry $registry for $name" >&2
+    exit 1
+    ;;
+esac
 
 if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then
-  echo "refusing: a token is set; releases publish via trusted publishing only" >&2
+  echo "refusing: a token is set; npmjs.com releases publish via trusted publishing only" >&2
   exit 1
 fi
 
