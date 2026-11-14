@@ -1326,8 +1326,12 @@ export const READING_FACTORS = [1, 0.75, 0.5] as const;
  * same symbols, read at the full scale, read at 3/4, log(1 + length).
  */
 export const DECISION_WEIGHTS = [-2.819, 2.88, 0.351, -2.842, -2.894, 1.309, 4.45, 0.919, 0.857, -0.244];
-/** How a box's readings become one, kept in the manifest: 1 = READING_FACTORS and the decision model (before: one reading). */
-export const MATH_DECISION = 1;
+/**
+ * How a box's readings become one and are judged, kept in the manifest:
+ * 1 = READING_FACTORS and the decision model (before: one reading);
+ * 2 = picture formulas unchecked, fonts not compared, stray delimiters removed.
+ */
+export const MATH_DECISION = 2;
 /** Below this, a reading whose check passed is still marked for a look. */
 export const DECISION_FLAG_BELOW = 0.8;
 

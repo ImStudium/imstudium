@@ -23,7 +23,7 @@ vi.mock("./ingest/local-docs.js", async (orig) => ({
 
 const { Extractor, nativeOutdated, shouldRedoForOcr, summarizeOcr } = await import("./extract.js");
 const { IMAGE_ONLY, MOSTLY_IMAGE, NATIVE_RULE, OCR_MERGE } = await import("./ingest/local-docs.js");
-const { MATH_MODEL, LAYOUT_MODEL } = await import("./ingest/math.js");
+const { MATH_MODEL, LAYOUT_MODEL, MATH_DECISION } = await import("./ingest/math.js");
 
 const native = (): LocalConvertOk => ({
   ok: true,
@@ -292,7 +292,8 @@ describe("math in the extractor", () => {
     ["pdf with text-less pages", { kind: "pdf", imageOnlyPages: [0] }, "", true],
     ["plain pdf", { kind: "pdf" }, "Agenda und Organisation", false],
     ["OCR'd photo", { kind: "image", ocr: { model: "m", pages: [0], lowConfidencePages: [] } }, "", true],
-    ["math already ran with these models and the decision model", { kind: "pdf", math: { model: MATH_MODEL, layoutModel: LAYOUT_MODEL, pages: [0], formulas: 0, ms: 1, decision: 1 } }, "∑", false],
+    ["math already ran with these models and this decision", { kind: "pdf", math: { model: MATH_MODEL, layoutModel: LAYOUT_MODEL, pages: [0], formulas: 0, ms: 1, decision: MATH_DECISION } }, "∑", false],
+    ["math ran with the decision before picture formulas", { kind: "pdf", math: { model: MATH_MODEL, layoutModel: LAYOUT_MODEL, pages: [0], formulas: 0, ms: 1, decision: 1 } }, "∑", true],
     ["math ran with these models, one reading per box", { kind: "pdf", math: { model: MATH_MODEL, layoutModel: LAYOUT_MODEL, pages: [0], formulas: 0, ms: 1 } }, "∑", true],
     ["math ran with older models", { kind: "pdf", math: { model: "m", layoutModel: "l", pages: [0], formulas: 0, ms: 1 } }, "∑", true],
     ["office document", { kind: "office" }, "∑", false],
