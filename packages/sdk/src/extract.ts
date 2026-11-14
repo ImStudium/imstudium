@@ -140,7 +140,6 @@ export class Extractor {
   /** See {@link shouldRedoForMath}. */
   private async mathWouldAdd(prev: ExtractManifest, outDir: string, opts: { ocr?: boolean; math?: boolean }): Promise<boolean> {
     if (opts.ocr === false || opts.math === false) return false;
-    if (prev.math && prev.math.model === MATH_MODEL && prev.math.layoutModel === LAYOUT_MODEL) return false;
     const status = mathRuntimeStatus();
     if (!status.ready || status.disabled) return false;
     const content = prev.kind === "pdf" ? await readFile(join(outDir, "content.md"), "utf-8").catch(() => "") : "";
@@ -183,6 +182,7 @@ export class Extractor {
         decision: MATH_DECISION,
       };
       this.lastFormulas = formulas;
+      this.lastChecks = checksOf(formulas);
       return byPage;
     } catch (err) {
       this.lastMathError = err instanceof Error ? err.message : String(err);
@@ -191,6 +191,8 @@ export class Extractor {
   }
 
   private lastFormulas: FormulaEntry[] = [];
+  /** The last file's formulas by their check, counted when they were read (writeMathJson clears lastFormulas). */
+  private lastChecks: NonNullable<ExtractResult["mathChecks"]> = { checked: 0, needLook: 0, unchecked: 0 };
 
   /** math.json next to content.md: every formula with its page and box, for checking against the original. */
   private async writeMathJson(outDir: string): Promise<void> {
@@ -296,14 +298,8 @@ export class Extractor {
     };
   }
 
-  /** The last file's formulas by their check; a stored correction counts as it checked. */
   private mathChecks(): NonNullable<ExtractResult["mathChecks"]> {
-    const checks = this.lastFormulas.map((f) => f.corrected?.verdict.check ?? f.check);
-    return {
-      checked: checks.filter((c) => c === "match").length,
-      needLook: checks.filter((c) => c === "differs").length,
-      unchecked: checks.filter((c) => c === "unchecked").length,
-    };
+    return this.lastChecks;
   }
 
   private async extractImage(src: string, outDir: string, opts: { ocr?: boolean; math?: boolean } = {}): Promise<ExtractResult> {
@@ -403,6 +399,16 @@ export function shouldRedoForMath(
   if (prev.kind === "image") return !!prev.ocr;
   if (prev.kind !== "pdf") return false;
   return !!prev.ocr?.pages.length || !!prev.imageOnlyPages?.length || isMathCandidate(contentMd);
+}
+
+/** Formulas by their check; a stored correction counts as it checked. */
+function checksOf(formulas: FormulaEntry[]): NonNullable<ExtractResult["mathChecks"]> {
+  const checks = formulas.map((f) => f.corrected?.verdict.check ?? f.check);
+  return {
+    checked: checks.filter((c) => c === "match").length,
+    needLook: checks.filter((c) => c === "differs").length,
+    unchecked: checks.filter((c) => c === "unchecked").length,
+  };
 }
 
 /** OCR totals over extraction results, for sync and extract summaries. */

@@ -10,11 +10,18 @@ import type { LocalConvertOk, LocalConvertResult } from "./ingest/local-docs.js"
  */
 
 const runtime = vi.hoisted(() => ({ ready: false, disabled: false }));
+const mathRuntime = vi.hoisted(() => ({ ready: false, disabled: false }));
+const recognize = vi.hoisted(() => vi.fn());
 const convert = vi.hoisted(() => vi.fn<(bytes: Uint8Array, name: string, opts?: { ocr?: boolean }) => Promise<LocalConvertResult>>());
 
 vi.mock("./ingest/ocr-runtime.js", async (orig) => ({
   ...(await orig<typeof import("./ingest/ocr-runtime.js")>()),
   ocrRuntimeStatus: () => ({ ...runtime, supported: true, reason: null }),
+}));
+vi.mock("./ingest/math.js", async (orig) => ({
+  ...(await orig<typeof import("./ingest/math.js")>()),
+  mathRuntimeStatus: () => ({ ...mathRuntime, installed: mathRuntime.ready, reason: null }),
+  recognizeMath: recognize,
 }));
 vi.mock("./ingest/local-docs.js", async (orig) => ({
   ...(await orig<typeof import("./ingest/local-docs.js")>()),
@@ -60,7 +67,10 @@ beforeEach(async () => {
   await writeFile(src, "%PDF-1.4 synthetic stand-in");
   runtime.ready = false;
   runtime.disabled = false;
+  mathRuntime.ready = false;
+  mathRuntime.disabled = false;
   convert.mockReset();
+  recognize.mockReset();
 });
 
 afterEach(async () => {
@@ -253,6 +263,39 @@ describe("summarizeOcr", () => {
 });
 
 describe("math in the extractor", () => {
+  it("reads and judges an unchanged file again once when its formulas were judged under an older decision, then never again", async () => {
+    runtime.ready = true;
+    mathRuntime.ready = true;
+    const ex = new Extractor({ anydoc: true, pdfInspector: true });
+    const slide = (): LocalConvertOk => ({
+      ok: true,
+      engine: "pdf-inspector",
+      pageCount: 1,
+      markdown: "Lift einer Regel ∑",
+      pages: [{ index: 0, markdown: "Lift einer Regel ∑" }],
+      metadata: { engine: "pdf-inspector" },
+    });
+    const lift = { id: "p1-1", page: 0, bbox: [10, 10, 200, 60], latex: "\\operatorname{lift}(X\\to Y)=\\frac{p(Y\\mid X)}{p(Y)}", score: 0.9, issues: [] };
+    convert.mockResolvedValue(slide());
+    // The verdict the previous decision gave a pasted-in picture: its few stray glyphs, marked.
+    recognize.mockResolvedValueOnce({ formulas: [{ ...lift, glyphs: { missing: [], extra: ["Y", "p"], pdf: 1 }, check: "differs" }], pages: [0], ms: 1 });
+    expect((await ex.extractFile(src, out)).mathChecks).toEqual({ checked: 0, needLook: 1, unchecked: 0 });
+    const m = await manifest();
+    expect(m.math).toMatchObject({ model: MATH_MODEL, layoutModel: LAYOUT_MODEL, decision: MATH_DECISION });
+    // As the previous version wrote it: same models, decision 1.
+    await writeFile(join(out, "manifest.json"), JSON.stringify({ ...m, math: { ...m.math, decision: 1 } }));
+
+    recognize.mockResolvedValueOnce({ formulas: [{ ...lift, glyphs: null, check: "unchecked", picture: true }], pages: [0], ms: 1 });
+    const again = await ex.extractFile(src, out);
+    expect(again.skipped).toBeUndefined();
+    expect(again.mathChecks).toEqual({ checked: 0, needLook: 0, unchecked: 1 });
+    expect((await manifest()).math.decision).toBe(MATH_DECISION);
+    expect(await readFile(join(out, "content.md"), "utf-8")).toContain("the formula is a picture in the PDF");
+
+    expect((await ex.extractFile(src, out)).skipped).toBe(true);
+    expect(recognize).toHaveBeenCalledTimes(2);
+  });
+
   it("withFormulas appends $$…$$ blocks under a provenance line, top to bottom, with a note where a formula needs a look", async () => {
     const { withFormulas, FORMULAS_HEADING } = await import("./extract.js");
     const glyphs = { missing: [], extra: [], pdf: 6 };
