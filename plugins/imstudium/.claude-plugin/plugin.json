@@ -1,6 +1,6 @@
 {
   "name": "imstudium",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Your Stud.IP studies for coding agents: today and this week, deadlines and Klausuren, new files and news, cited explanations from your own slides, exam prep and quizzes — read-only by default, local in ~/Studium.",
   "author": {
     "name": "Patrick Schröppel",

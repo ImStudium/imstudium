@@ -99,7 +99,7 @@ Follow `requiredAction` literally.
 - `studium_read_material` reuses cached extraction (manifest mtime): fast on repeat
 - `imstudium view` only writes `viewer.html` (near instant): no re-render unless the file changed
 - Bulk `imstudium extract` does NOT auto-open a browser: agents opt in per file
-- OCR takes about half a second per scanned page, formulas about half a second per formula page; `--no-ocr` / `--no-math` skip them for one run
+- OCR takes about half a second per scanned page, formulas about 3 to 5 seconds per slide that has them (three readings per formula); `--no-ocr` / `--no-math` skip them for one run
 
 ## Playwright one-liner
 

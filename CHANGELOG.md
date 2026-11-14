@@ -4,6 +4,10 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-14
+
+The first npm release since 0.1.3. Installing it also brings everything under 0.2.0 below, which was cut in the repository but never published.
+
 Stud.IP 6 support, a daily sync that never switches semesters on its own, one agent plugin for Claude Code and Codex, and on-device OCR and formula recognition.
 
 ### Fixed
@@ -12,7 +16,7 @@ Stud.IP 6 support, a daily sync that never switches semesters on its own, one ag
 - **Slides that are mostly a picture keep their text without OCR.** pdf-inspector rates a page "scanned" when a high-resolution image (a chart or screenshot at about 200 dpi) covers much of it and little text sits beside it, and then returns no text at all, even when the page has a real title and labels. Such pages are now built from their own visible text runs, top to bottom, the largest top line as a heading, and marked `_(mostly an image: only the page's own text is above, the image itself is not read)_`. Text lying on the image, invisible text (OCR layers) and repeated shadow runs are left out. With OCR installed these pages still go to the OCR call, whose reading or PDFium recovery wins unless it reads nothing or reads it unsure. PDFs that still had image-only pages are extracted again once.
 - **`setup ocr --math` survives a broken download.** The 734 MB formula model was fetched into memory in one piece, so a connection that broke off ("terminated") lost it all. Downloads now stream to a `.part` file. A break is retried up to five times from where it stopped, and the next run resumes the partial file with an HTTP Range request. Each piece's SHA-256 is recorded once it is verified (`math/verified.json`), so a rerun fetches only what is missing or whose pin changed. A machine that already has the math runtime fetches only the new formula reader (about 729 MB); the layout model, ONNX Runtime and PDFium stay, and the old reader's files, a broken partial included, are deleted.
 - **`doctor` names the harness that lacks skills.** With the plugin covering Claude Code and Codex, a missing Cursor install listed every skill as stale. It now says `Cursor: skills not installed` with `imstudium setup all --agent cursor -y`; `setup status` lists missing and outdated skills per harness.
-- **The keychain hint works with npm 11.** npm skips keytar's install script unless it is allowed, and `npm install-scripts approve` refuses global installs. `doctor` now says `npm install -g @imstudium/cli --allow-scripts=keytar`, or ImSicheren, and that the session sits in a 0600 file until then.
+- **The keychain hint works with npm 11.** npm skips keytar's install script unless it is allowed, and `npm install-scripts approve` refuses global installs. `doctor` now says `npm install -g @imstudium/cli --allow-scripts=keytar`, or ImSicheren, and that the session sits in a 0600 file until then. The installer and `imstudium update` pass `--allow-scripts=keytar` themselves.
 - **Bold dates in news stay bold.** `<strong> 06.10.2026 … Uhr</strong>` became `** 06.10.2026 … Uhr**`, which markdown shows as asterisks. Whitespace now goes outside the markers, empty ones are dropped, and `<blockquote>`/`<img>` are no longer taken for `<b>`/`<i>`.
 - **Sessions reach the keychain.** keytar is CommonJS, and `await import("keytar")` exposes only `getPassword` as a named export (Node's export detection stops at the first function in keytar's `module.exports`). `setPassword` was undefined, so every session went to the plain 0600 file on every OS and Node version, and `doctor` asked students to install keychain support they already had. The session store now takes keytar's default export, and a session left in the file moves to ImSicheren or the keychain on the next command. `doctor` says whether keytar doesn't load or the keychain refused the session, with a fix for each.
 - **Workflow skills install under their own names.** `setup` copied them under their folder name (`klausur-prep`) while their frontmatter says `imstudium-klausur-prep`. They now install under the frontmatter name, and `setup` removes the folder-name copies it made before, only where the SKILL.md inside names one of ours.
@@ -66,6 +70,8 @@ Stud.IP 6 support, a daily sync that never switches semesters on its own, one ag
 - `imstudium-klausur-prep` and `imstudium-semester-refresh` are CLI-first (the MCP door is the fallback) and plan with what the CLI knows: exam aids and scope from news and courseware, unconfirmed dates flagged, a day-by-day plan ending in a mock exam.
 
 ## [0.2.0] - 2026-10-26
+
+Never published to npm: these changes first reached npm with 0.3.0.
 
 "Semester start": the whole Stud.IP within reach of one CLI, with a workspace that knows what's new, what's due and which semester it is.
 
@@ -264,7 +270,8 @@ Stud.IP 6 support, a daily sync that never switches semesters on its own, one ag
 - OAuth2 PKCE requires university-registered client
 - Courseware plugin files not in JSON:API (Stud.IP 5.4)
 
-[0.2.0]: https://github.com/ImStudium/imstudium/releases/tag/v0.2.0
+[0.3.0]: https://github.com/ImStudium/imstudium/releases/tag/v0.3.0
+[0.2.0]: https://github.com/ImStudium/imstudium/pull/1
 [0.1.3]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.3
 [0.1.2]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.2
 [0.1.1]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.1

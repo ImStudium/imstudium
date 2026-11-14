@@ -50,7 +50,7 @@ ImStudium install — Node.js 20+.
   bash scripts/install.sh [--no-global] [-o ~/Studium]
 
 Options:
-  --global          npm install -g @imstudium/cli @imstudium/mcp (default)
+  --global          npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar (default)
   --no-global       Use npx only (no global imstudium on PATH)
   -o, --workspace   Studium workspace path (default: ~/Studium)
 
@@ -86,7 +86,8 @@ install_optional_tools() {
 
 install_from_npm() {
   log "Installing @imstudium/cli + @imstudium/mcp from npm..."
-  npm install -g @imstudium/cli @imstudium/mcp
+  # npm 11 skips install scripts unless allowed; keytar needs its own to reach the OS keychain.
+  npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar
 }
 
 install_from_source() {

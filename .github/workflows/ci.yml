@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master, semester-start]
+    branches: [main, master]
   pull_request:
-    branches: [main, master, semester-start]
+    branches: [main, master]
 
 permissions:
   contents: read

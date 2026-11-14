@@ -23,10 +23,12 @@ Command-line interface for ImStudium / Stud.IP. Sync materials, build agent work
 ## One-shot setup
 
 ```bash
-npx -y @imstudium/cli onboard --agents-only -y -o ~/Studium
-imstudium login
-imstudium init -o ~/Studium
+npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar
+imstudium login                      # the student signs in, in their own browser window
+imstudium semester start --extract   # first sync of the running semester, files as markdown
 ```
+
+Skills for harnesses without the plugin: `imstudium setup all -y`. MCP: `imstudium setup mcp`.
 
 ## Updates
 
