@@ -1,8 +1,10 @@
 name: Release
 
-# Tag vX.Y.Z on main → publish @imstudium/{contract,sdk,cli,mcp} with npm
-# trusted publishing (OIDC). There is no npm token anywhere: each package on
-# npmjs.com trusts this repository and this workflow file (release.yml).
+# Tag vX.Y.Z on main → publish @imstudium/{contract,sdk,cli,mcp} to the
+# registry each package's publishConfig names. For now that is GitHub Packages
+# (npm.pkg.github.com), with this workflow's own GITHUB_TOKEN. Back on
+# npmjs.com it is npm trusted publishing (OIDC) with provenance, and there is
+# no npm token anywhere. One script covers both: scripts/release-publish.sh.
 
 on:
   push:
@@ -10,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
   id-token: write
 
 concurrency:
@@ -26,12 +29,14 @@ jobs:
         with:
           bun-version: 1.4.2
 
-      # Trusted publishing needs npm >= 11.5.1 (Node 24 ships 11.x; make sure).
-      # No registry-url: setup-node would export a placeholder NODE_AUTH_TOKEN;
-      # the registry comes from each package's publishConfig.
+      # registry-url and scope write the .npmrc that sends @imstudium to GitHub
+      # Packages with NODE_AUTH_TOKEN; the publish steps set it to GITHUB_TOKEN.
+      # Trusted publishing on npmjs.com needs npm >= 11.5.1.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@imstudium"
 
       - name: npm >= 11.5.1
         run: |
@@ -60,12 +65,20 @@ jobs:
       # (scripts/release-order.test.ts keeps these steps in that order).
       - name: Publish contract
         run: bash scripts/release-publish.sh contract
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish sdk
         run: bash scripts/release-publish.sh sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish cli
         run: bash scripts/release-publish.sh cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish mcp
         run: bash scripts/release-publish.sh mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

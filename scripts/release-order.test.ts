@@ -25,15 +25,26 @@ describe("release order (P-008)", () => {
     expect(steps).toEqual(order);
   });
 
-  it("release.yml uses trusted publishing on a tag, never a token", () => {
+  it("every package publishes to GitHub Packages for now", () => {
+    for (const dir of order) {
+      const { publishConfig } = JSON.parse(read(`packages/${dir}/package.json`)) as { publishConfig?: { registry?: string } };
+      expect(publishConfig?.registry, dir).toBe("https://npm.pkg.github.com");
+    }
+  });
+
+  it("release.yml publishes on a tag with the repository's own token, never an npm token", () => {
     const yml = read(".github/workflows/release.yml")
       .split("\n")
       .filter((l) => !l.trim().startsWith("#"))
       .join("\n");
     expect(yml).toMatch(/push:\s*\n\s*tags:\s*\["v\*"\]/);
-    expect(yml).toMatch(/id-token: write/);
+    expect(yml).toMatch(/packages: write/);
     expect(yml).toMatch(/node-version: 24/);
-    expect(yml).not.toMatch(/NODE_AUTH_TOKEN|NPM_TOKEN|registry-url/);
+    expect(yml).toMatch(/registry-url: https:\/\/npm\.pkg\.github\.com/);
+    const tokens = [...yml.matchAll(/NODE_AUTH_TOKEN: (.+)/g)].map((m) => m[1]!.trim());
+    expect(tokens).toEqual(order.map(() => "${{ secrets.GITHUB_TOKEN }}"));
+    expect(yml).not.toMatch(/NPM_TOKEN|secrets\.NPM/);
+    // The npmjs.com path stays: trusted publishing with provenance, no token.
     const script = read("scripts/release-publish.sh");
     expect(script).toMatch(/npm publish --provenance --access public/);
     expect(script).toMatch(/dist\.attestations/);

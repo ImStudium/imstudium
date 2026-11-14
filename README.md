@@ -8,7 +8,13 @@ The default instance is [Digicampus](https://digicampus.uni-augsburg.de) (Uni Au
 
 ## Get started
 
-You need Node.js 20 or newer. Install the CLI and the agent server with one line:
+You need Node.js 20 or newer and a GitHub account. For now ImStudium is published on GitHub Packages, which asks for a token even for public packages, so you sign npm in to it once. Create a classic personal access token with only the `read:packages` scope on github.com (Settings → Developer settings → Personal access tokens), then run:
+
+```bash
+npm login --scope=@imstudium --auth-type=legacy --registry=https://npm.pkg.github.com
+```
+
+Your username is your GitHub name and the password is the token. After that, one line installs the CLI and the agent server:
 
 ```bash
 npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar
@@ -54,7 +60,7 @@ imstudium setup all --agent cursor -y
 imstudium setup mcp --agent cursor
 ```
 
-For Claude Desktop, Windsurf and OpenCode, `imstudium setup all -y` installs the skills for every harness it finds on your machine, and `imstudium setup mcp` adds the server. There is also an installer that does the npm install and this setup in one go: `curl -fsSL https://raw.githubusercontent.com/ImStudium/imstudium/main/scripts/install.sh | bash`.
+For Claude Desktop, Windsurf and OpenCode, `imstudium setup all -y` installs the skills for every harness it finds on your machine, and `imstudium setup mcp` adds the server. There is also an installer that does the npm install and this setup in one go: `curl -fsSL https://raw.githubusercontent.com/ImStudium/imstudium/main/scripts/install.sh | bash`. Without the GitHub Packages sign-in it builds ImStudium from source instead, which needs git and installs Bun.
 
 ## On-device OCR and formulas
 
