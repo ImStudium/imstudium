@@ -1,6 +1,17 @@
 import { z } from "zod";
 import { ContextOutput } from "./cli/context.js";
 import { DoctorOutput } from "./cli/doctor.js";
+import {
+  ArbeitCheckOutput,
+  ArbeitListOutput,
+  ArbeitShowOutput,
+  LiteraturOutput,
+  QuellenAddOutput,
+  QuellenCheckOutput,
+  QuellenListOutput,
+  StileOutput,
+  ZitierenOutput,
+} from "./cli/arbeit.js";
 import { SetupOcrOutput } from "./cli/setup.js";
 import { FormulasCheckOutput, FormulasFixOutput, FormulasListOutput } from "./cli/formulas.js";
 import { CoursewareOutput, TasksOutput } from "./cli/content.js";
@@ -42,6 +53,19 @@ export const CLI_OUTPUTS = {
   sync: SyncOutput,
   extract: ExtractOutput,
   doctor: DoctorOutput,
+  arbeit: ArbeitListOutput,
+  "arbeit list": ArbeitListOutput,
+  "arbeit new": ArbeitShowOutput,
+  "arbeit show": ArbeitShowOutput,
+  "arbeit check": ArbeitCheckOutput,
+  quellen: QuellenListOutput,
+  "quellen list": QuellenListOutput,
+  "quellen add": QuellenAddOutput,
+  "quellen import": QuellenAddOutput,
+  "quellen check": QuellenCheckOutput,
+  zitieren: ZitierenOutput,
+  literatur: LiteraturOutput,
+  stile: StileOutput,
   "setup ocr": SetupOcrOutput,
   "formulas list": FormulasListOutput,
   "formulas check": FormulasCheckOutput,

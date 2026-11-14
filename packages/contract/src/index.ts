@@ -17,6 +17,7 @@ export * from "./cli/content.js";
 export * from "./cli/communication.js";
 export * from "./cli/workspace.js";
 export * from "./cli/doctor.js";
+export * from "./cli/arbeit.js";
 export * from "./cli/setup.js";
 export * from "./cli/formulas.js";
 export * from "./feed/index.js";
