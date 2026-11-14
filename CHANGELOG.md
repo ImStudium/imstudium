@@ -4,6 +4,12 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-14
+
+### Fixed
+
+- **0.3.0 could not be installed from GitHub Packages.** That registry drops `peerDependenciesMeta` from a package's manifest, so npm took the optional ImSicheren SDK for a required peer of `@imstudium/sdk` and stopped with a 404 for `@imsicheren/sdk`. The SDK no longer declares it as a peer; it still uses ImSicheren as the session store when it is installed. Install 0.3.1, not 0.3.0.
+
 ## [0.3.0] - 2026-11-14
 
 The first release since 0.1.3, and the first on GitHub Packages (`npm.pkg.github.com`) instead of npmjs.com, for now. Installing needs a one-time `npm login` there with a GitHub token that has `read:packages` (README, Get started); npmjs.com keeps 0.1.3. This release also brings everything under 0.2.0 below, which was cut in the repository but never published.
@@ -270,6 +276,7 @@ Never published: these changes were first released with 0.3.0.
 - OAuth2 PKCE requires university-registered client
 - Courseware plugin files not in JSON:API (Stud.IP 5.4)
 
+[0.3.1]: https://github.com/ImStudium/imstudium/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ImStudium/imstudium/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ImStudium/imstudium/pull/1
 [0.1.3]: https://github.com/ImStudium/imstudium/releases/tag/v0.1.3

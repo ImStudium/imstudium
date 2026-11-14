@@ -1,6 +1,6 @@
 {
   "name": "@imstudium/contract",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "ImStudium wire contract — zod schemas for every CLI --json output, the error table and the imstudium/source/v1 feed",
   "license": "MIT",
   "type": "module",

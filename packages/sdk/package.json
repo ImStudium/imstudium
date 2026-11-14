@@ -1,6 +1,6 @@
 {
   "name": "@imstudium/sdk",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "ImStudium Stud.IP JSON:API client, auth, sync, and Studium workspace builder",
   "license": "MIT",
   "type": "module",
@@ -47,18 +47,10 @@
   "dependencies": {
     "@firecrawl/anydoc": "^0.2.4",
     "@firecrawl/pdf-inspector": "^1.25.2",
-    "@imstudium/contract": "^0.3.0",
+    "@imstudium/contract": "^0.3.1",
     "katex": "^0.19.1",
     "keytar": "^7.9.0",
     "playwright": "^1.64.1"
-  },
-  "peerDependencies": {
-    "@imsicheren/sdk": ">=0.1.0"
-  },
-  "peerDependenciesMeta": {
-    "@imsicheren/sdk": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@types/node": "^24",
