@@ -93,7 +93,82 @@ export { pickCourse, resolveCourseDir, resolveCourseQuery, resolveWorkspaceCours
 export { ensureMigrated, archiveLegacyConfigDir, convertLegacyManifest, legacyPaths, type MigrationResult } from "./migrate.js";
 
 // ── Extraction, viewer and search ────────────────────────────────────────────
-export { Extractor, detectTools, toolHints, extractSlug, type ExtractTools } from "./extract.js";
+export {
+  Extractor,
+  detectTools,
+  toolHints,
+  extractSlug,
+  shouldRedoForOcr,
+  shouldRedoForMath,
+  summarizeOcr,
+  withFormulas,
+  FORMULAS_HEADING,
+  type ExtractTools,
+  type OcrSummary,
+} from "./extract.js";
+export {
+  FORMULA_FIXES_FILE,
+  readFormulaFixes,
+  writeFormulaFixes,
+  applyFormulaFixes,
+  describeVerdict,
+  formulaNote,
+  loadExtractedFormulas,
+  findFormula,
+  checkExtractedFormula,
+  fixExtractedFormula,
+  replaceFormulaInContent,
+  type ExtractedFormulas,
+  type FormulaFix,
+  type FormulaEntry,
+} from "./formulas.js";
+export { imageToPdf, imagesToPdf, IMAGE_PDF_DPI } from "./ingest/image-pdf.js";
+export { convertLocalDocument, type LocalConvertResult, type LocalPage } from "./ingest/local-docs.js";
+export {
+  installMathRuntime,
+  removeMathRuntime,
+  mathRuntimeStatus,
+  recognizeMath,
+  renderPdfPages,
+  checkFormula,
+  judgeFormula,
+  isPictureFormula,
+  type FormulaPdf,
+  latexIssues,
+  latexGlyphs,
+  type FormulaVerdict,
+  type FormulaCheck,
+  type GlyphDiff,
+  normalizeLatex,
+  sameMeaning,
+  decideReading,
+  readingFeatures,
+  READING_FACTORS,
+  DECISION_WEIGHTS,
+  DECISION_FLAG_BELOW,
+  MATH_DECISION,
+  type Reading,
+  MATH_MODEL,
+  LAYOUT_MODEL,
+  type Formula,
+  type MathResult,
+  type MathRuntimeStatus,
+  type RenderedPage,
+} from "./ingest/math.js";
+export { encodePng } from "./ingest/png.js";
+export {
+  installOcrRuntime,
+  removeOcrRuntime,
+  ocrRuntimeStatus,
+  ocrDisabledByEnv,
+  OCR_MODEL,
+  OCR_RUNTIMES,
+  ONNXRUNTIME_VERSION,
+  PDFIUM_VERSION,
+  type OcrInstallResult,
+  type OcrRuntimeInfo,
+  type OcrRuntimeStatus,
+} from "./ingest/ocr-runtime.js";
 export { buildSlideViewer, buildAgentVisualPayload, type AgentVisualPayload } from "./viewer.js";
 export { searchWorkspace, type SearchKind, type SearchDoc, type SearchHit, type SearchOptions } from "./search.js";
 export {
@@ -113,7 +188,7 @@ export { EXTRACTION_LIMITS_FOR_AGENTS } from "./extraction-guidance.js";
 // ── Resources (one per Stud.IP area; GET only) ───────────────────────────────
 export { CoursesResource, ScheduleResource, DiscoveryResource, type ListMineOptions, type ResolvedSemesterContext } from "./resources/courses.js";
 export { FilesResource, formatFileTree, type FileTreeEntry } from "./resources/files.js";
-export { NewsResource, selectNews, writeNewsMarkdown, type NewsItem, type NewsScope, type NewsWriteResult } from "./resources/news.js";
+export { mergeLiveAndSavedNews, NewsResource, readSavedNews, selectNews, upgradeLegacyNews, writeNewsMarkdown, type NewsItem, type NewsScope, type NewsWriteResult } from "./resources/news.js";
 export { WikiResource, buildWikiTree, renderWiki, wikiPageUrl, type WikiPage, type WikiNode } from "./resources/wiki.js";
 export { MessagesResource, type MessageItem, type MessageBox } from "./resources/messages.js";
 export {

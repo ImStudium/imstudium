@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChangeEntry, IsoDateTime, SearchHit, SemesterProgress, SyncReport } from "../common.js";
+import { OcrSummary } from "./setup.js";
 
 /** `imstudium search --json` */
 export const SearchOutput = z
@@ -54,7 +55,13 @@ export const SemesterOutput = z
       })
       .nullable(),
     archive: z.array(ArchivedSemester),
-    needsRollover: z.boolean(),
+    enrolled: z
+      .number()
+      .int()
+      .nullable()
+      .optional()
+      .describe("Your courses in the running semester on Stud.IP; null when signed out or offline"),
+    needsRollover: z.boolean().describe("A semester start is due: Stud.IP is on a newer semester you have courses in"),
     next: z.string(),
   })
   .describe("Where you are in the semester and whether a rollover is due");
@@ -81,7 +88,12 @@ export const SemesterStartOutput = z.union([
     report: SyncReport,
     extracted: z.number().int(),
   }),
-  z.object({ semester: SemesterId, plan: RolloverPlan, downloads: z.number().int() }),
+  z.object({
+    semester: SemesterId,
+    plan: RolloverPlan,
+    downloads: z.number().int(),
+    courses: z.number().int().optional().describe("Your courses in the target semester"),
+  }),
 ]);
 export type SemesterStartOutput = z.infer<typeof SemesterStartOutput>;
 
@@ -98,8 +110,38 @@ export const SyncOutput = SyncReport.extend({
   ),
   changes: z.array(ChangeEntry),
   extracted: z.number().int().optional().describe("Only with --extract"),
+  ocr: OcrSummary.optional().describe("Only with --extract: pages read by on-device OCR"),
 }).describe("Sync report: downloads, per-semester folders and the files that changed");
 export type SyncOutput = z.infer<typeof SyncOutput>;
+
+const ExtractResult = z.object({
+  source: z.string(),
+  outDir: z.string(),
+  kind: z.enum(["pdf", "office", "image", "text", "unsupported"]),
+  pages: z.number().int(),
+  tool: z.string().optional().describe("pdf-inspector · pdf-inspector+ocr · anydoc · passthrough · copy"),
+  skipped: z.boolean().optional().describe("Unchanged since the last extraction"),
+  error: z.string().optional(),
+  hint: z.string().optional(),
+  ocrPages: z.array(z.number().int()).optional().describe("0-based pages read by on-device OCR"),
+  ocrLowConfidencePages: z.array(z.number().int()).optional(),
+  imageOnlyPages: z.array(z.number().int()).optional().describe("0-based pages still without text"),
+  mathFormulas: z.number().int().optional().describe("Display formulas read into LaTeX (set when math recognition ran)"),
+});
+
+/** `imstudium extract --json` (workspace mode; `--file` returns one result) */
+export const ExtractOutput = z
+  .object({
+    extracted: z.number().int(),
+    skipped: z.number().int(),
+    failed: z.number().int(),
+    hints: z.array(z.string()),
+    ocr: OcrSummary,
+    results: z.array(ExtractResult),
+    searchIndex: z.unknown().nullable().optional(),
+  })
+  .describe("Local extraction to content.md: counts, OCR totals and one result per file");
+export type ExtractOutput = z.infer<typeof ExtractOutput>;
 
 export const ExamDate = z.object({
   courseId: z.string(),

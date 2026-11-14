@@ -85,6 +85,18 @@ export function attr<T = string>(resource: JsonApiResource | undefined, key: str
   return resource?.attributes?.[key] as T | undefined;
 }
 
+/**
+ * `**…**` / `_…_` around an element's content, with its leading and trailing
+ * whitespace (spaces, &nbsp;, wrapping tags) outside the markers: markdown
+ * reads `** 06.10.2026 Uhr**` as literal asterisks, not bold. Nothing but
+ * whitespace inside: no markers.
+ */
+function emphasis(marker: string, inner: string): string {
+  const m = /^((?:\s|&nbsp;|&#160;|<[^>]*>)*)([\s\S]*?)((?:\s|&nbsp;|&#160;|<[^>]*>)*)$/i.exec(inner)!;
+  const [, lead, core, trail] = m as unknown as [string, string, string, string];
+  return core ? `${lead}${marker}${core}${marker}${trail}` : `${lead}${trail}`;
+}
+
 /** Stud.IP sends HTML in news, forum, wiki and courseware text. Make it readable markdown-ish text. */
 export function htmlToText(html: unknown): string {
   if (typeof html !== "string" || !html) return "";
@@ -95,8 +107,8 @@ export function htmlToText(html: unknown): string {
     .replace(/<\/(p|div|h[1-6]|li|tr|blockquote|pre)>/gi, "\n")
     .replace(/<li[^>]*>/gi, "- ")
     .replace(/<h([1-6])[^>]*>/gi, (_, n: string) => `${"#".repeat(Math.min(Number(n) + 1, 6))} `)
-    .replace(/<(strong|b)[^>]*>([\s\S]*?)<\/\1>/gi, "**$2**")
-    .replace(/<(em|i)[^>]*>([\s\S]*?)<\/\1>/gi, "_$2_")
+    .replace(/<(strong|b)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi, (_, _tag: string, inner: string) => emphasis("**", inner))
+    .replace(/<(em|i)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi, (_, _tag: string, inner: string) => emphasis("_", inner))
     .replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, "`$1`")
     .replace(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, text: string) =>
       text.trim() && text.trim() !== href ? `[${text.trim()}](${href})` : href,

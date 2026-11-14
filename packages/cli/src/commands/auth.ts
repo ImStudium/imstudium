@@ -194,14 +194,14 @@ export function registerAuth(program: Command): void {
   const session = program.command("session").description("Session management: import a Stud.IP session cookie");
   session
     .command("import")
-    .description("Store a Seminar_Session cookie (from --cookie or a Netscape cookie file)")
-    .option("--cookie <value>", "Seminar_Session cookie value")
+    .description("Store a Stud.IP session cookie (Studip_Session or Seminar_Session; from --cookie or a Netscape cookie file)")
+    .option("--cookie <value>", "Session cookie value (checked against Stud.IP to find its name)")
     .option("--file <path>", "Netscape cookie file")
     .action(
       act(async (opts: { cookie?: string; file?: string }) => {
         const sdk = await getSdk();
         if (opts.cookie) {
-          await sdk.auth.importCookies({ Seminar_Session: opts.cookie });
+          await sdk.auth.loginInteractive({ instanceOrigin: sdk.config.instanceOrigin, cookieValue: opts.cookie });
         } else if (opts.file) {
           await sdk.auth.importFromNetscapeCookieFile(await readFile(opts.file, "utf-8"));
         } else {

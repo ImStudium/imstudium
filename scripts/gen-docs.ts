@@ -4,11 +4,11 @@
  *
  *   bun run docs            write every generated doc
  *   bun run docs:check      fail (exit 1) when a generated doc is out of date
- *   bun scripts/gen-docs.ts errors   one doc only
+ *   bun scripts/gen-docs.ts errors   one doc only (ids: commands, errors, plugin)
  *
  * The same renderers back `scripts/docs.test.ts`, so CI catches drift.
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GENERATED_DOCS } from "./docs/index.ts";
@@ -32,6 +32,7 @@ for (const doc of GENERATED_DOCS) {
     stale++;
     console.error(`OUT OF DATE ${doc.path} — run: bun run docs`);
   } else {
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, next);
     console.error(`wrote       ${doc.path}`);
   }

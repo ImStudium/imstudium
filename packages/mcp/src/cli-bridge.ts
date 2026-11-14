@@ -70,6 +70,8 @@ export const READ_ONLY_PATHS: ReadonlySet<string> = new Set([
   "stile list",
   "stile show",
   "stile find",
+  "formulas list",
+  "formulas check",
 ]);
 
 /**

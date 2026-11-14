@@ -23,10 +23,12 @@ Command-line interface for ImStudium / Stud.IP. Sync materials, build agent work
 ## One-shot setup
 
 ```bash
-npx -y @imstudium/cli onboard --agents-only -y -o ~/Studium
-imstudium login
-imstudium init -o ~/Studium
+npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar
+imstudium login                      # the student signs in, in their own browser window
+imstudium semester start --extract   # first sync of the running semester, files as markdown
 ```
+
+Skills for harnesses without the plugin: `imstudium setup all -y`. MCP: `imstudium setup mcp`.
 
 ## Updates
 
@@ -74,7 +76,7 @@ Global flags: `--json` (stable keys for agents), `--quiet`, `--instance <url>` (
 
 After `extract`, each file has `extracted/<file>/content.md` (pages as `## Page N` sections); photos are copied to `pages/`.
 
-**Limits:** one pipeline — pdf-inspector (PDF) + AnyDoc (Office). No Tesseract. Image-only pages have no text; open the original. See `imstudium-visual`.
+**Limits:** one local pipeline: pdf-inspector (PDF) and AnyDoc (Office), plus on-device OCR for scanned pages after `imstudium setup ocr` and `$$…$$` LaTeX for display formulas after `imstudium setup ocr --math` (`math.json` has page and box). Without OCR, image-only pages have no text. OCR text and formulas are model output: check formulas and diagrams against the original. See `imstudium-visual`.
 
 ## Auth
 

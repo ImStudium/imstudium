@@ -48,8 +48,8 @@ Add `--json` when you parse output. Course arguments take a title fragment, slug
 
 1. `imstudium search "<concept>"` (add `--archive` for earlier semesters).
 2. Open the hit's `content.md`; read the page section around the cited page.
-3. Answer with citations like `Statistik · v03.pdf · p.12`. Formulas and diagrams: the markdown is not LaTeX —
-   say so and point to the original PDF in `files/` when the page is image-only.
+3. Answer with citations like `Statistik · v03.pdf · p.12`. Formulas and diagrams: check the original PDF in `files/`.
+   Inline math in the markdown is garbled, and `$$…$$` formulas were read by an on-device model and can be wrong.
 4. Graded work stays the student's own: explain, quiz, give hints and worked examples of *similar* problems —
    don't hand in solutions to current Übungsblätter as if they were theirs.
 

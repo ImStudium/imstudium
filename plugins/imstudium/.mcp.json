@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "imstudium": {
+      "command": "imstudium-mcp",
+      "args": []
+    }
+  }
+}

@@ -364,7 +364,18 @@ export class StudIpClient {
     while (nextPath) {
       const qs = nextQuery.toString();
       const fullPath: string = qs ? `${nextPath}?${qs}` : nextPath;
-      const doc: JsonApiDocument<T> = await this.request<T>("GET", fullPath);
+      let doc: JsonApiDocument<T>;
+      try {
+        doc = await this.request<T>("GET", fullPath);
+      } catch (e) {
+        // Some Stud.IP 6 routes (e.g. /courseware-tasks) aren't paginated and answer
+        // 400 "Page parameter limit is not allowed." — fetch them once, unpaged.
+        if (!isPagingRejected(e) || ![...nextQuery.keys()].some((k) => k.startsWith("page["))) throw e;
+        const unpaged = new URLSearchParams([...nextQuery].filter(([k]) => !k.startsWith("page[")));
+        const rest = unpaged.toString();
+        doc = await this.request<T>("GET", rest ? `${nextPath}?${rest}` : nextPath);
+        doc = { ...doc, links: undefined };
+      }
       if (Array.isArray(doc.data)) data.push(...doc.data);
       else if (doc.data) data.push(doc.data);
       for (const inc of doc.included ?? []) {
@@ -399,4 +410,13 @@ export class StudIpClient {
   ): Promise<T[]> {
     return (await this.paginate<T>(initialPath, params)).data;
   }
+}
+
+/** Stud.IP's 400 for a route that takes no `page[…]` parameters. */
+export function isPagingRejected(e: unknown): boolean {
+  return (
+    e instanceof ImstudiumError &&
+    (e.status === undefined || e.status === 400) &&
+    /page parameter \w+ is not allowed/i.test(e.message)
+  );
 }

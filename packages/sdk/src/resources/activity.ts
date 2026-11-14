@@ -155,7 +155,23 @@ export class ActivityResource {
     );
     const included = new Included(page.included);
     return page.data
-      .map((r) => normalizeActivity(r, included, this.origin))
+      .map((r) => redactMembership(normalizeActivity(r, included, this.origin)))
       .sort((a, b) => toMs(b.date) - toMs(a.date));
   }
+}
+
+/**
+ * Membership activities ("X was enrolled in / removed from the course") name
+ * other students — a member list in disguise. Keep that something changed, drop who.
+ */
+export function redactMembership(item: ActivityItem): ActivityItem {
+  if (item.type !== "participants") return item;
+  const where = item.courseTitle ? ` in ${item.courseTitle}` : "";
+  return {
+    ...item,
+    title: `Participants changed${where}`,
+    text: "",
+    actor: null,
+    objectId: null,
+  };
 }

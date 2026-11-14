@@ -30,22 +30,41 @@ export function getDefaultConfig(): ImstudiumConfig {
   };
 }
 
-export async function loadConfig(): Promise<ImstudiumConfig> {
-  await ensureMigrated();
+/**
+ * Per-process overrides. They beat config.json — Echo and other launchers point one
+ * run at another workspace with IMSTUDIUM_WORKSPACE — and are never written back.
+ */
+export function envConfigOverrides(env: NodeJS.ProcessEnv = process.env): Partial<ImstudiumConfig> {
+  const o: Partial<ImstudiumConfig> = {};
+  if (env.IMSTUDIUM_WORKSPACE) o.workspacePath = env.IMSTUDIUM_WORKSPACE;
+  if (env.IMSTUDIUM_ORIGIN) o.instanceOrigin = env.IMSTUDIUM_ORIGIN;
+  if (env.IMSTUDIUM_BASE_URL) o.baseUrl = env.IMSTUDIUM_BASE_URL;
+  return o;
+}
+
+/** config.json as saved, without environment overrides. */
+async function readSavedConfig(): Promise<Partial<ImstudiumConfig>> {
   try {
-    const raw = await readFile(paths.configFile, "utf-8");
-    return { ...getDefaultConfig(), ...JSON.parse(raw) };
+    return JSON.parse(await readFile(paths.configFile, "utf-8")) as Partial<ImstudiumConfig>;
   } catch {
-    return getDefaultConfig();
+    return {};
   }
 }
 
+/** Defaults < config.json < environment (IMSTUDIUM_WORKSPACE, IMSTUDIUM_ORIGIN, IMSTUDIUM_BASE_URL). */
+export async function loadConfig(): Promise<ImstudiumConfig> {
+  await ensureMigrated();
+  return { ...getDefaultConfig(), ...(await readSavedConfig()), ...envConfigOverrides() };
+}
+
 export async function saveConfig(config: Partial<ImstudiumConfig>): Promise<ImstudiumConfig> {
-  const current = await loadConfig();
-  const merged = { ...current, ...config };
+  await ensureMigrated();
+  // Merge into what's on disk only: neither an environment override nor a default
+  // derived from one (getDefaultConfig reads IMSTUDIUM_*) may become the saved setting.
+  const onDisk = { ...(await readSavedConfig()), ...config };
   await mkdir(CONFIG_DIR, { recursive: true });
-  await writeFile(paths.configFile, JSON.stringify(merged, null, 2));
-  return merged;
+  await writeFile(paths.configFile, JSON.stringify(onDisk, null, 2));
+  return { ...getDefaultConfig(), ...onDisk, ...envConfigOverrides() };
 }
 
 export function slugify(text: string): string {

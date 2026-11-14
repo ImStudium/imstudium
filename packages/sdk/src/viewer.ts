@@ -115,8 +115,8 @@ export function buildAgentVisualPayload(
   return {
     requiredAction:
       pageImages.length > 0
-        ? "MANDATORY: Visually inspect all pageImages (or viewerHtml via Playwright/browser) BEFORE explaining slide content, diagrams, formulas, or layout. Extracted text is supplementary only — no LaTeX; OCR math is unreliable."
-        : "No page images — photos copy into pages/; PDFs/PPTX are markdown-only (AnyDoc / pdf-inspector).",
+        ? "MANDATORY: Visually inspect all pageImages (or viewerHtml via Playwright/browser) BEFORE explaining slide content, diagrams, formulas, or layout. Extracted text is supplementary only: OCR text and $$…$$ formulas are model output."
+        : "No page images: photos copy into pages/. For diagrams and formulas open the original in files/; $$…$$ formulas in content.md were read on this machine and need checking against it.",
     pageImages,
     viewerHtml,
     viewerFileUrl,

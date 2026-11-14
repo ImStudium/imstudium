@@ -107,7 +107,8 @@ export async function checkForUpdates(entryPath: string, timeoutMs = 10_000): Pr
 
 export async function runGlobalUpdate(): Promise<{ ok: boolean; output: string }> {
   try {
-    const out = execSync("npm install -g @imstudium/cli@latest @imstudium/mcp@latest", {
+    // npm 11 skips install scripts unless allowed; keytar needs its own to reach the OS keychain.
+    const out = execSync("npm install -g @imstudium/cli@latest @imstudium/mcp@latest --allow-scripts=keytar", {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });

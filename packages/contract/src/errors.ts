@@ -49,10 +49,12 @@ export const ERROR_CODES = {
   UPDATE_FAILED: spec("internal", "`imstudium update` could not upgrade the global npm install", "Run: npm i -g @imstudium/cli@latest"),
   BROWSER_LAUNCH_FAILED: spec("internal", "The sign-in browser (Playwright) could not start", "Run: npx playwright install chromium"),
   CLI_NOT_FOUND: spec("internal", "The MCP server could not find the imstudium CLI to run", "npm i -g @imstudium/cli, or set IMSTUDIUM_CLI to its path"),
+  OCR_INSTALL_FAILED: spec("internal", "Downloading, verifying or starting the on-device OCR runtime failed (nothing half-installed is used)", "Check the connection, then run: imstudium setup ocr --force", { retryable: true }),
   // ── 2 usage ────────────────────────────────────────────────────────────────
   BAD_ARGS: spec("usage", "An argument or flag is missing, unknown or malformed", "See: imstudium <command> --help", {
     aliases: ["MISSING_ARG", "INVALID_KEY"],
   }),
+  FORMULA_MISMATCH: spec("usage", "The corrected formula doesn't check: it is malformed LaTeX, or it shows letters or digits the PDF doesn't have in that box (or leaves out ones it has)", "Look at the formula's image again and write only what it shows; imstudium formulas check <file> <id> --latex '…' says what differs"),
   NO_CLIENT_ID: spec("usage", "OAuth sign-in was requested without a client id", "Set IMSTUDIUM_OAUTH_CLIENT_ID or oauth.clientId (docs/OAUTH.md), or run imstudium login without --oauth"),
   IDENTIFIER_UNRECOGNIZED: spec("usage", "The input is not a DOI, ISBN, arXiv id or web address", "e.g. imstudium quellen add 10.1000/xyz123, an ISBN, arXiv:2101.01234 or a URL; without one use --manual"),
   IMPORT_FAILED: spec("usage", "The file could not be read as BibTeX/BibLaTeX, RIS or CSL-JSON", "Export from Zotero, Citavi, Mendeley or JabRef as BibTeX (.bib), RIS (.ris) or CSL JSON (.json)"),
@@ -66,7 +68,7 @@ export const ERROR_CODES = {
   LOGIN_FAILED: spec("auth", "Browser sign-in did not produce a session", "Run: imstudium login (or --manual)"),
   LOGIN_TIMEOUT: spec("auth", "Sign-in took too long", "Run: imstudium login and finish the sign-in within a few minutes"),
   LOGIN_CANCELLED: spec("auth", "The sign-in window was closed before the login finished", "Run: imstudium login"),
-  LOGIN_INVALID_COOKIE: spec("auth", "The pasted or imported session cookie is not valid", "Copy Seminar_Session again, or run: imstudium login"),
+  LOGIN_INVALID_COOKIE: spec("auth", "The pasted or imported session cookie is not valid", "Copy Studip_Session (or Seminar_Session) again, or run: imstudium login"),
   CHROME_PROFILE_LOCKED: spec("auth", "--chrome-profile needs Chrome closed", "Quit Chrome completely, then run: imstudium login --chrome-profile"),
   OAUTH_UNAVAILABLE: spec("auth", "OAuth is not available on this Stud.IP instance", "Run: imstudium login (browser sign-in)"),
   OAUTH_CLIENT_INVALID: spec("auth", "Stud.IP rejected the OAuth client id", "Check oauth.clientId in ~/.config/imstudium/config.json (docs/OAUTH.md)"),
@@ -80,6 +82,11 @@ export const ERROR_CODES = {
   SEMESTER_NOT_FOUND: spec("not_found", "No semester matches the label", "imstudium semesters lists them, e.g. --semester \"WS 2026/27\"", {
     aliases: ["NO_SEMESTER"],
   }),
+  OCR_UNSUPPORTED: spec("not_found", "No pinned on-device OCR runtime for this platform or JavaScript runtime", "Extraction keeps the native text and marks image-only pages; OCR runs on macOS arm64, Linux x64/arm64 and Windows x64 under Node"),
+  FORMULA_NOT_FOUND: spec("not_found", "No recognised formulas in that file, or none with that id", "imstudium formulas list <file> shows the ids; formulas are read at extraction once imstudium setup ocr --math has run", {
+    aliases: ["NO_FORMULAS"],
+  }),
+  NO_ENROLMENTS: spec("not_found", "You are not enrolled in any course of that semester on Stud.IP", "Enrol in Stud.IP first and keep working in your current semester folder (imstudium sync), or pass --allow-empty"),
   UNIT_NOT_FOUND: spec("not_found", "No Courseware unit matches", "imstudium courseware <course> lists the units"),
   PAGE_NOT_FOUND: spec("not_found", "No wiki page matches", "imstudium wiki <course> lists the pages"),
   ROUTE_NOT_FOUND: spec("not_found", "No JSON:API route matches the path", "imstudium routes lists the routes of your Stud.IP", {

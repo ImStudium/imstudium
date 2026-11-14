@@ -12,11 +12,14 @@ import {
   StileOutput,
   ZitierenOutput,
 } from "./cli/arbeit.js";
+import { SetupOcrOutput } from "./cli/setup.js";
+import { FormulasCheckOutput, FormulasFixOutput, FormulasListOutput } from "./cli/formulas.js";
 import { CoursewareOutput, TasksOutput } from "./cli/content.js";
 import { ForumOutput, MessagesOutput, NewsOutput } from "./cli/communication.js";
 import { HolidaysOutput, TodayOutput, WeekOutput } from "./cli/planning.js";
 import {
   ChangesOutput,
+  ExtractOutput,
   KlausurenOutput,
   SearchOutput,
   SemesterOutput,
@@ -48,6 +51,7 @@ export const CLI_OUTPUTS = {
   semester: SemesterOutput,
   "semester start": SemesterStartOutput,
   sync: SyncOutput,
+  extract: ExtractOutput,
   doctor: DoctorOutput,
   arbeit: ArbeitListOutput,
   "arbeit list": ArbeitListOutput,
@@ -62,6 +66,10 @@ export const CLI_OUTPUTS = {
   zitieren: ZitierenOutput,
   literatur: LiteraturOutput,
   stile: StileOutput,
+  "setup ocr": SetupOcrOutput,
+  "formulas list": FormulasListOutput,
+  "formulas check": FormulasCheckOutput,
+  "formulas fix": FormulasFixOutput,
 } satisfies Record<string, z.ZodType>;
 
 export type CliCommandWithSchema = keyof typeof CLI_OUTPUTS;

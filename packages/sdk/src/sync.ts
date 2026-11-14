@@ -1,5 +1,5 @@
-import { readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile, realpath, rename, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { StudIpClient } from "./client.js";
 import { CoursesResource } from "./resources/courses.js";
 import { FilesResource } from "./resources/files.js";
@@ -148,7 +148,17 @@ export class SyncEngine {
         const chdate = fr.attributes?.chdate;
         const existing = state.entries[fr.id];
         const meta = { courseId: course.id, courseTitle: title, name };
-        if (existing && existing.chdate === chdate && existing.localPath === destPath) {
+        // Names come from whoever may create folders in the course: a path
+        // outside the course folder is never written, whatever the name.
+        if (!isInside(courseDir, destPath)) {
+          report.failed++;
+          report.errors.push({ fileRefId: fr.id, message: `"${name}" would land outside the course folder; skipped` });
+          report.files.push({ fileRefId: fr.id, path: destPath, action: "fail", ...meta });
+          return;
+        }
+        if (existing && existing.chdate === chdate && (await samePath(existing.localPath, destPath))) {
+          // Same file, maybe reached through a symlinked workspace path: record the path in use now.
+          if (existing.localPath !== destPath && !options.dryRun) state.entries[fr.id] = { ...existing, localPath: destPath };
           report.skipped++;
           report.files.push({ fileRefId: fr.id, path: destPath, action: "skip", ...meta });
           return;
@@ -188,7 +198,7 @@ export class SyncEngine {
           report.files.push({ fileRefId: fr.id, path: destPath, action: "download", change, ...meta });
         } catch (e) {
           report.failed++;
-          const msg = e instanceof Error ? e.message : String(e);
+          const msg = friendlyDownloadError(e instanceof Error ? e.message : String(e), fr.attributes?.["mime-type"]);
           report.errors.push({ fileRefId: fr.id, message: msg });
           report.files.push({ fileRefId: fr.id, path: destPath, action: "fail", ...meta });
         }
@@ -202,8 +212,17 @@ export class SyncEngine {
   }
 }
 
+/** A local file name from a Stud.IP name; "." and ".." (or only dots) are never a path. */
 export function sanitizeFilename(name: string): string {
-  return name.replace(/[<>:"/\\|?*]/g, "_").trim() || "file";
+  const cleaned = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim();
+  if (!cleaned) return "file";
+  return /^\.+$/.test(cleaned) ? "_" : cleaned;
+}
+
+/** True when `path` lies inside `dir` (not `dir` itself, not beside it). */
+export function isInside(dir: string, path: string): boolean {
+  const rel = relative(resolve(dir), resolve(path));
+  return !!rel && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 async function runPool(tasks: Array<() => Promise<void>>, concurrency: number): Promise<void> {
@@ -215,4 +234,30 @@ async function runPool(tasks: Array<() => Promise<void>>, concurrency: number): 
     }
   });
   await Promise.all(workers);
+}
+
+/**
+ * Two paths to one file — e.g. a workspace reached through a symlink
+ * (`echo/domains/studium → ~/Studium`). Plain string compare first; realpath
+ * only when they differ and both exist.
+ */
+export async function samePath(a: string, b: string): Promise<boolean> {
+  if (a === b) return true;
+  try {
+    const [ra, rb] = await Promise.all([realpath(a), realpath(b)]);
+    return ra === rb;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stud.IP sometimes answers a file download with a bare PHP location
+ * (`…/FileRefsContentShow.php(83)`) — typically a link entry or a broken upload.
+ * Say that instead of leaking the server's paths.
+ */
+export function friendlyDownloadError(message: string, mimeType?: unknown): string {
+  if (!/\.php\(\d+\)/.test(message) && !/^\/var\//.test(message)) return message;
+  const kind = mimeType === "0" || mimeType === 0 ? "probably an external link or a broken upload" : "a server-side error";
+  return `Stud.IP can't deliver this file through its API (${kind}) — open it in Stud.IP`;
 }

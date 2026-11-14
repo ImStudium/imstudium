@@ -80,9 +80,10 @@ function codeForStatus(status: number | undefined): string {
  * A JSON:API error document as an ImstudiumError. Stud.IP's own code never
  * becomes ours: it travels in `details.upstream`.
  */
-export function parseApiErrors(doc: JsonApiDocument): ImstudiumError {
+export function parseApiErrors(doc: JsonApiDocument, httpStatus?: number): ImstudiumError {
   const err = doc.errors?.[0];
-  const status = err?.status ? parseInt(err.status, 10) : undefined;
+  // Stud.IP 6 error objects often omit `status`; the HTTP status still tells 400 from 500.
+  const status = err?.status ? parseInt(err.status, 10) : httpStatus;
   return new ImstudiumError(
     err?.detail || err?.title || "Unknown API error",
     codeForStatus(status),
@@ -97,7 +98,7 @@ export async function readResponseError(res: Response): Promise<ImstudiumError> 
   if (contentType.includes("json")) {
     try {
       const doc = (await res.json()) as JsonApiDocument;
-      if (doc.errors?.length) return parseApiErrors(doc);
+      if (doc.errors?.length) return parseApiErrors(doc, res.status);
     } catch {
       // fall through
     }

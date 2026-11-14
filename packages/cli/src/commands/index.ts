@@ -9,6 +9,7 @@ import { registerContent } from "./content.js";
 import { registerContext } from "./context.js";
 import { registerCourses } from "./courses.js";
 import { registerDoctor } from "./doctor.js";
+import { registerFormulas } from "./formulas.js";
 import { registerLegacy } from "./legacy.js";
 import { registerPeople } from "./people.js";
 import { registerPlanning } from "./planning.js";
@@ -44,6 +45,7 @@ export const COMMAND_MODULES: Array<(program: Command) => void> = [
   registerZitieren,
   registerSemester,
   registerSync,
+  registerFormulas,
   registerApi,
   registerSchema,
   registerSetup,

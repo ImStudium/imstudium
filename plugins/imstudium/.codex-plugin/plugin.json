@@ -1,0 +1,44 @@
+{
+  "name": "imstudium",
+  "version": "0.3.0",
+  "description": "Your Stud.IP studies for coding agents: today and this week, deadlines and Klausuren, new files and news, cited explanations from your own slides, exam prep and quizzes — read-only by default, local in ~/Studium.",
+  "author": {
+    "name": "Patrick Schröppel",
+    "url": "https://github.com/ImStudium"
+  },
+  "homepage": "https://github.com/ImStudium/imstudium#readme",
+  "repository": "https://github.com/ImStudium/imstudium",
+  "license": "MIT",
+  "keywords": [
+    "imstudium",
+    "studip",
+    "stud.ip",
+    "studium",
+    "university",
+    "klausur",
+    "exam-prep",
+    "education",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "ImStudium",
+    "shortDescription": "Your Stud.IP courses, dates and slides — agent-ready",
+    "longDescription": "ImStudium mirrors your Stud.IP into a local study workspace and gives Codex one read-only door to it: what's on today and this week, open Abgaben and Klausuren, new files and announcements, office hours, and cited explanations, exam plans and quizzes built from your own lecture material. Needs the imstudium CLI (npm i -g @imstudium/cli @imstudium/mcp) and one `imstudium login`.",
+    "developerName": "ImStudium",
+    "category": "Education",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "websiteURL": "https://github.com/ImStudium/imstudium#readme",
+    "defaultPrompt": [
+      "What's on today, and what's due this week?",
+      "Help me prepare for my next Klausur.",
+      "Explain this week's lecture topic from my slides, with citations."
+    ],
+    "brandColor": "#1F6FEB",
+    "screenshots": []
+  }
+}

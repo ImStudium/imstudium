@@ -1,7 +1,8 @@
 ---
 name: imstudium-mcp
 description: |
-  ImStudium MCP tools for all agent harnesses — studium overview, klausuren, course brief, find materials, sync.
+  ImStudium MCP tools for all agent harnesses — the read-only `imstudium` door to every CLI command, plus
+  studium overview, klausuren, course brief, find and read materials, sync preview.
   Use when working inside an MCP-enabled agent instead of terminal.
 ---
 
@@ -19,6 +20,7 @@ imstudium setup mcp
 
 | Intent | Tool |
 |--------|------|
+| **Any CLI command, read-only** | `imstudium` with `{"args": ["context"]}`, `["today"]`, `["search", "<words>"]`, … |
 | Course map + search guidance | `studium_overview` (read `searchGuidance`) |
 | Exams | `studium_klausuren` |
 | One course | `studium_course_brief` |
@@ -40,7 +42,7 @@ rg -i "backprop" ~/Studium/SS2026/*/search/corpus.jsonl
 Each JSONL line has `ref`, `text`, `extractSlug`, `page`. Cite with `ref`, then read:
 
 - `extracted/<extractSlug>/content.md` (## Page N)
-- the original in `files/` for diagrams and formulas (markdown is not LaTeX)
+- the original in `files/` for diagrams and formulas (inline math is garbled; `$$…$$` formulas are on-device model output)
 
 Faster: the `imstudium` tool with `["search", "<words>"]` returns ranked hits with citations.
 

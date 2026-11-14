@@ -11,7 +11,7 @@ Incremental sync from Stud.IP JSON:API to local workspace.
 **Default:** syncs courses active in the **current calendar semester** into `~/Studium/SS2026/` (not all 50+ past enrollments).
 
 ```bash
-imstudium semesters              # show current + recent semesters
+imstudium semester               # Stud.IP term vs workspace; says when to roll over
 imstudium courses list           # current semester courses only
 imstudium sync --semester WS2025-26   # pick a specific semester
 imstudium sync --all-semesters   # legacy: every enrollment
