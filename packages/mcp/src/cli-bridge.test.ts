@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkArgs, READ_ONLY_PATHS } from "./cli-bridge.js";
+import { checkArgs, READ_ONLY_PATHS, refuseArgs } from "./cli-bridge.js";
 import { buildProgram } from "@imstudium/cli/program";
 
 describe("MCP CLI door", () => {
@@ -59,8 +59,10 @@ describe("MCP CLI door", () => {
     expect(checkArgs(["courses", "list", "--semester", "start"])).toBeNull();
   });
 
-  it("refuses bad arguments instead of passing them to the CLI", () => {
-    expect(checkArgs(["today", "--no-such-flag"])).toMatch(/Refused/);
+  it("refuses bad arguments as BAD_ARGS with the command's help, not as a write", () => {
+    expect(refuseArgs(["today", "--since", "99x"])).toEqual({ code: "BAD_ARGS", message: "imstudium today: unknown option '--since'", hint: "imstudium today --help" });
+    expect(refuseArgs(["quellen", "show"])).toMatchObject({ code: "BAD_ARGS", hint: "imstudium quellen show --help" });
+    expect(refuseArgs(["login"])).toMatchObject({ code: "WRITE_NOT_ALLOWED" });
   });
 
   it("lets agents read the citation registry but never change it", () => {
