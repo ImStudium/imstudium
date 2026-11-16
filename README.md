@@ -8,13 +8,7 @@ The default instance is [Digicampus](https://digicampus.uni-augsburg.de) (Uni Au
 
 ## Get started
 
-You need Node.js 20 or newer and a GitHub account. For now ImStudium is published on GitHub Packages, which asks for a token even for public packages, so you sign npm in to it once. Create a classic personal access token with only the `read:packages` scope on github.com (Settings → Developer settings → Personal access tokens), then run:
-
-```bash
-npm login --scope=@imstudium --auth-type=legacy --registry=https://npm.pkg.github.com
-```
-
-Your username is your GitHub name and the password is the token. After that, one line installs the CLI and the agent server:
+You need Node.js 20 or newer. Install the CLI and the agent server with one line:
 
 ```bash
 npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar
@@ -60,7 +54,7 @@ imstudium setup all --agent cursor -y
 imstudium setup mcp --agent cursor
 ```
 
-For Claude Desktop, Windsurf and OpenCode, `imstudium setup all -y` installs the skills for every harness it finds on your machine, and `imstudium setup mcp` adds the server. There is also an installer that does the npm install and this setup in one go: `curl -fsSL https://raw.githubusercontent.com/ImStudium/imstudium/main/scripts/install.sh | bash`. Without the GitHub Packages sign-in it builds ImStudium from source instead, which needs git and installs Bun.
+For Claude Desktop, Windsurf and OpenCode, `imstudium setup all -y` installs the skills for every harness it finds on your machine, and `imstudium setup mcp` adds the server. There is also an installer that does the npm install and this setup in one go: `curl -fsSL https://raw.githubusercontent.com/ImStudium/imstudium/main/scripts/install.sh | bash`.
 
 ## On-device OCR and formulas
 
@@ -135,7 +129,7 @@ Start with `imstudium doctor`. It checks the install, the session, the workspace
 
 | Symptom | Fix |
 |---|---|
-| `doctor` says the session sits in a file, or keytar doesn't load | npm 11 skipped keytar's build. Run `npm install -g @imstudium/cli --allow-scripts=keytar`, or install ImSicheren. The session moves out of the file on the next command |
+| `doctor` says the session sits in a file, or keytar doesn't load | npm 11 skipped keytar's build. Run `npm install -g @imstudium/cli --allow-scripts=keytar`. The session moves out of the file on the next command |
 | `AUTH_REQUIRED`, `SESSION_EXPIRED` or "got a web page" | You are signed out, or silent renewal failed because your university forgot you. Run `imstudium login` |
 | `semester start` stops with `NO_ENROLMENTS` | Stud.IP doesn't list any course for you in the new semester yet. Keep working in your current semester with `imstudium sync`, and run `semester start` once you are enrolled (`--allow-empty` starts it anyway) |
 | Still on last semester's folder | `imstudium semester` compares Stud.IP's semester with your workspace; `imstudium semester start` rolls over. A plain `sync` never switches semesters on its own |

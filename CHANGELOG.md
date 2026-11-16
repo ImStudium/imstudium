@@ -8,6 +8,8 @@ All notable changes to ImStudium.
 
 Written work: a citation registry per Hausarbeit, Seminararbeit or thesis that checks every source, formats in the Lehrstuhl's style and holds the manuscript against the Formvorgaben ([docs/ARBEITEN.md](docs/ARBEITEN.md)).
 
+Back on npmjs.com: `npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar` needs no login again, and every package carries a provenance attestation. 0.3.0 and 0.3.1 stay on GitHub Packages.
+
 ### Added
 
 - **`imstudium arbeit`**: an Arbeit is a folder (`~/Studium/arbeiten/<slug>/`, or any LaTeX/Typst project with `--dir`) with type, deadline, length, course, style, Formvorgaben and an agent brief `ARBEIT.md`.

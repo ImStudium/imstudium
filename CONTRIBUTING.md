@@ -43,7 +43,9 @@ Do not commit session files or cookies.
 
 ## Release (maintainers)
 
-Releases publish from CI only, to the registry each package's `publishConfig` names. For now that is GitHub Packages (`https://npm.pkg.github.com`), with the release workflow's own `GITHUB_TOKEN`. To go back to npmjs.com, set `publishConfig.registry` to `https://registry.npmjs.org/` in all four packages: the workflow then publishes with npm trusted publishing (OIDC, no token) and provenance, which needs each package to exist on npmjs.com and trust `ImStudium/imstudium`, workflow `release.yml`.
+Releases publish from CI only, with npm trusted publishing (OIDC, no token) and provenance. Every package on npmjs.com trusts `ImStudium/imstudium`, workflow `release.yml`.
+
+npmjs.com lets a package trust a workflow only once the package exists there. A new package is therefore published once by hand from a maintainer's machine, at a version below the next release, and gets its trusted publisher before the tag. The release script skips a version npm already has and then fails on the missing attestation, so that first version must not be the one being released.
 
 ```bash
 bun run validate && bun run docs:check
@@ -51,4 +53,4 @@ bun run validate && bun run docs:check
 git tag vX.Y.Z && git push origin vX.Y.Z   # → .github/workflows/release.yml
 ```
 
-The workflow publishes in dependency order — contract → sdk → cli → mcp (`bun scripts/release-order.ts`; `scripts/release-order.test.ts` pins it) — and fails unless the registry shows each package, with a provenance attestation on npmjs.com. Bun is pinned to 1.4.2 (`packageManager`, CI, release).
+The workflow publishes in dependency order — contract → sdk → cli → mcp (`bun scripts/release-order.ts`; `scripts/release-order.test.ts` pins it) — and fails unless npm shows a provenance attestation for each package. Bun is pinned to 1.4.2 (`packageManager`, CI, release).
