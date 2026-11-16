@@ -5,7 +5,8 @@ import {
   dayLabel,
   hhmm,
   ImstudiumError,
-  isAuthError,
+  failureReason,
+  isOfflineError,
   type ConsultationBlockInfo,
   type CoursePerson,
 } from "@imstudium/sdk";
@@ -39,8 +40,8 @@ async function lecturersOf(sdk: Sdk, courses: Array<{ id: string; title: string 
       try {
         return { c, people: await sdk.people.lecturers(c.id) };
       } catch (err) {
-        if (isAuthError(err)) throw err;
-        note(`Hinweis (${c.title}): ${err instanceof Error ? err.message : String(err)}`);
+        if (isOfflineError(err)) throw err;
+        note(`Hinweis (${c.title}): ${failureReason(err)}`);
         return { c, people: [] as CoursePerson[] };
       }
     }),
@@ -107,8 +108,8 @@ export function registerSprechstunden(program: Command): void {
                 list.filter((b) => opts.expired || !b.end || Date.parse(b.end) >= now).map((b) => ({ ...b, owner: o.name })),
               );
             } catch (err) {
-              if (isAuthError(err)) throw err;
-              if (!o.courseId) note(`Hinweis: ${o.name}: ${err instanceof Error ? err.message : String(err)}`);
+              if (isOfflineError(err)) throw err;
+              if (!o.courseId) note(`Hinweis: ${o.name}: ${failureReason(err)}`);
               blocks.set(o.key, []);
             }
           }),

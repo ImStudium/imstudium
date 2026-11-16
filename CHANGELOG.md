@@ -15,6 +15,27 @@ One package: `npm install -g @imstudium/sdk --allow-scripts=keytar` installs the
 - `imstudium update`, `doctor`, `setup mcp` (`npx -y -p @imstudium/sdk imstudium-mcp`) and every hint name the one package. `doctor` reports one version.
 - The release script waits for a new package's metadata instead of failing while npm still answers 404.
 
+### Fixed
+
+From a run of 2,008 CLI calls and 297 MCP calls against a fake Stud.IP:
+
+- **A subcommand's own options count.** `quellen add --arbeit zweite`, `quellen add --tag methode`, `quellen list --status verified`, `arbeit formvorgaben set … --arbeit zweite`, `arbeit new … -o <dir>` and `semester start -o <dir>` were read by the parent command and ignored; on 27 subcommands they now reach the subcommand, and `--tag` on add and edit keeps every tag.
+- Offline or signed out, `news`, `forum`, `tasks`, `courseware`, `wiki` and `sprechstunden` say why and exit with that code, instead of "No announcements." and exit 0.
+- The offline "Hinweis" lines are German throughout, e.g. "Live-Daten nicht erreichbar (keine Verbindung), Termine aus calendar.ics".
+- A mistyped path (`extract --file`, `session import --file`, `-o`, `arbeit new --dir`) is reported as NOT_FOUND or a usage error with the path, not as an internal error asking for an issue.
+- `sync --course` with a name no course matches stops with COURSE_NOT_FOUND instead of downloading nothing; so does the MCP tool `imstudium_sync_dry_run`.
+- `search --course` with an unknown course names it instead of saying there are no hits.
+- An unknown `--semester` stops with SEMESTER_NOT_FOUND; `sync --semester WS1999` filed the semester's files under `current/`.
+- `holidays --year` accepts only a year like 2027.
+- `quellen import` of a file with no entries fails with IMPORT_FAILED instead of reporting 0 imported.
+- `zitieren` refuses a page below 1; `--seite=-1` printed "S. 1".
+- `quellen add --file` and `quellen edit --file` check that the file exists before they store its path.
+- `courseware --unit` without a course is refused instead of ignored.
+- Ids in Stud.IP routes are encoded, so a message id with backslashes can no longer read another route.
+- MCP `imstudium_sync_dry_run` compares against the folder layout `imstudium sync` writes; on a synced workspace it said every file had changed.
+- MCP `studium_read_material` needs a file name and cites only a page the file has; page 1000000000 or "abc" returned the whole text cited as that page, and an empty file name read the first file. Its `page` is now an integer of at least 1 in the tool schema.
+- Every MCP tool checks its arguments against its schema and answers BAD_ARGS, where `{"args": "today"}` or a number for `course` failed as an internal error. An unknown option to the `imstudium` tool is BAD_ARGS with the command's `--help`, no longer "not allowed".
+
 ## [0.4.0] - 2026-11-16
 
 Tagged, never published; its changes reach npm with 0.4.1.

@@ -294,7 +294,7 @@ describe("buildTimetable", () => {
     expect(tt.source).toBe("ics");
     expect(tt.stale).toBe(true);
     expect(tt.entries.map((e) => e.start)).toEqual(["2026-10-20T10:00:00+02:00"]);
-    expect(tt.warnings.join(" ")).toMatch(/calendar\.ics/);
+    expect(tt.warnings).toContain("Live-Daten nicht erreichbar (nicht angemeldet), Termine aus calendar.ics");
   });
 
   it("explains how to get an offline calendar when none exists", async () => {

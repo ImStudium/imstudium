@@ -1,3 +1,4 @@
+import { apiPath } from "../client.js";
 import type { StudIpClient } from "../client.js";
 import { attr, htmlToText, Included } from "../jsonapi.js";
 import type { JsonApiResource } from "../types.js";
@@ -149,7 +150,7 @@ export class ActivityResource {
     };
     const page = await fetchPages(
       this.client,
-      `/users/${userId}/activitystream`,
+      apiPath`/users/${userId}/activitystream`,
       { include: "actor,context", filter },
       { max: query.limit ?? 50 },
     );

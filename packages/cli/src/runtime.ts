@@ -1,4 +1,4 @@
-import type { CommanderError } from "commander";
+import type { Command, CommanderError } from "commander";
 import { createSdk, EXIT_CODES, ImstudiumError, toImstudiumError, type CreateSdkOptions } from "@imstudium/sdk";
 
 export interface GlobalOpts {
@@ -93,9 +93,38 @@ export async function getSdk(options?: CreateSdkOptions): Promise<Sdk> {
 export function act<A extends unknown[]>(fn: (...args: A) => Promise<void>) {
   return async (...args: A) => {
     try {
+      inheritParentOptions(args[args.length - 1]);
       await fn(...args);
     } catch (e) {
       fail(e);
     }
   };
+}
+
+type OptionCommand = Pick<Command, "options" | "parent" | "getOptionValue" | "getOptionValueSource" | "setOptionValueWithSource">;
+
+/**
+ * `quellen --arbeit zweite add …`: written before the subcommand's name, an
+ * option both declare is parsed by the parent. The subcommand's own value
+ * wins; the parent's fills in only when the subcommand has none. Commander
+ * passes the command last and the options object is its live option store,
+ * so the action sees the value. A variadic option (`--tag <tag...>`) stays
+ * an array.
+ */
+function inheritParentOptions(cmd: unknown): void {
+  const leaf = cmd as OptionCommand | undefined;
+  if (typeof leaf?.getOptionValueSource !== "function" || !Array.isArray(leaf.options)) return;
+  for (const opt of leaf.options) {
+    const key = opt.attributeName();
+    const own = leaf.getOptionValueSource(key);
+    if (own && own !== "default") continue;
+    for (let p = leaf.parent; p; p = p.parent) {
+      if (!p.options.some((o) => o.attributeName() === key)) continue;
+      const source = p.getOptionValueSource(key);
+      if (!source || source === "default") continue;
+      const value = p.getOptionValue(key);
+      leaf.setOptionValueWithSource(key, opt.variadic && !Array.isArray(value) ? [value] : value, source);
+      break;
+    }
+  }
 }

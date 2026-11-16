@@ -1,3 +1,4 @@
+import { apiPath } from "../client.js";
 import { createWriteStream } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -17,41 +18,41 @@ export class FilesResource {
   constructor(private client: StudIpClient) {}
 
   async listAllFileRefs(courseId: string): Promise<FileRefResource[]> {
-    return this.client.paginateAll<FileRefResource>(`/courses/${courseId}/file-refs`);
+    return this.client.paginateAll<FileRefResource>(apiPath`/courses/${courseId}/file-refs`);
   }
 
   async listAllFolders(courseId: string): Promise<FolderResource[]> {
-    return this.client.paginateAll<FolderResource>(`/courses/${courseId}/folders`);
+    return this.client.paginateAll<FolderResource>(apiPath`/courses/${courseId}/folders`);
   }
 
   async getFileRef(id: string): Promise<FileRefResource> {
-    const doc = await this.client.get<FileRefResource>(`/file-refs/${id}`);
+    const doc = await this.client.get<FileRefResource>(apiPath`/file-refs/${id}`);
     if (!doc.data || Array.isArray(doc.data)) throw new Error("File ref not found");
     return doc.data;
   }
 
   async getFolder(id: string): Promise<FolderResource> {
-    const doc = await this.client.get<FolderResource>(`/folders/${id}`);
+    const doc = await this.client.get<FolderResource>(apiPath`/folders/${id}`);
     if (!doc.data || Array.isArray(doc.data)) throw new Error("Folder not found");
     return doc.data;
   }
 
   async listFolderFileRefs(folderId: string): Promise<FileRefResource[]> {
-    return this.client.paginateAll<FileRefResource>(`/folders/${folderId}/file-refs`);
+    return this.client.paginateAll<FileRefResource>(apiPath`/folders/${folderId}/file-refs`);
   }
 
   async listSubfolders(folderId: string): Promise<FolderResource[]> {
-    return this.client.paginateAll<FolderResource>(`/folders/${folderId}/folders`);
+    return this.client.paginateAll<FolderResource>(apiPath`/folders/${folderId}/folders`);
   }
 
   async headFileRef(id: string): Promise<string | undefined> {
-    const res = await this.client.head(`/file-refs/${id}/content`);
+    const res = await this.client.head(apiPath`/file-refs/${id}/content`);
     return res.headers.get("etag") ?? undefined;
   }
 
   async downloadFileRef(id: string, destPath: string): Promise<number> {
     await ensureDir(dirname(destPath));
-    const res = await this.client.download(`/file-refs/${id}/content`);
+    const res = await this.client.download(apiPath`/file-refs/${id}/content`);
     const body = res.body;
     if (!body) throw new Error("Empty response body");
 

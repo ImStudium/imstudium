@@ -1,3 +1,4 @@
+import { apiPath } from "../client.js";
 import type { StudIpClient } from "../client.js";
 import { htmlToText, Included, relId } from "../jsonapi.js";
 import type { JsonApiResource } from "../types.js";
@@ -91,7 +92,7 @@ export class BlubberResource {
 
   /** Threads of a course (usually its one course chat). */
   async course(courseId: string, options: { limit?: number } = {}): Promise<BlubberThread[]> {
-    const page = await fetchPages(this.client, `/courses/${courseId}/blubber-threads`, { include: "author" }, { max: 200 });
+    const page = await fetchPages(this.client, apiPath`/courses/${courseId}/blubber-threads`, { include: "author" }, { max: 200 });
     const included = new Included(page.included);
     return newestFirst(page.data.map((t) => normalizeBlubberThread(t, included)), options.limit);
   }
@@ -110,7 +111,7 @@ export class BlubberResource {
 
   /** Private conversations between you and `userId` (your own id lists all of yours). */
   async private(userId: string, options: { limit?: number } = {}): Promise<BlubberThread[]> {
-    const page = await fetchPages(this.client, `/users/${userId}/blubber-threads`, { include: "author" }, { max: 200 });
+    const page = await fetchPages(this.client, apiPath`/users/${userId}/blubber-threads`, { include: "author" }, { max: 200 });
     const included = new Included(page.included);
     return newestFirst(page.data.map((t) => normalizeBlubberThread(t, included)), options.limit);
   }
@@ -119,7 +120,7 @@ export class BlubberResource {
   async comments(threadId: string, options: { limit?: number; since?: Date } = {}): Promise<BlubberComment[]> {
     const page = await fetchPages(
       this.client,
-      `/blubber-threads/${threadId}/comments`,
+      apiPath`/blubber-threads/${threadId}/comments`,
       {
         include: "author",
         sort: "-mkdate",

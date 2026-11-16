@@ -319,6 +319,17 @@ describe("messages", () => {
     assert.match(calls.at(-1)!.query, /include=sender,recipients/);
     assert.ok(calls.every((c) => !c.path.includes(" ")), "no write requests");
   });
+
+  it("keeps a message id inside its route: backslashes, slashes and dot segments never reach another one", async () => {
+    const { client, calls } = fakeClient({});
+    const res = new MessagesResource(client);
+    await res.get("x\\..\\..\\users\\me").catch(() => undefined);
+    assert.equal(calls.at(-1)!.path, "/messages/x%5C..%5C..%5Cusers%5Cme");
+    assert.equal(new URL(`https://studip.example.org/jsonapi.php/v1${calls.at(-1)!.path}`).pathname, "/jsonapi.php/v1/messages/x%5C..%5C..%5Cusers%5Cme");
+    await res.get("../../users/me").catch(() => undefined);
+    assert.equal(calls.at(-1)!.path, "/messages/..%2F..%2Fusers%2Fme");
+    await assert.rejects(res.get(".."), { code: "BAD_ARGS" });
+  });
 });
 
 // ── forum ─────────────────────────────────────────────────────────────────────

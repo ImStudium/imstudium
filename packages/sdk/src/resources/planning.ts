@@ -6,6 +6,7 @@
  * to the `owner` relationship, and serves `/holidays` as plain JSON. We read
  * both spellings and never throw on a missing field.
  */
+import { apiPath } from "../client.js";
 import { cachedJson, peekCachedJson } from "../cache.js";
 import type { StudIpClient } from "../client.js";
 import { relId } from "../jsonapi.js";
@@ -258,7 +259,7 @@ export class PlanningResource {
 
   /** Every date of a course (regular + single + cancelled), oldest first. */
   async courseDates(courseId: string, courseTitle?: string): Promise<CourseDate[]> {
-    const page = await this.client.paginate(`/courses/${courseId}/events`, { page: { limit: 100 } });
+    const page = await this.client.paginate(apiPath`/courses/${courseId}/events`, { page: { limit: 100 } });
     return page.data
       .map((r) => normalizeCourseEvent(r, { courseId, courseTitle }))
       .filter((d): d is CourseDate => !!d)
@@ -267,7 +268,7 @@ export class PlanningResource {
 
   /** Personal Stud.IP calendar entries for the 14 days from `from` (route limit). */
   async personalEvents(userId: string, from: Date): Promise<CourseDate[]> {
-    const page = await this.client.paginate(`/users/${userId}/events`, {
+    const page = await this.client.paginate(apiPath`/users/${userId}/events`, {
       filter: { timestamp: Math.floor(from.getTime() / 1000) },
       page: { limit: 100 },
     });
@@ -284,7 +285,7 @@ export class PlanningResource {
     options: { at?: Date; courseTitles?: Map<string, string> | Record<string, string> } = {},
   ): Promise<WeeklySlot[]> {
     const filter = options.at ? { timestamp: Math.floor(options.at.getTime() / 1000) } : undefined;
-    const doc = await this.client.get(`/users/${userId}/schedule`, { filter });
+    const doc = await this.client.get(apiPath`/users/${userId}/schedule`, { filter });
     return listOf(doc)
       .map((r) => normalizeScheduleItem(r, options.courseTitles))
       .filter((s): s is WeeklySlot => !!s)

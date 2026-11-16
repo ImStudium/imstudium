@@ -76,10 +76,12 @@
         },
         "file": {
           "type": "string",
+          "minLength": 1,
           "description": "Filename substring (e.g. 'vorlesung 3', 'klausur')"
         },
         "page": {
-          "type": "number",
+          "type": "integer",
+          "minimum": 1,
           "description": "Optional: only this page/slide (1-based)"
         }
       },

@@ -121,6 +121,7 @@ export function registerContent(program: Command): void {
 
         if (!courseQuery) {
           if (opts.save) throw new ImstudiumError("--save needs a course", "BAD_ARGS", undefined, "imstudium courseware <course> --save");
+          if (opts.unit !== undefined) throw new ImstudiumError("--unit needs a course", "BAD_ARGS", undefined, "imstudium courseware <course> --unit <unit>");
           const courses = await currentCourses(sdk);
           const rows = await perCourse(courses, (c) => sdk.courseware.listCourseUnits(c.id));
           const withUnits = rows.filter((r) => r.value.length);

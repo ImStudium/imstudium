@@ -5,6 +5,7 @@ import {
   buildTimetable,
   dateKey,
   dayLabel,
+  failureReason,
   findCurrentSemester,
   germanDate,
   hhmm,
@@ -153,7 +154,7 @@ function isoWeekNumber(key: string): number {
 function sourceNote(tt: { source: string; stale: boolean; icsUpdatedAt: string | null; warnings: string[] }) {
   if (tt.stale) {
     const when = tt.icsUpdatedAt ? ` (Stand ${germanDate(dateKey(new Date(tt.icsUpdatedAt)))})` : "";
-    note(`Offline: Termine aus calendar.ics${when} — Ausfälle seit dem Export fehlen evtl.`);
+    note(`Offline: Termine aus calendar.ics${when}, Ausfälle seit dem Export fehlen vielleicht.`);
   }
   for (const w of tt.warnings) note(`Hinweis: ${w}`);
 }
@@ -259,7 +260,7 @@ export function registerPlanning(program: Command): void {
         let snapshot: PlanningSnapshot;
         let offlineFrom: string | null = null;
         const offline = async (reason?: string) => {
-          if (reason) note(`Hinweis: ${reason} — Stundenplan aus calendar.ics abgeleitet`);
+          if (reason) note(`Hinweis: Live-Daten nicht erreichbar (${reason}), Stundenplan aus calendar.ics abgeleitet`);
           const snap = await offlinePlanningSnapshot(icsPath(sdk, opts.ics, workspaceDir(sdk, opts)), {
             knownCourses: await workspaceCourses(sdk, workspaceDir(sdk, opts)),
             semester,
@@ -284,7 +285,7 @@ export function registerPlanning(program: Command): void {
             );
           } catch (err) {
             if (!isOfflineError(err)) throw err;
-            snapshot = await offline(err instanceof Error ? err.message : String(err));
+            snapshot = await offline(failureReason(err));
           }
         }
         if (opts.save) snapshot.markdownPath = await writeStundenplanMarkdown(workspaceDir(sdk, opts), snapshot);
@@ -331,14 +332,18 @@ export function registerPlanning(program: Command): void {
     .option("--all", "Include commemorative days (Muttertag, Advent …)")
     .action(
       act(async (opts: { year?: string; all?: boolean }) => {
+        const year = opts.year?.trim();
+        if (year !== undefined && (!/^\d{4}$/.test(year) || Number(year) < 1900)) {
+          throw new ImstudiumError(`--year expects a year like 2027, got "${opts.year}"`, "BAD_ARGS", undefined, "imstudium holidays --year 2027");
+        }
         const sdk = await getSdk();
         const today = dateKey(new Date());
         const semester = await resolveSemester(sdk);
         let from: string;
         let to: string;
-        if (opts.year) {
-          from = `${opts.year}-01-01`;
-          to = `${opts.year}-12-31`;
+        if (year) {
+          from = `${year}-01-01`;
+          to = `${year}-12-31`;
         } else {
           from = today;
           to = semester?.end ? dateKey(new Date(semester.end)) : addDays(today, 180);
@@ -350,8 +355,8 @@ export function registerPlanning(program: Command): void {
             ? `Vorlesungszeit ${germanDate(dateKey(new Date(semester.startOfLectures)))}–${germanDate(dateKey(new Date(semester.endOfLectures)))}`
             : null;
         const lines = [
-          `Feiertage ${germanDate(from)}–${germanDate(to)}${semester?.title && !opts.year ? ` · ${semester.title}` : ""}`,
-          ...(lectures && !opts.year ? [lectures] : []),
+          `Feiertage ${germanDate(from)}–${germanDate(to)}${semester?.title && !year ? ` · ${semester.title}` : ""}`,
+          ...(lectures && !year ? [lectures] : []),
           "",
           ...holidays.map((h) => `${dayLabel(h.date)}${h.date.slice(0, 4)}  ${h.name}${h.official ? "" : " (kein Feiertag)"}`),
         ];

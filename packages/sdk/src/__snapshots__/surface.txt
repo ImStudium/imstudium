@@ -101,6 +101,7 @@ expandIcs
 expandPath
 exportLibrary
 extractSlug
+failureReason
 fetchRouteCatalog
 fetchStyle
 findCurrentSemester

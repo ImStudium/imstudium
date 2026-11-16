@@ -2,6 +2,7 @@
  * Who teaches a course — READ-ONLY. Lecturers and tutors by name, groups,
  * and how many students: students are only ever counted, never named.
  */
+import { apiPath } from "../client.js";
 import type { StudIpClient } from "../client.js";
 import { attr, Included } from "../jsonapi.js";
 import type { JsonApiResource } from "../types.js";
@@ -86,7 +87,7 @@ export class PeopleResource {
 
   /** Lecturers ("dozent") or tutors of a course, in Stud.IP's order. */
   async members(courseId: string, permission: "dozent" | "tutor"): Promise<CoursePerson[]> {
-    const page = await this.client.paginate(`/courses/${courseId}/memberships`, {
+    const page = await this.client.paginate(apiPath`/courses/${courseId}/memberships`, {
       filter: { permission },
       include: "user",
       page: { limit: 100 },
@@ -110,13 +111,13 @@ export class PeopleResource {
 
   /** Count of members with a permission, without loading anyone's name. */
   async memberCount(courseId: string, permission: "autor" | "user" | "tutor" | "dozent"): Promise<number | null> {
-    const doc = await this.client.get(`/courses/${courseId}/memberships`, { filter: { permission }, page: { limit: 1 } });
+    const doc = await this.client.get(apiPath`/courses/${courseId}/memberships`, { filter: { permission }, page: { limit: 1 } });
     return typeof doc.meta?.page?.total === "number" ? doc.meta.page.total : listOf(doc).length;
   }
 
   /** Groups (Übungsgruppen etc.) with capacity and self-assignment window. */
   async statusGroups(courseId: string): Promise<StatusGroupInfo[]> {
-    const data = await this.client.paginateAll(`/courses/${courseId}/status-groups`, { page: { limit: 100 } });
+    const data = await this.client.paginateAll(apiPath`/courses/${courseId}/status-groups`, { page: { limit: 100 } });
     return data.map(normalizeStatusGroup).sort((a, b) => a.position - b.position || a.name.localeCompare(b.name, "de"));
   }
 
@@ -165,7 +166,7 @@ export class PeopleResource {
   }
 
   private async courseMemberCount(courseId: string): Promise<number | null> {
-    const { data } = await this.client.getOne(`/courses/${courseId}`);
+    const { data } = await this.client.getOne(apiPath`/courses/${courseId}`);
     return num((data.meta as Record<string, unknown> | undefined)?.["members-count"]);
   }
 }
