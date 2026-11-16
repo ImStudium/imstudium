@@ -14,7 +14,7 @@ import {
 } from "@imstudium/sdk";
 import type { ContextOutput } from "@imstudium/contract";
 import { act, getSdk, globalOpts, output, type Sdk } from "../runtime.js";
-import { readChanges, readTasks } from "../pipeline.js";
+import { readCurrentChanges, readTasks } from "../pipeline.js";
 import { formatEntry, icsPath, timetableSources, workspaceCourses } from "./planning.js";
 import { meId } from "../me.js";
 import { enrolledIn } from "./semester.js";
@@ -131,7 +131,7 @@ async function buildContext(sdk: Sdk, out: string, opts: ContextOptions): Promis
   }));
 
   const seen = new Set<string>();
-  const newFiles = (await readChanges(out, since))
+  const newFiles = (await readCurrentChanges(out, since))
     .reverse()
     .filter((c) => (seen.has(c.path) ? false : (seen.add(c.path), true)))
     .slice(0, 12)

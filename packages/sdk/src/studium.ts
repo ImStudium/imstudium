@@ -9,6 +9,7 @@ import {
   semesterSlug,
 } from "./semesters.js";
 import { courseRelativePath, semesterFolderSlug } from "./workspace-path.js";
+import { WEEKDAYS_SHORT_DE, dateKey, germanDate, hhmm, isDateKey, weekdayOf } from "./berlin.js";
 import { agentSearchGuidance, type CourseSearchIndex, type WorkspaceSearchIndex } from "./search-corpus.js";
 import { EXTRACTION_LIMITS_FOR_AGENTS } from "./extraction-guidance.js";
 import { courseScheduleFromResources } from "./timetable.js";
@@ -263,7 +264,8 @@ export class StudiumBuilder {
       course.subtitle ? `_${course.subtitle}_\n` : "",
       "## Overview",
       "",
-      `- **Type:** ${course.courseType || "—"}`,
+      // Stud.IP sends the course type as a number (the sem_type id); only a name says anything
+      ...(course.courseType && !/^\d+$/.test(String(course.courseType)) ? [`- **Type:** ${course.courseType}`] : []),
       `- **ECTS:** ${course.credits ?? "—"}`,
       `- **Files synced:** ${course.fileCount}`,
       "",
@@ -364,7 +366,7 @@ export class StudiumBuilder {
     for (const e of confirmed) {
       const days = e.daysRemaining != null ? ` (${e.daysRemaining} days)` : "";
       lines.push(
-        `- **${e.date || "TBD"}** — ${e.courseTitle}: ${e.title}${e.location ? ` @ ${e.location}` : ""}${days}`,
+        `- **${e.date ? examWhen(e.date) : "TBD"}** — ${e.courseTitle}: ${e.title}${e.location ? ` @ ${e.location}` : ""}${days}`,
       );
     }
 
@@ -557,4 +559,13 @@ export function normalizeStudiumWorkspace(ws: StudiumWorkspace): StudiumWorkspac
     }
   }
   return ws;
+}
+
+/** "Mo 15.02.2027, 09:00" (Berlin) from an ISO date or date-time; anything else as given. */
+function examWhen(value: string): string {
+  if (isDateKey(value)) return `${WEEKDAYS_SHORT_DE[weekdayOf(value) - 1]} ${germanDate(value)}`;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const key = dateKey(d);
+  return `${WEEKDAYS_SHORT_DE[weekdayOf(key) - 1]} ${germanDate(key)}, ${hhmm(d)}`;
 }

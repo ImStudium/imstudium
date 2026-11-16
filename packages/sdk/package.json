@@ -1,6 +1,6 @@
 {
   "name": "@imstudium/sdk",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "ImStudium Stud.IP JSON:API client, auth, sync, and Studium workspace builder",
   "license": "MIT",
   "type": "module",
@@ -48,7 +48,7 @@
   "dependencies": {
     "@firecrawl/anydoc": "^0.2.4",
     "@firecrawl/pdf-inspector": "^1.25.2",
-    "@imstudium/contract": "^0.3.1",
+    "@imstudium/contract": "^0.4.0",
     "citeproc": "^2.4.63",
     "katex": "^0.19.1",
     "keytar": "^7.9.0",
@@ -64,6 +64,7 @@
     "node": ">=20"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

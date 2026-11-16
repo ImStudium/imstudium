@@ -184,7 +184,7 @@ export const DOCTOR_CHECKS: CheckDef[] = [
           )
         : warn(
             `${session.type} session stored in ${tier}: the keychain module (keytar) does not load`,
-            "npm 11 skips keytar's install script unless allowed: npm install -g @imstudium/cli --allow-scripts=keytar (npm install-scripts approve doesn't work for global installs), or install ImSicheren. The session moves out of the file on the next command; until then the 0600 file is readable by your user only",
+            "npm 11 skips keytar's install script unless allowed: npm install -g @imstudium/cli --allow-scripts=keytar (npm install-scripts approve doesn't work for global installs). The session moves out of the file on the next command; until then the 0600 file is readable by your user only",
             { store, type: session.type, keychain: "missing" },
           );
     },

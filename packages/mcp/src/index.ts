@@ -8,7 +8,7 @@ import {
 import { createSdk, expandPath, extractSlug, ImstudiumError, normalizeStudiumWorkspace, pageRef, resolveCourseDir, resolveWorkspaceCourse, agentSearchGuidance, toImstudiumError, type StudiumWorkspace } from "@imstudium/sdk";
 import type { ErrorBody, KlausurenOutput } from "@imstudium/contract";
 import { readdir, readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 import { MCP_TOOLS } from "./tools.js";
 import { materialVisualPayload } from "./visual.js";
 import { checkArgs, runCli } from "./cli-bridge.js";
@@ -167,7 +167,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const src = candidates[0];
 
-        const outDir = join(courseDir, "extracted", extractSlug(basename(src)));
+        // The folder sync uses (folder-qualified, extract.ts), so no second copy goes stale in search.
+        const outDir = join(courseDir, "extracted", extractSlug(relative(filesDir, src)));
         const result = await sdk.extractor.extractFile(src, outDir);
         if (result.error) {
           throw new ImstudiumError(result.error, "UNKNOWN", undefined, result.hint, { source: src });

@@ -1,5 +1,5 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 import type { Command } from "commander";
 import {
   buildAgentVisualPayload,
@@ -231,7 +231,8 @@ export function registerSync(program: Command): void {
           if (!matches.length) throw new ImstudiumError(`No file matching "${opts.file}" in ${course.title}`, "NOT_FOUND", 404);
           const src = matches[0]!;
           title = basename(src);
-          outDir = join(courseDir, "extracted", extractSlug(title));
+          // The folder sync uses (folder-qualified, extract.ts), so no second copy goes stale in search.
+          outDir = join(courseDir, "extracted", extractSlug(relative(join(courseDir, "files"), src)));
           await sdk.extractor.extractFile(src, outDir);
         }
 

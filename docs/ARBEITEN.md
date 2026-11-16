@@ -208,7 +208,7 @@ It exits 1 when a check fails, so it also works in a script or a pre-commit hook
 
 ## Privacy
 
-Your Arbeit, your manuscript and your registry stay on your machine. Only an identifier (DOI, ISBN, arXiv id, URL) or your search words go to doi.org, api.crossref.org, services.dnb.de, openlibrary.org, or the CSL repository on GitHub, when you add, check, search or fetch a style. `--offline` checks send nothing.
+Your Arbeit, your manuscript and your registry stay on your machine. Only an identifier (DOI, ISBN, arXiv id) or your search words go to doi.org, api.crossref.org, services.dnb.de, openlibrary.org, or the CSL repository on GitHub, when you add, check, search or fetch a style. A web page you add by its URL is fetched from its own site. `--offline` checks send nothing.
 
 ## For agents
 

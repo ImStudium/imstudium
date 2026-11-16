@@ -224,6 +224,63 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+interface TextCitation {
+  family: string;
+  year: number;
+  /** 1, 2, or 3 for "et al." / "u. a." */
+  authors: 1 | 2 | 3;
+  locator: string | null;
+  /** The form is a citation beyond doubt ("(Name, 2020)", a page, "et al.", a second author), so an unmatched one is reported. */
+  strong: boolean;
+}
+
+const NAME = String.raw`(?:(?:von|van|de|der|den|zu)\s+)?[A-ZÄÖÜ][\p{L}'’-]+`;
+const AUTHORS = String.raw`(${NAME})(\s+(?:et\s+al\.|u\.\s?a\.)|(?:\s*,\s*${NAME})*\s*(?:&|und|and)\s+${NAME})?`;
+const PAREN_PART = new RegExp(String.raw`^(?:(?:vgl\.|siehe|s\.)\s+)?${AUTHORS},?\s+(\d{4})[a-z]?(?:,\s*(.+))?$`, "u");
+const NARRATIVE = new RegExp(String.raw`${AUTHORS}\s+\((\d{4})[a-z]?(?:,\s*([^)]+))?\)`, "gu");
+
+function authorCount(group: string | undefined): 1 | 2 | 3 {
+  if (!group) return 1;
+  if (/et\s+al|u\.\s?a/.test(group)) return 3;
+  return group.includes(",") ? 3 : 2;
+}
+
+/** Author-year citations in running text, up to the bibliography: "(Müller, 2020, S. 5; Weber, 2019)" and "Müller (2020, S. 5)". */
+export function authorYearCitations(text: string): TextCitation[] {
+  const lines = text.split("\n");
+  const end = lines.findIndex((l) => l.trim().length <= 40 && isBibliographyHeading(l.trim()));
+  const body = (end >= 0 ? lines.slice(0, end) : lines).join("\n");
+  const out: TextCitation[] = [];
+  for (const m of body.matchAll(/\(([^()]{4,240})\)/g)) {
+    for (const part of m[1]!.split(";")) {
+      const p = PAREN_PART.exec(part.trim());
+      if (p) out.push({ family: p[1]!, year: Number(p[3]), authors: authorCount(p[2]), locator: p[4]?.trim() || null, strong: true });
+    }
+  }
+  for (const m of body.matchAll(NARRATIVE)) {
+    const authors = authorCount(m[2]);
+    const locator = m[4]?.trim() || null;
+    out.push({ family: m[1]!, year: Number(m[3]), authors, locator, strong: authors > 1 || !!locator });
+  }
+  return out;
+}
+
+function familyKey(family: string): string {
+  return foldGerman(family.split(/\s+/).at(-1)!).toLowerCase();
+}
+
+/** Registry entries a text citation names: same first family name and year, the author count deciding between namesakes. */
+function registryByAuthorYear(file: QuellenFile, c: TextCitation): Quelle[] {
+  const same = file.items.filter((q) => {
+    const fam = firstCreatorFamily(q.csl);
+    return !!fam && familyKey(fam) === familyKey(c.family) && yearOf(q.csl.issued) === c.year;
+  });
+  if (same.length < 2) return same;
+  const count = (q: Quelle) => (q.csl.author ?? q.csl.editor ?? []).length;
+  const fit = same.filter((q) => (c.authors === 3 ? count(q) >= 3 : count(q) === c.authors));
+  return fit.length ? fit : same;
+}
+
 /** Match manuscript citations to registry entries (by key, Word field data, or author + year in the text). */
 export function matchCitations(file: QuellenFile, scan: ManuscriptScan): ManuscriptCitationReport {
   const byKey = new Map(file.items.map((q) => [q.key, q]));
@@ -253,20 +310,39 @@ export function matchCitations(file: QuellenFile, scan: ManuscriptScan): Manuscr
     }
     if (q && !c.locator && PRINTED.has(q.csl.type)) withoutLocator.push({ key: q.key, line: c.line ?? null });
   }
-  // Word without citation fields, plain text: author and year near each other count as a cite
+  // Word without citation fields, plain text: read the author-year citations in the running text
+  let textCites = 0;
   if (scan.format === "docx" || scan.format === "text") {
+    const decided = new Set<string>();
+    for (const c of authorYearCitations(scan.text)) {
+      const matches = registryByAuthorYear(file, c);
+      decided.add(`${familyKey(c.family)}|${c.year}`);
+      if (!matches.length) {
+        if (c.strong) {
+          unknown.add(`${c.family} ${c.year}`);
+          textCites++;
+        }
+        continue;
+      }
+      textCites++;
+      for (const q of matches) {
+        matchedBy[q.key] ??= "heuristic";
+        if (!c.locator && PRINTED.has(q.csl.type)) withoutLocator.push({ key: q.key, line: null });
+      }
+    }
+    // other forms (footnote styles: "LeCun u. a., Nature 2015, 436"): author and year near each other
     for (const q of file.items) {
       if (matchedBy[q.key]) continue;
       const fam = firstCreatorFamily(q.csl);
       const year = yearOf(q.csl.issued);
-      if (!fam || !year) continue;
+      if (!fam || !year || decided.has(`${familyKey(fam)}|${year}`)) continue;
       const re = new RegExp(`${escapeRe(fam.split(/\s+/)[0]!)}[^\\n]{0,80}?${year}|${year}[^\\n]{0,10}?${escapeRe(fam.split(/\s+/)[0]!)}`, "i");
       if (re.test(scan.text)) matchedBy[q.key] = "heuristic";
     }
   }
   const cited = scan.citesAll ? file.items.map((q) => q.key) : Object.keys(matchedBy);
   return {
-    count: scan.citations.length,
+    count: scan.citations.length + textCites,
     cited,
     unknown: [...unknown],
     uncited: file.items.map((q) => q.key).filter((k) => !cited.includes(k)),
@@ -352,7 +428,7 @@ export function checkArbeit(arbeit: Arbeit, file: QuellenFile, scan: ManuscriptS
         title: "Belege mit Seitenangabe",
         status: report.withoutLocator.length ? "warn" : "ok",
         detail: report.withoutLocator.length ? `${report.withoutLocator.length} ${report.withoutLocator.length === 1 ? "Beleg" : "Belege"} gedruckter Werke ohne Seite: ${report.withoutLocator.slice(0, 8).map((w) => `${w.key}${w.line ? ` (Zeile ${w.line})` : ""}`).join(", ")}` : "jeder Beleg gedruckter Werke hat eine Seite",
-        fix: report.withoutLocator.length ? (scan.format === "latex" ? "\\autocite[S.~12]{key}" : scan.format === "typst" ? "@key[S. 12]" : "[@key, S. 12]") : null,
+        fix: report.withoutLocator.length ? (scan.format === "latex" ? "\\autocite[S.~12]{key}" : scan.format === "typst" ? "@key[S. 12]" : scan.format === "docx" || scan.format === "text" ? "Seite angeben: (Autor, Jahr, S. 12)" : "[@key, S. 12]") : null,
       });
     }
     if (Object.values(report.matchedBy).includes("heuristic")) {

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { ImstudiumError } from "@imstudium/sdk";
 import { getCliVersion } from "./version.js";
 
 export type AgentId =
@@ -116,8 +117,11 @@ export function resolveAgentProfiles(
   allAgents = false,
 ): AgentProfile[] {
   if (agent && agent !== "all") {
-    const one = getAgent(agent);
-    return one ? [one] : [];
+    const one = getAgent((agent as string) === "claude" ? "claude-code" : agent);
+    if (!one) {
+      throw new ImstudiumError(`Unknown agent "${agent}"`, "BAD_ARGS", undefined, `One of: ${AGENT_REGISTRY.map((a) => a.id).join(", ")}, all`);
+    }
+    return [one];
   }
   return detectAgents(allAgents || agent === "all");
 }

@@ -35,6 +35,8 @@ export interface SetupOptions {
 export interface SetupItemResult {
   action: "installed" | "skipped" | "updated" | "removed";
   path: string;
+  /** Set when a step could not be done: what to run instead. */
+  note?: string;
 }
 
 export interface SetupResult {
@@ -347,7 +349,10 @@ async function installClaudeCodeMcp(workspace: string, force: boolean): Promise<
   const { spawnSync } = await import("node:child_process");
   const where = "claude mcp (user scope)";
   const probe = spawnSync("claude", ["mcp", "get", "imstudium"], { encoding: "utf-8" });
-  if (probe.error) return { action: "skipped", path: `${where}: claude CLI not on PATH` };
+  if (probe.error) {
+    const entry = JSON.stringify({ type: "stdio", ...imstudiumMcpEntry(workspace) });
+    return { action: "skipped", path: where, note: `Claude Code: the claude CLI is not on PATH, so the MCP server is not registered there. Run: claude mcp add-json -s user imstudium '${entry}'` };
+  }
   const exists = probe.status === 0;
   if (exists && !force) return { action: "skipped", path: where };
   if (exists) spawnSync("claude", ["mcp", "remove", "imstudium", "-s", "user"], { encoding: "utf-8" });
@@ -355,7 +360,7 @@ async function installClaudeCodeMcp(workspace: string, force: boolean): Promise<
   const add = spawnSync("claude", ["mcp", "add-json", "-s", "user", "imstudium", JSON.stringify(entry)], {
     encoding: "utf-8",
   });
-  if (add.status !== 0) return { action: "skipped", path: `${where}: ${(add.stderr || add.stdout).trim().slice(0, 120)}` };
+  if (add.status !== 0) return { action: "skipped", path: where, note: `Claude Code: claude mcp add-json failed: ${(add.stderr || add.stdout).trim().slice(0, 120)}` };
   return { action: exists ? "updated" : "installed", path: where };
 }
 
@@ -575,7 +580,7 @@ export function formatSetupSummary(result: SetupResult): string {
   const count = (items: SetupItemResult[]) => ({
     installed: items.filter((i) => i.action === "installed").length,
     updated: items.filter((i) => i.action === "updated").length,
-    skipped: items.filter((i) => i.action === "skipped").length,
+    skipped: items.filter((i) => i.action === "skipped" && !i.note).length,
   });
   const s = count(result.skills);
   const m = count(result.mcp);
@@ -592,5 +597,6 @@ export function formatSetupSummary(result: SetupResult): string {
     parts.push(`Plugin: ${[...new Set(result.plugins.map((p) => `${p.key} (${p.agent})`))].join(", ")} brings the skills there`);
   }
   if (result.removed.length) parts.push(`Cleaned up: ${result.removed.length} old skill folder${result.removed.length === 1 ? "" : "s"}`);
-  return parts.join(" · ");
+  const notes = [...result.skills, ...result.mcp, ...result.workflows].flatMap((i) => (i.note ? [i.note] : []));
+  return [parts.join(" · "), ...notes].join("\n");
 }
