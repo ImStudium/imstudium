@@ -1,3 +1,4 @@
+import { apiPath } from "./client.js";
 import { access, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { StudIpClient } from "./client.js";
@@ -143,7 +144,7 @@ export class SemestersResource {
   }
 
   async get(semesterId: string): Promise<SemesterResource> {
-    const doc = await this.client.get<SemesterResource>(`/semesters/${semesterId}`);
+    const doc = await this.client.get<SemesterResource>(apiPath`/semesters/${semesterId}`);
     if (!doc.data || Array.isArray(doc.data)) throw new Error("Semester not found");
     return doc.data;
   }

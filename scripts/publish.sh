@@ -14,7 +14,7 @@ bun run docs:check
 version=$(node -p "require('./packages/cli/package.json').version")
 echo ""
 echo "Releases publish from CI only (npm trusted publishing, provenance, no token)."
-echo "Order: $(bun scripts/release-order.ts | tr '\n' ' ')"
+echo "Publishes @imstudium/sdk $version, the CLI and MCP server inside (scripts/assemble-sdk.ts)."
 echo ""
 echo "  git tag v$version && git push origin v$version"
 echo ""

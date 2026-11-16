@@ -421,7 +421,7 @@ export async function installOcrRuntime(options: { force?: boolean; onProgress?:
     throw new ImstudiumError(`No local OCR runtime for ${key}`, "OCR_UNSUPPORTED", undefined, undefined, { platform: key, supported: Object.keys(OCR_RUNTIMES) });
   }
   if (typeof (process.versions as Record<string, string | undefined>).bun === "string") {
-    throw new ImstudiumError("Local OCR runs under Node", "OCR_UNSUPPORTED", undefined, "Run imstudium with Node (npm i -g @imstudium/cli), not Bun", { platform: key, runtime: "bun" });
+    throw new ImstudiumError("Local OCR runs under Node", "OCR_UNSUPPORTED", undefined, "Run imstudium with Node (npm i -g @imstudium/sdk), not Bun", { platform: key, runtime: "bun" });
   }
   const installed: string[] = [];
   const skipped: string[] = [];

@@ -43,9 +43,9 @@ Do not commit session files or cookies.
 
 ## Release (maintainers)
 
-Releases publish from CI only, with npm trusted publishing (OIDC, no token) and provenance. Every package on npmjs.com trusts `ImStudium/imstudium`, workflow `release.yml`.
+One package goes to npm: `@imstudium/sdk`, with the `imstudium` CLI and the `imstudium-mcp` server inside. `packages/contract`, `packages/cli` and `packages/mcp` are private workspace packages. `scripts/assemble-sdk.ts` puts the published package together in `.release/sdk` from the four builds: the SDK bundle with the contract's types inlined, `dist/cli.js` and `dist/mcp.js` (both reach the SDK through the package's own name), the CSL styles and the skills. It fails when a bundle imports a package the manifest does not list. `scripts/package-smoke.sh` (CI job `package`) installs the tarball globally and starts both commands.
 
-npmjs.com lets a package trust a workflow only once the package exists there. A new package is therefore published once by hand from a maintainer's machine, at a version below the next release, and gets its trusted publisher before the tag. The release script skips a version npm already has and then fails on the missing attestation, so that first version must not be the one being released.
+Releases publish from CI only, with npm trusted publishing (OIDC, no token) and provenance. `@imstudium/sdk` on npmjs.com trusts `ImStudium/imstudium`, workflow `release.yml`.
 
 ```bash
 bun run validate && bun run docs:check
@@ -53,4 +53,4 @@ bun run validate && bun run docs:check
 git tag vX.Y.Z && git push origin vX.Y.Z   # → .github/workflows/release.yml
 ```
 
-The workflow publishes in dependency order — contract → sdk → cli → mcp (`bun scripts/release-order.ts`; `scripts/release-order.test.ts` pins it) — and fails unless npm shows a provenance attestation for each package. Bun is pinned to 1.4.2 (`packageManager`, CI, release).
+The workflow validates, assembles and publishes `@imstudium/sdk` (`scripts/release.test.ts` pins that), and fails unless npm shows a provenance attestation for the version. Bun is pinned to 1.4.2 (`packageManager`, CI, release).

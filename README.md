@@ -11,10 +11,10 @@ The default instance is [Digicampus](https://digicampus.uni-augsburg.de) (Uni Au
 You need Node.js 20 or newer. Install the CLI and the agent server with one line:
 
 ```bash
-npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar
+npm install -g @imstudium/sdk --allow-scripts=keytar
 ```
 
-`--allow-scripts=keytar` lets npm 11 run keytar's install script, which the OS keychain needs; without it your session goes into a file only your user can read. Then sign in and fetch the semester:
+`--allow-scripts=keytar` lets npm 11 run keytar's install script, which the OS keychain needs; without it your session goes into a file only your user can read. Coming from 0.1.x, remove the old packages first, since they own the same command names: `npm uninstall -g @imstudium/cli @imstudium/mcp`. Then sign in and fetch the semester:
 
 ```bash
 imstudium login
@@ -129,7 +129,7 @@ Start with `imstudium doctor`. It checks the install, the session, the workspace
 
 | Symptom | Fix |
 |---|---|
-| `doctor` says the session sits in a file, or keytar doesn't load | npm 11 skipped keytar's build. Run `npm install -g @imstudium/cli --allow-scripts=keytar`. The session moves out of the file on the next command |
+| `doctor` says the session sits in a file, or keytar doesn't load | npm 11 skipped keytar's build. Run `npm install -g @imstudium/sdk --allow-scripts=keytar`. The session moves out of the file on the next command |
 | `AUTH_REQUIRED`, `SESSION_EXPIRED` or "got a web page" | You are signed out, or silent renewal failed because your university forgot you. Run `imstudium login` |
 | `semester start` stops with `NO_ENROLMENTS` | Stud.IP doesn't list any course for you in the new semester yet. Keep working in your current semester with `imstudium sync`, and run `semester start` once you are enrolled (`--allow-empty` starts it anyway) |
 | Still on last semester's folder | `imstudium semester` compares Stud.IP's semester with your workspace; `imstudium semester start` rolls over. A plain `sync` never switches semesters on its own |
@@ -288,14 +288,9 @@ MCP is opt-in, and the plugin brings it along. Without the plugin, `imstudium se
 
 It also writes `~/Studium/mcp.json`. The server's main tool is **`imstudium`**, a read-only door to every CLI command: `{"args": ["week", "--next"]}` returns the same JSON as `imstudium --json week --next`. It parses the arguments with the CLI's own command tree and refuses anything that writes or changes where the session goes (`--write`, `--save`, `-o/--output`, `--instance`, `semester start`, `files download`, `login`, `setup`). The workspace tools `studium_overview`, `studium_klausuren`, `studium_course_brief`, `studium_find_materials`, `studium_read_material` and `imstudium_sync_dry_run` stay available; syncing runs only in a terminal (`imstudium sync`).
 
-## Packages
+## Package
 
-| Package | |
-|---|---|
-| `@imstudium/cli` | The `imstudium` command |
-| `@imstudium/contract` | zod schemas for every `--json` output, the error table and the `imstudium/source/v1` feed |
-| `@imstudium/sdk` | Stud.IP client, auth, sync, workspace writers |
-| `@imstudium/mcp` | MCP server (`imstudium-mcp`) |
+One package on npm, `@imstudium/sdk`, with three things inside: the `imstudium` command, the `imstudium-mcp` server and the SDK (Stud.IP client, auth, sync, workspace writers) for your own scripts. Every release carries a provenance attestation that ties it to this repository. The repository builds it from four workspace packages, contract, sdk, cli and mcp; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [AGENTS.md](AGENTS.md) · [docs/COMMANDS.md](docs/COMMANDS.md) · [docs/ERRORS.md](docs/ERRORS.md) · [docs/STUDIUM.md](docs/STUDIUM.md) · [docs/API.md](docs/API.md) · [docs/BENCHMARKS.md](docs/BENCHMARKS.md) · [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
 

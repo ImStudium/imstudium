@@ -43,8 +43,42 @@ export function buildProgram(): Command {
     });
 
   registerCommands(program);
+  leafOptionsWin(program);
 
   const rank = new Map<string, number>(HELP_ORDER.map((n, i) => [n, i]));
   (program.commands as Command[]).sort((a, b) => (rank.get(a.name()) ?? 999) - (rank.get(b.name()) ?? 999));
   return program;
+}
+
+/**
+ * A subcommand reads its own options. Commander lets a parent parse its
+ * options anywhere on the line, so `quellen add --arbeit zweite` handed
+ * --arbeit to `quellen` and `add` never saw it (likewise -o, --tag,
+ * --status). Every command with subcommands stops reading options at the
+ * subcommand's name. The root keeps parsing --json, --quiet and --instance
+ * anywhere, but passes everything after such a command's name on unparsed:
+ * Commander would otherwise hand the parent the words before the first
+ * unknown option as operands, and the parent would never see the
+ * subcommand's name first. A parent option written before the subcommand's
+ * name still reaches the subcommand through act() (runtime.ts).
+ */
+function leafOptionsWin(program: Command): void {
+  const positional = (cmd: Command) => {
+    for (const sub of cmd.commands as Command[]) {
+      if (!sub.commands.length) continue;
+      sub.enablePositionalOptions();
+      positional(sub);
+    }
+  };
+  positional(program);
+
+  const parseOptions = program.parseOptions.bind(program);
+  program.parseOptions = (argv: string[]) => {
+    const parsed = parseOptions(argv);
+    const [name, ...rest] = parsed.operands;
+    if (!name || !rest.length || argv.includes("--")) return parsed;
+    const cmd = (program.commands as Command[]).find((c) => c.name() === name || c.aliases().includes(name));
+    if (!cmd?.commands.length) return parsed;
+    return { operands: [name], unknown: [...rest, ...parsed.unknown] };
+  };
 }

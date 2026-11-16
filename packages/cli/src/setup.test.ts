@@ -48,11 +48,11 @@ describe("mergeMcpConfig", () => {
       env: { IMSTUDIUM_WORKSPACE: string };
     };
     assert.equal(entry.command, "npx");
-    assert.deepEqual(entry.args, ["-y", "@imstudium/mcp"]);
+    assert.deepEqual(entry.args, ["-y", "-p", "@imstudium/sdk", "imstudium-mcp"]);
     assert.ok(entry.env.IMSTUDIUM_WORKSPACE.includes("Studium"));
   });
 
-  it("overwrites imstudium entry with new workspace", () => {
+  it("overwrites an entry from the two-package install with the new launch and workspace", () => {
     const merged = mergeMcpConfig(
       {
         mcpServers: {
@@ -64,9 +64,10 @@ describe("mergeMcpConfig", () => {
         },
       },
       "/new/workspace",
-    ) as { mcpServers: Record<string, { env: { IMSTUDIUM_WORKSPACE: string } }> };
+    ) as { mcpServers: Record<string, { args: string[]; env: { IMSTUDIUM_WORKSPACE: string } }> };
 
     assert.equal(merged.mcpServers.imstudium.env.IMSTUDIUM_WORKSPACE, "/new/workspace");
+    assert.ok(!merged.mcpServers.imstudium.args.includes("@imstudium/mcp"));
   });
 });
 
@@ -84,7 +85,7 @@ describe("mcpEntryMatches", () => {
     const d = desired as { command: string; args: string[]; env: Record<string, string> };
     const existing = {
       command: "npx",
-      args: ["-y", "@imstudium/mcp"],
+      args: ["-y", "-p", "@imstudium/sdk", "imstudium-mcp"],
       env: d.env,
     };
     assert.equal(mcpEntryMatches(existing, desired), true);

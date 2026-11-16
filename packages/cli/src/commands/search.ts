@@ -1,11 +1,25 @@
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { Command } from "commander";
 import { ImstudiumError, resolveWorkspaceCourse, searchWorkspace, type SearchKind } from "@imstudium/sdk";
 import type { SearchOutput } from "@imstudium/contract";
 import { act, getSdk, output } from "../runtime.js";
 import { courseOption, limitOption, outputOption, parseLimit, workspaceDir } from "../kit/args.js";
-import { notFoundAsUndefined } from "../course-arg.js";
 
 const KINDS: SearchKind[] = ["material", "news", "forum", "courseware", "wiki", "note"];
+
+/** A course folder (`<semester>/<course>` or `archive/<semester>/<course>`) whose path contains `name`, the way search filters. */
+async function hasCourseFolder(workspace: string, name: string): Promise<boolean> {
+  const dirs = async (dir: string) => (await readdir(dir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory() && !e.name.startsWith(".")).map((e) => e.name);
+  const needle = name.toLowerCase();
+  for (const sem of await dirs(workspace)) {
+    const semesters = sem === "archive" ? (await dirs(join(workspace, sem))).map((s) => `archive/${s}`) : [sem];
+    for (const s of semesters) {
+      if ((await dirs(join(workspace, s))).some((c) => `${s}/${c}`.toLowerCase().includes(needle))) return true;
+    }
+  }
+  return false;
+}
 
 export function registerSearch(program: Command): void {
   program
@@ -31,8 +45,14 @@ export function registerSearch(program: Command): void {
         let course = opts.course?.replace(/\s+/g, "-");
         if (opts.course) {
           const ws = await sdk.studium.loadWorkspace(out);
-          const hit = ws ? notFoundAsUndefined(() => resolveWorkspaceCourse(ws, opts.course!, sdk.config.courseAliases)) : undefined;
-          if (hit) course = hit.slug;
+          if (ws) {
+            try {
+              course = resolveWorkspaceCourse(ws, opts.course, sdk.config.courseAliases).slug;
+            } catch (e) {
+              // a course of an earlier semester has a folder under archive/ but no entry in studium.json
+              if (!(e instanceof ImstudiumError && e.code === "COURSE_NOT_FOUND") || !(await hasCourseFolder(out, course!))) throw e;
+            }
+          }
         }
         const hits = await searchWorkspace(out, query, {
           limit,

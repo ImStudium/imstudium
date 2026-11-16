@@ -46,9 +46,9 @@ const spec = (category: ErrorCategory, summary: string, hint: string, extra: Par
 export const ERROR_CODES = {
   // ── 1 internal ─────────────────────────────────────────────────────────────
   UNKNOWN: spec("internal", "Unexpected failure (a bug, or something the CLI did not anticipate)", "Run again with the same arguments; if it persists, open an issue with the command and the message"),
-  UPDATE_FAILED: spec("internal", "`imstudium update` could not upgrade the global npm install", "Run: npm i -g @imstudium/cli@latest"),
+  UPDATE_FAILED: spec("internal", "`imstudium update` could not upgrade the global npm install", "Run: npm i -g @imstudium/sdk@latest"),
   BROWSER_LAUNCH_FAILED: spec("internal", "The sign-in browser (Playwright) could not start", "Run: npx playwright install chromium"),
-  CLI_NOT_FOUND: spec("internal", "The MCP server could not find the imstudium CLI to run", "npm i -g @imstudium/cli, or set IMSTUDIUM_CLI to its path"),
+  CLI_NOT_FOUND: spec("internal", "The MCP server could not find the imstudium CLI to run", "npm i -g @imstudium/sdk, or set IMSTUDIUM_CLI to its path"),
   OCR_INSTALL_FAILED: spec("internal", "Downloading, verifying or starting the on-device OCR runtime failed (nothing half-installed is used)", "Check the connection, then run: imstudium setup ocr --force", { retryable: true }),
   // ── 2 usage ────────────────────────────────────────────────────────────────
   BAD_ARGS: spec("usage", "An argument or flag is missing, unknown or malformed", "See: imstudium <command> --help", {

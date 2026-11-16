@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 import {
   courseActiveInSemester,
   findCurrentSemester,
+  ImstudiumError,
   rebuildSearchIndexes,
   semesterIdFromRelationships,
   semesterSlug,
@@ -95,6 +96,11 @@ function matchesCourse(query: string | undefined) {
   return (c: { id: string; title: string }) => c.title.toLowerCase().includes(q) || c.id === query;
 }
 
+/** `sync --course <typo>` used to download nothing and exit 0. */
+function noCourseMatches(query: string): ImstudiumError {
+  return new ImstudiumError(`No course matches "${query}"`, "COURSE_NOT_FOUND", 404, "imstudium courses list");
+}
+
 /**
  * Home semester of each enrollment: the current semester when the course
  * runs now, otherwise its start semester. Multi-semester courses therefore
@@ -136,6 +142,8 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
     const semesters = await sdk.courses.semesters.listAll();
     const current = findCurrentSemester(semesters);
     const courses = (await sdk.courses.listMine(id, { allSemesters: true })) as CourseWithSemester[];
+    const wanted = matchesCourse(opts.course);
+    if (wanted && opts.course && !courses.some((c) => wanted({ id: c.id, title: String(c.attributes?.title ?? c.id) }))) throw noCourseMatches(opts.course);
     const groups = groupCoursesBySemester(courses, semesters, current);
     const ordered = semesters.filter((s) => groups.has(s.id));
 
@@ -175,6 +183,8 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
       result.semesters.push({ title, slug, folder, archived: !isCurrent, courses: ids.length });
     }
   } else {
+    const wanted = matchesCourse(opts.course);
+    let matched = 0;
     const report = await sdk.sync.sync({
       outputDir: opts.out,
       layout,
@@ -182,8 +192,15 @@ export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncRe
       include,
       semesterId: opts.semesterId,
       semesterLabel: opts.semesterLabel,
-      courseFilter: matchesCourse(opts.course),
+      courseFilter: wanted
+        ? (c) => {
+            const hit = wanted(c);
+            if (hit) matched++;
+            return hit;
+          }
+        : undefined,
     });
+    if (opts.course && !matched) throw noCourseMatches(opts.course);
     mergeReport(result.report, report);
     if (!opts.dryRun) {
       const ws = await sdk.studium.build(opts.out, origin, {

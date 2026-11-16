@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import type { Command } from "commander";
 import {
@@ -109,6 +109,13 @@ function setField(csl: Record<string, unknown>, rawKey: string, value: string): 
   else if (DATE_FIELDS.has(key)) csl[key] = parseCslDate(value);
   else csl[key] = value;
   return key;
+}
+
+/** The full text a source points to: it must exist, or the registry keeps a path to nothing. */
+async function fullTextFile(path: string): Promise<string> {
+  const abs = resolve(path);
+  if (!(await stat(abs).catch(() => null))?.isFile()) throw new ImstudiumError(`No file at ${abs}`, "NOT_FOUND", undefined, "Pass the path of the full text (PDF) on your disk");
+  return abs;
 }
 
 function quelleLine(q: Quelle): string[] {
@@ -230,7 +237,7 @@ export function registerQuellen(program: Command): void {
         if (!ids.length && !opts.manual) throw new ImstudiumError("Nothing to add", "BAD_ARGS", undefined, "imstudium quellen add <DOI|ISBN|arXiv|URL> …, or --manual --title …");
         if (opts.key && ids.length > 1) throw new ImstudiumError("--key works with one source at a time", "BAD_ARGS");
         const payload: QuellenAddOutput = { arbeit: ref.arbeit.slug, added: [], duplicates: [], failed: [], dryRun: !!opts.dryRun };
-        const extra = { key: opts.key, file: opts.file ? resolve(opts.file) : undefined, tags: opts.tag, notes: opts.note };
+        const extra = { key: opts.key, file: opts.file ? await fullTextFile(opts.file) : undefined, tags: opts.tag, notes: opts.note };
         if (opts.manual) {
           const r = addQuelle(quellen, manualItem(opts), { via: "manual" }, extra);
           if (r.duplicate) payload.duplicates.push({ input: opts.title ?? "--manual", key: r.quelle.key });
@@ -319,7 +326,7 @@ export function registerQuellen(program: Command): void {
           const field = setField(q.csl, k, v);
           if (IDENTITY_FIELDS.has(field)) identityChanged = true;
         }
-        if (opts.file) q.file = resolve(opts.file);
+        if (opts.file) q.file = await fullTextFile(opts.file);
         if (opts.tag) q.tags = opts.tag;
         if (opts.note !== undefined) q.notes = opts.note || undefined;
         if (identityChanged && q.check) {
@@ -455,6 +462,10 @@ export function registerQuellen(program: Command): void {
             continue;
           }
           const lib = parseLibrary(text, format);
+          if (!lib.items.length && !lib.errors.length) {
+            payload.failed.push({ input: file, code: "IMPORT_FAILED", message: `${basename(file)}: keine Einträge erkannt (BibTeX, RIS oder CSL-JSON)` });
+            continue;
+          }
           for (const err of lib.errors) payload.failed.push({ input: `${basename(file)}: ${err.slice(0, 80)}`, code: "IMPORT_FAILED", message: err });
           const via = format === "bibtex" ? "bibtex" : format === "ris" ? "ris" : "csl-json";
           for (const item of lib.items) {

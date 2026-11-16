@@ -129,6 +129,43 @@ describe("imstudium arbeit / quellen / zitieren / literatur (offline, synthetic)
     expect(exp.stdout).toContain("TY  - JOUR");
   });
 
+  it("refuses an import with no entries, a page below 1 and a full text that is not there", async () => {
+    const errorOf = (args: string[]) => {
+      const r = runCli(fx, ["--json", ...args]);
+      return [r.status, JSON.parse(r.stderr).error.code];
+    };
+    await writeFile(join(fx.root, "garbage.bib"), "this is not a bibliography\n");
+    expect(errorOf(["quellen", "import", join(fx.root, "garbage.bib")])).toEqual([2, "IMPORT_FAILED"]);
+    expect(errorOf(["zitieren", "schmidt2020lernen", "--seite=-1"])).toEqual([2, "BAD_ARGS"]);
+    expect(errorOf(["zitieren", "schmidt2020lernen@0"])).toEqual([2, "BAD_ARGS"]);
+    expect(errorOf(["quellen", "edit", "schmidt2020lernen", "--file", join(fx.root, "fehlt.pdf")])).toEqual([5, "NOT_FOUND"]);
+    const kept = json("quellen list", ["quellen", "list"]).quellen.find((q: { key: string }) => q.key === "schmidt2020lernen");
+    expect(kept.file).toBeUndefined();
+  });
+
+  it("a subcommand's own --arbeit, --tag, --status and -o win over its parent's", async () => {
+    const own = await makeFixture();
+    const run = (args: string[]) => {
+      const r = runCli(own, ["--json", ...args]);
+      expect(r.status, `${args.join(" ")}\n${r.stderr}`).toBe(0);
+      return r.json() as Record<string, any>;
+    };
+    run(["arbeit", "new", "Zweite", "Arbeit", "--slug", "zweite"]);
+    run(["arbeit", "new", "Erste", "Arbeit", "--slug", "erste"]);
+    const added = run(["quellen", "add", "--manual", "--title", "Methoden", "--author", "A, B", "--year", "2020", "--arbeit", "zweite", "--tag", "methode", "theorie"]);
+    expect(added).toMatchObject({ arbeit: "zweite", added: [{ tags: ["methode", "theorie"] }] });
+    expect(run(["quellen", "list"]).count).toBe(0);
+    expect(run(["quellen", "list", "--arbeit", "zweite", "--tag", "methode"]).count).toBe(1);
+    expect(run(["quellen", "list", "--arbeit", "zweite", "--status", "verified"]).count).toBe(0);
+    expect(run(["quellen", "--arbeit", "zweite", "list"]).count).toBe(1);
+    run(["arbeit", "formvorgaben", "set", "rand.oben=4", "--arbeit", "zweite"]);
+    expect(run(["arbeit", "show", "zweite"]).arbeit.formvorgaben.rand.oben).toBe(4);
+    expect(run(["arbeit", "show"]).arbeit.formvorgaben.rand.oben).not.toBe(4);
+    const elsewhere = join(own.root, "Anderswo");
+    run(["arbeit", "new", "Dritte", "-o", elsewhere]);
+    expect(existsSync(join(elsewhere, "arbeiten", "dritte", "ARBEIT.md"))).toBe(true);
+  });
+
   it("asks for an Arbeit when there is none", async () => {
     const empty = await makeFixture();
     const r = runCli(empty, ["--json", "quellen"]);

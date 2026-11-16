@@ -90,4 +90,12 @@ describe("Stud.IP errors", () => {
     expect(isOfflineError(e)).toBe(true);
     expect(toImstudiumError(new Error("boom")).code).toBe("UNKNOWN");
   });
+
+  it("turns a mistyped or unusable path into NOT_FOUND or BAD_ARGS, not an internal error", async () => {
+    const missing = toImstudiumError(await readFile("/nonexistent-imstudium/nope.pdf").catch((e: unknown) => e));
+    expect(missing).toMatchObject({ code: "NOT_FOUND", message: "No such file or folder: /nonexistent-imstudium/nope.pdf" });
+    expect(missing.hint).not.toMatch(/issue/);
+    const notDir = toImstudiumError(await readdir(fileURLToPath(import.meta.url)).catch((e: unknown) => e));
+    expect(notDir).toMatchObject({ code: "BAD_ARGS", exitCode: 2, details: { cause: "ENOTDIR" } });
+  });
 });

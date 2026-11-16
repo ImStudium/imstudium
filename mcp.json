@@ -2,7 +2,7 @@
   "mcpServers": {
     "imstudium": {
       "command": "npx",
-      "args": ["-y", "@imstudium/mcp"],
+      "args": ["-y", "-p", "@imstudium/sdk", "imstudium-mcp"],
       "env": {
         "IMSTUDIUM_WORKSPACE": "~/Studium"
       }

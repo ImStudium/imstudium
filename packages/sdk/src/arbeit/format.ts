@@ -75,13 +75,19 @@ const LABELS: Array<[RegExp, string]> = [
   [/^(?:Tab\.|table)\s*/i, "table"],
 ];
 
-/** "S. 12", "12-14", "Kap. 3", "Rn. 7" → citeproc locator and label (page when none is given). */
+/**
+ * "S. 12", "12-14", "Kap. 3", "Rn. 7" → citeproc locator and label (page
+ * when none is given). A number below 1 is refused: citeproc printed
+ * `--seite=-1` as "S. 1" and `--seite 0` as "S. 0".
+ */
 export function parseLocator(raw: string): { locator: string; label: string } {
   const s = raw.trim();
-  for (const [re, label] of LABELS) {
-    if (re.test(s)) return { locator: s.replace(re, "").trim(), label };
+  const hit = LABELS.find(([re]) => re.test(s));
+  const out = hit ? { locator: s.replace(hit[0], "").trim(), label: hit[1] } : { locator: s, label: "page" };
+  if (/^[-\u2212\u2013]\s*\d/.test(out.locator) || /^0+(?:\D|$)/.test(out.locator)) {
+    throw new ImstudiumError(`No ${out.label} "${out.locator}": numbers start at 1`, "BAD_ARGS", undefined, "e.g. key@12, key@S. 12-14 or --seite 12");
   }
-  return { locator: s, label: "page" };
+  return out;
 }
 
 /** citeproc HTML → markdown (emphasis, small caps as plain text, entities decoded). */

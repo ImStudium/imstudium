@@ -57,15 +57,18 @@ const SKILLS_ROOT = join(PKG_ROOT, "skills");
 const WORKFLOWS_ROOT = join(SKILLS_ROOT, "workflows");
 const MANIFEST_FILE = join(paths.configDir, "setup-manifest.json");
 
+/** imstudium-mcp ships inside @imstudium/sdk: npx fetches that package and runs its second command. */
+export const NPX_MCP_ARGS = ["-y", "-p", "@imstudium/sdk", "imstudium-mcp"];
+
 function resolveMcpLaunch(): { command: string; args: string[] } {
   if (process.env.IMSTUDIUM_MCP_LAUNCH === "npx") {
-    return { command: "npx", args: ["-y", "@imstudium/mcp"] };
+    return { command: "npx", args: NPX_MCP_ARGS };
   }
   const local = join(homedir(), ".local", "bin", "imstudium-mcp");
   if (existsSync(local)) {
     return { command: local, args: [] };
   }
-  return { command: "npx", args: ["-y", "@imstudium/mcp"] };
+  return { command: "npx", args: NPX_MCP_ARGS };
 }
 
 export function mergeMcpConfig(

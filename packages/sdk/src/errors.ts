@@ -58,13 +58,33 @@ export class ImstudiumError extends Error {
   }
 }
 
-/** Any thrown value as an ImstudiumError (unknown errors become UNKNOWN, network failures NETWORK). */
+/** File system failures that mean "this path cannot be used here": a usage error, not a bug. */
+const UNUSABLE_PATH: Record<string, string> = {
+  ENOTDIR: "a part of the path is a file, not a folder",
+  EEXIST: "something is already there",
+  EISDIR: "it is a folder, not a file",
+  EACCES: "no permission",
+  EPERM: "no permission",
+  EROFS: "the file system is read-only",
+};
+
+/** Any thrown value as an ImstudiumError (unknown errors become UNKNOWN, network failures NETWORK, a bad path NOT_FOUND or BAD_ARGS). */
 export function toImstudiumError(err: unknown): ImstudiumError {
   if (err instanceof ImstudiumError) return err;
   const message = err instanceof Error ? err.message : String(err);
   const cause = err instanceof Error ? (err.cause as { code?: string } | undefined) : undefined;
   if (err instanceof TypeError && /fetch failed|network/i.test(message)) {
     return new ImstudiumError(message, "NETWORK", undefined, undefined, cause?.code ? { cause: cause.code } : undefined);
+  }
+  const fs = err instanceof Error ? (err as Error & { code?: unknown; path?: unknown; syscall?: unknown }) : undefined;
+  if (fs && typeof fs.code === "string" && typeof fs.path === "string" && !String(fs.syscall ?? "").startsWith("spawn")) {
+    if (fs.code === "ENOENT") {
+      return new ImstudiumError(`No such file or folder: ${fs.path}`, "NOT_FOUND", undefined, "Check the path; a relative path starts in the folder you are in", { path: fs.path, cause: fs.code });
+    }
+    const why = UNUSABLE_PATH[fs.code];
+    if (why) {
+      return new ImstudiumError(`Cannot use ${fs.path}: ${why}`, "BAD_ARGS", undefined, "Pass a file you can read, or a folder you can write to", { path: fs.path, cause: fs.code });
+    }
   }
   return new ImstudiumError(message, "UNKNOWN");
 }

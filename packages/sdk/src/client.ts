@@ -114,6 +114,21 @@ function isNetworkError(err: unknown): boolean {
   );
 }
 
+/**
+ * A route with ids in it: `apiPath\`/messages/${id}\``. Every value is one
+ * path segment, percent-encoded, so an id with `/`, `\`, `?` or `#` cannot
+ * reach another route (`x\..\..\users\me` read /users/me), and `.` or `..`
+ * is refused because URL parsing would resolve it.
+ */
+export function apiPath(strings: TemplateStringsArray, ...ids: Array<string | number>): string {
+  return strings.reduce((path, part, i) => {
+    if (i === 0) return part;
+    const id = String(ids[i - 1]);
+    if (!id.trim() || id === "." || id === "..") throw new ImstudiumError(`Not a valid id: "${id}"`, "BAD_ARGS", undefined, "Pass the id as the list command shows it");
+    return path + encodeURIComponent(id) + part;
+  }, "");
+}
+
 /** Serialise a JsonApiQuery (or a flat record) into URLSearchParams. */
 export function toSearchParams(query?: JsonApiQuery | Record<string, string>): URLSearchParams {
   const qs = new URLSearchParams();

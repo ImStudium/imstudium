@@ -55,3 +55,18 @@ export function isOfflineError(err: unknown): boolean {
 export function originOf(apiBase: string): string {
   return apiBase.replace(/\/jsonapi\.php\/v1\/?$/, "");
 }
+
+/**
+ * Why a call failed, short and in German, for the "Hinweis" lines a student
+ * reads: "keine Verbindung", "nicht angemeldet", "kein Zugriff", "nicht
+ * gefunden", else the message itself.
+ */
+export function failureReason(err: unknown): string {
+  if (err instanceof ImstudiumError) {
+    if (err.code === "NETWORK") return "keine Verbindung";
+    if (isAuthError(err)) return "nicht angemeldet";
+    if (err.status === 403) return "kein Zugriff";
+    if (err.code === "NOT_FOUND") return "nicht gefunden";
+  }
+  return err instanceof Error ? err.message : String(err);
+}

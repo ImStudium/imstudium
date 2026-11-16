@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { buildProgram } from "@imstudium/cli/program";
 
@@ -105,9 +106,9 @@ function chain(cmd: Cmd): Cmd[] {
  * attached values, `--x=y`, combined short flags) without running anything:
  * every action is replaced by one that only records which command Commander
  * picked. Returns the leaf command, "help" for help/version output, or the
- * Commander error message.
+ * Commander error message with the deepest command it reached.
  */
-function resolve(args: string[]): Resolved | "help" | { error: string } {
+function resolve(args: string[]): Resolved | "help" | { error: string; at: Cmd } {
   const program = buildProgram();
   const silent = { writeOut: () => {}, writeErr: () => {}, outputError: () => {} };
   const all: Cmd[] = [];
@@ -117,9 +118,13 @@ function resolve(args: string[]): Resolved | "help" | { error: string } {
   };
   visit(program);
   let picked: Cmd | null = null;
+  let reached: Cmd = program;
   for (const c of all) {
     c.exitOverride();
     c.configureOutput(silent);
+    c.hook("preSubcommand", (_parent, sub) => {
+      reached = sub as Cmd;
+    });
     c.action(function (this: Cmd) {
       picked = this;
     });
@@ -129,21 +134,31 @@ function resolve(args: string[]): Resolved | "help" | { error: string } {
   } catch (e) {
     const code = (e as { code?: string }).code ?? "";
     if (code === "commander.helpDisplayed" || code === "commander.help" || code === "commander.version") return "help";
-    return { error: (e as Error).message.replace(/^error:\s*/i, "") };
+    return { error: (e as Error).message.replace(/^error:\s*/i, ""), at: reached };
   }
-  return picked ? new Resolved(picked) : { error: "no command" };
+  return picked ? new Resolved(picked) : { error: "no command", at: reached };
 }
 
-export function checkArgs(args: string[]): string | null {
+/** Why the door refuses a call: a command or flag that writes (WRITE_NOT_ALLOWED), or arguments the CLI would reject anyway (BAD_ARGS). */
+export interface DoorRefusal {
+  code: "WRITE_NOT_ALLOWED" | "BAD_ARGS";
+  message: string;
+  hint: string;
+}
+
+const TERMINAL = "Run it in a terminal";
+
+export function refuseArgs(args: string[]): DoorRefusal | null {
+  const gated = (message: string): DoorRefusal => ({ code: "WRITE_NOT_ALLOWED", message, hint: TERMINAL });
   const notAvailable = (what: string) =>
-    `Not available over MCP: "${what}". Read-only commands: ${[...READ_ONLY_PATHS].join(", ")}.`;
+    gated(`Not available over MCP: "${what}". Read-only commands: ${[...READ_ONLY_PATHS].join(", ")}.`);
   if (args.length === 0) return notAvailable("");
 
   // Defence in depth: a blocked long option is refused wherever it appears,
   // also as the value of another option (the root parses --instance anywhere).
   for (const a of args) {
     const long = a.startsWith("--") ? a.split("=")[0]! : "";
-    if (BLOCKED_LONG.has(long)) return `${long} is not allowed over MCP (read-only door).`;
+    if (BLOCKED_LONG.has(long)) return gated(`${long} is not allowed over MCP (read-only door).`);
   }
 
   // The runner prepends --json; parse exactly what will run.
@@ -151,14 +166,15 @@ export function checkArgs(args: string[]): string | null {
   if (r === "help") return null;
   if (!(r instanceof Resolved)) {
     const first = args.find((a) => !a.startsWith("-")) ?? args[0]!;
-    return /unknown command|too many arguments|no command/i.test(r.error)
-      ? notAvailable(first)
-      : `Refused over MCP: ${r.error}`;
+    if (/unknown command|no command/i.test(r.error)) return notAvailable(first);
+    // An unknown option, a missing value, too many arguments: the CLI's own usage error, not a write.
+    const at = chain(r.at).slice(1).map((c) => c.name()).join(" ");
+    return { code: "BAD_ARGS", message: `imstudium ${at || first}: ${r.error}`, hint: `imstudium ${at ? `${at} ` : ""}--help` };
   }
 
   const cmds = chain(r.leaf);
   const path = cmds.slice(1).map((c) => c.name()).join(" ");
-  if (WHY[path]) return WHY[path];
+  if (WHY[path]) return gated(WHY[path]);
   if (!READ_ONLY_PATHS.has(path)) return notAvailable(path);
 
   // Every option the user set, on the leaf and its ancestors, by its real flags.
@@ -166,16 +182,24 @@ export function checkArgs(args: string[]): string | null {
     for (const opt of c.options) {
       if (c.getOptionValueSource(opt.attributeName()) !== "cli") continue;
       if ((opt.long && BLOCKED_LONG.has(opt.long)) || (opt.short && BLOCKED_SHORT.has(opt.short))) {
-        return `${opt.long ?? opt.short} is not allowed over MCP (read-only door).`;
+        return gated(`${opt.long ?? opt.short} is not allowed over MCP (read-only door).`);
       }
     }
   }
   return null;
 }
 
+/** The refusal's message, or null when the door lets `args` through. */
+export function checkArgs(args: string[]): string | null {
+  return refuseArgs(args)?.message ?? null;
+}
+
 function resolveCli(): { cmd: string; pre: string[] } {
   const explicit = process.env.IMSTUDIUM_CLI;
   if (explicit) return explicit.endsWith(".js") ? { cmd: process.execPath, pre: [explicit] } : { cmd: explicit, pre: [] };
+  // Published: dist/mcp.js sits next to dist/cli.js inside @imstudium/sdk.
+  const sibling = join(dirname(fileURLToPath(import.meta.url)), "cli.js");
+  if (existsSync(sibling)) return { cmd: process.execPath, pre: [sibling] };
   try {
     const require = createRequire(import.meta.url);
     const pkg = require.resolve("@imstudium/cli/package.json");

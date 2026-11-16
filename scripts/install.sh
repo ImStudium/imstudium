@@ -50,11 +50,11 @@ ImStudium install — Node.js 20+.
   bash scripts/install.sh [--no-global] [-o ~/Studium]
 
 Options:
-  --global          npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar (default)
+  --global          npm install -g @imstudium/sdk --allow-scripts=keytar (default)
   --no-global       Use npx only (no global imstudium on PATH)
   -o, --workspace   Studium workspace path (default: ~/Studium)
 
-Falls back to building from GitHub when @imstudium/cli is not on npm yet.
+Falls back to building from GitHub when npm has no @imstudium/sdk with the CLI yet.
 EOF
       exit 0
       ;;
@@ -76,8 +76,9 @@ fi
 
 log "Node $(node -v)"
 
+# @imstudium/sdk carries the imstudium and imstudium-mcp commands since 0.4.1.
 npm_package_available() {
-  npm view @imstudium/cli version >/dev/null 2>&1
+  [[ -n "$(npm view @imstudium/sdk bin.imstudium 2>/dev/null)" ]]
 }
 
 install_optional_tools() {
@@ -85,9 +86,15 @@ install_optional_tools() {
 }
 
 install_from_npm() {
-  log "Installing @imstudium/cli + @imstudium/mcp from npm..."
+  # Up to 0.1.x the commands came in @imstudium/cli and @imstudium/mcp; they
+  # own the same command names, so npm would refuse the new package next to them.
+  if npm ls -g --depth=0 @imstudium/cli @imstudium/mcp >/dev/null 2>&1; then
+    log "Removing the old @imstudium/cli and @imstudium/mcp..."
+    npm uninstall -g @imstudium/cli @imstudium/mcp
+  fi
+  log "Installing @imstudium/sdk from npm (imstudium and imstudium-mcp)..."
   # npm 11 skips install scripts unless allowed; keytar needs its own to reach the OS keychain.
-  npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar
+  npm install -g @imstudium/sdk --allow-scripts=keytar
 }
 
 install_from_source() {
@@ -96,7 +103,7 @@ install_from_source() {
     local install_dir="${IMSTUDIUM_INSTALL_DIR:-$HOME/.local/share/imstudium/source}"
     log "Installing source to $install_dir..."
     if ! has_cmd git; then
-      die "git required to install from source. Install git or publish @imstudium/cli to npm."
+      die "git required to install from source. Install git, or wait for @imstudium/sdk on npm."
     fi
     rm -rf "$install_dir"
     git clone --depth 1 "$IMSTUDIUM_REPO" "$install_dir"
@@ -120,12 +127,12 @@ install_cli() {
     if [[ "$GLOBAL" -eq 1 ]]; then
       install_from_npm
     else
-      log "Using npx @imstudium/cli (no global install)."
+      log "Using npx -p @imstudium/sdk imstudium (no global install)."
     fi
     return
   fi
 
-  warn "@imstudium/cli not on npm yet — installing from source."
+  warn "@imstudium/sdk with the CLI is not on npm yet, installing from source."
   if [[ -f "${IMSTUDIUM_SOURCE:-$HOME/Documents/GitHub/imstudium}/packages/cli/dist/cli.js" ]]; then
     install_from_source "${IMSTUDIUM_SOURCE:-$HOME/Documents/GitHub/imstudium}"
   else
@@ -138,7 +145,7 @@ imstudium_cmd() {
   if has_cmd imstudium; then
     imstudium "$@"
   else
-    npx -y @imstudium/cli "$@"
+    npx -y -p @imstudium/sdk imstudium "$@"
   fi
 }
 

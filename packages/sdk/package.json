@@ -1,7 +1,7 @@
 {
   "name": "@imstudium/sdk",
-  "version": "0.4.0",
-  "description": "ImStudium Stud.IP JSON:API client, auth, sync, and Studium workspace builder",
+  "version": "0.4.1",
+  "description": "ImStudium for Stud.IP: the imstudium CLI, the imstudium-mcp server and the SDK in one package",
   "license": "MIT",
   "type": "module",
   "author": "Patrick Schröppel",
@@ -17,8 +17,14 @@
   "keywords": [
     "imstudium",
     "studip",
+    "stud.ip",
     "studium",
-    "jsonapi"
+    "jsonapi",
+    "cli",
+    "mcp",
+    "claude",
+    "cursor",
+    "codex"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -36,7 +42,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "prepublishOnly": "bun run build && bun run typecheck"
+    "prepublishOnly": "echo \"Publish the assembled package: bun scripts/assemble-sdk.ts, then release.yml\" >&2 && exit 1"
   },
   "imsicheren": {
     "namespace": "imstudium",
@@ -48,13 +54,13 @@
   "dependencies": {
     "@firecrawl/anydoc": "^0.2.4",
     "@firecrawl/pdf-inspector": "^1.25.2",
-    "@imstudium/contract": "^0.4.0",
     "citeproc": "^2.4.63",
     "katex": "^0.19.1",
     "keytar": "^7.9.0",
     "playwright": "^1.64.1"
   },
   "devDependencies": {
+    "@imstudium/contract": "^0.4.1",
     "@types/node": "^24",
     "tsup": "^8.5.0",
     "typescript": "^6.0.2",
