@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { isAbsolute, join } from "node:path";
 import type { Command } from "commander";
 import {
@@ -35,7 +34,6 @@ import { berlinDateTime, cell } from "../kit/format.js";
 
 const NETWORK_BUDGET_MS = 3_000;
 const MIN_NODE_MAJOR = 20;
-const require = createRequire(import.meta.url);
 
 interface DoctorContext {
   sdk: Sdk;
@@ -59,14 +57,6 @@ const warn = (detail: string, fix: string | null, data?: Record<string, unknown>
 const failed = (detail: string, fix: string | null, data?: Record<string, unknown>): Result => ({ status: "fail", detail, fix, ...(data ? { data } : {}) });
 const skip = (detail: string): Result => ({ status: "skip", detail, fix: null });
 
-function packageVersion(name: string): string | null {
-  try {
-    return (require(`${name}/package.json`) as { version: string }).version;
-  } catch {
-    return null;
-  }
-}
-
 function bunVersion(): string | null {
   try {
     const r = spawnSync("bun", ["--version"], { encoding: "utf8", timeout: 1_500 });
@@ -76,7 +66,6 @@ function bunVersion(): string | null {
   }
 }
 
-const minor = (v: string) => v.split(".").slice(0, 2).join(".");
 const ageHours = (iso: string | number) => (Date.now() - new Date(iso).getTime()) / 3_600_000;
 
 function withBudget<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
@@ -122,15 +111,12 @@ export const DOCTOR_CHECKS: CheckDef[] = [
     id: "versions",
     title: "Versions",
     run: async () => {
+      // The CLI, the MCP server and the SDK ship in one package (@imstudium/sdk).
       const cli = getCliVersion();
-      const versions = { cli, sdk: SDK_VERSION, contract: packageVersion("@imstudium/contract"), mcp: packageVersion("@imstudium/mcp") };
-      const drift = Object.entries(versions).filter(([, v]) => v && minor(v) !== minor(cli));
-      const detail = Object.entries(versions)
-        .map(([k, v]) => `${k} ${v ?? "—"}`)
-        .join(" · ");
-      return drift.length
-        ? warn(`${detail} — ${drift.map(([k]) => k).join(", ")} differ from the CLI`, "npm i -g @imstudium/cli@latest @imstudium/mcp@latest", versions)
-        : ok(detail, versions);
+      const versions = { cli, sdk: SDK_VERSION };
+      return cli === SDK_VERSION
+        ? ok(`imstudium ${cli}`, versions)
+        : warn(`CLI ${cli} and SDK ${SDK_VERSION} differ`, "npm install -g @imstudium/sdk@latest --allow-scripts=keytar", versions);
     },
   },
   {
@@ -184,7 +170,7 @@ export const DOCTOR_CHECKS: CheckDef[] = [
           )
         : warn(
             `${session.type} session stored in ${tier}: the keychain module (keytar) does not load`,
-            "npm 11 skips keytar's install script unless allowed: npm install -g @imstudium/cli --allow-scripts=keytar (npm install-scripts approve doesn't work for global installs). The session moves out of the file on the next command; until then the 0600 file is readable by your user only",
+            "npm 11 skips keytar's install script unless allowed: npm install -g @imstudium/sdk --allow-scripts=keytar (npm install-scripts approve doesn't work for global installs). The session moves out of the file on the next command; until then the 0600 file is readable by your user only",
             { store, type: session.type, keychain: "missing" },
           );
     },
@@ -293,7 +279,7 @@ export const DOCTOR_CHECKS: CheckDef[] = [
     run: async () => {
       const tools = await detectTools();
       const detail = `pdf-inspector ${tools.pdfInspector ? "ok" : "missing"} · anydoc ${tools.anydoc ? "ok" : "missing"}`;
-      return tools.pdfInspector && tools.anydoc ? ok(detail, { ...tools }) : warn(detail, toolHints(tools)[0] ?? "npm i -g @imstudium/cli@latest", { ...tools });
+      return tools.pdfInspector && tools.anydoc ? ok(detail, { ...tools }) : warn(detail, toolHints(tools)[0] ?? "npm i -g @imstudium/sdk@latest", { ...tools });
     },
   },
   {
@@ -311,7 +297,7 @@ export const DOCTOR_CHECKS: CheckDef[] = [
           : " · math: formulas as LaTeX model readings, checked against the PDF; marked ones need a look (imstudium formulas list <file> --needs-look)"
         : " · math not installed (opt-in: imstudium setup ocr --math)";
       if (s.ready) return ok(`${s.model} · PDFium ${s.installed?.pdfium} · ONNX Runtime ${s.installed?.onnxruntime} (offline, on this machine)${math}`, data);
-      return warn(`${s.reason ?? "not ready"}: scanned pages and photos stay unread`, s.reason?.startsWith("runs under Node") ? "Run imstudium with Node: npm i -g @imstudium/cli" : "imstudium setup ocr", data);
+      return warn(`${s.reason ?? "not ready"}: scanned pages and photos stay unread`, s.reason?.startsWith("runs under Node") ? "Run imstudium with Node: npm i -g @imstudium/sdk" : "imstudium setup ocr", data);
     },
   },
   {
@@ -373,15 +359,14 @@ export async function runDoctor(sdk: Sdk, options: { offline: boolean; workspace
     }),
   );
   const count = (s: DoctorStatus) => checks.filter((c) => c.status === s).length;
-  const versions = (checks.find((c) => c.id === "versions")?.data ?? {}) as Record<string, string | null>;
   return {
     ok: count("fail") === 0,
     offline: options.offline,
     versions: {
       cli: getCliVersion(),
       sdk: SDK_VERSION,
-      contract: versions.contract ?? packageVersion("@imstudium/contract") ?? "—",
-      mcp: versions.mcp ?? null,
+      contract: SDK_VERSION,
+      mcp: SDK_VERSION,
       node: process.versions.node,
       bun: options.offline ? null : bunVersion(),
     },

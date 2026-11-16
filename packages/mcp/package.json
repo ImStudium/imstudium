@@ -1,6 +1,7 @@
 {
   "name": "@imstudium/mcp",
-  "version": "0.4.0",
+  "version": "0.4.1",
+  "private": true,
   "description": "ImStudium MCP server — study planning tools for LLMs",
   "license": "MIT",
   "type": "module",
@@ -34,14 +35,15 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist",
-    "prepublishOnly": "bun run build && bun run typecheck"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@imstudium/cli": "^0.4.0",
-    "@imstudium/contract": "^0.4.0",
-    "@imstudium/sdk": "^0.4.0",
-    "@modelcontextprotocol/sdk": "^1.32.1"
+    "@imstudium/cli": "^0.4.1",
+    "@imstudium/contract": "^0.4.1",
+    "@imstudium/sdk": "^0.4.1",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "commander": "^13.1.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24",
@@ -51,9 +53,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
   }
 }

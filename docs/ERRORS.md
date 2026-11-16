@@ -32,9 +32,9 @@ Every ImStudium failure has one stable `code`. The CLI exits with the code's exi
 | Code | Exit | Retryable | When | Default hint |
 |---|---|---|---|---|
 | `UNKNOWN` | 1 | no | Unexpected failure (a bug, or something the CLI did not anticipate) | Run again with the same arguments; if it persists, open an issue with the command and the message |
-| `UPDATE_FAILED` | 1 | no | `imstudium update` could not upgrade the global npm install | Run: npm i -g @imstudium/cli@latest |
+| `UPDATE_FAILED` | 1 | no | `imstudium update` could not upgrade the global npm install | Run: npm i -g @imstudium/sdk@latest |
 | `BROWSER_LAUNCH_FAILED` | 1 | no | The sign-in browser (Playwright) could not start | Run: npx playwright install chromium |
-| `CLI_NOT_FOUND` | 1 | no | The MCP server could not find the imstudium CLI to run | npm i -g @imstudium/cli, or set IMSTUDIUM_CLI to its path |
+| `CLI_NOT_FOUND` | 1 | no | The MCP server could not find the imstudium CLI to run | npm i -g @imstudium/sdk, or set IMSTUDIUM_CLI to its path |
 | `OCR_INSTALL_FAILED` | 1 | yes | Downloading, verifying or starting the on-device OCR runtime failed (nothing half-installed is used) | Check the connection, then run: imstudium setup ocr --force |
 | `BAD_ARGS` | 2 | no | An argument or flag is missing, unknown or malformed | See: imstudium &lt;command&gt; --help |
 | `FORMULA_MISMATCH` | 2 | no | The corrected formula doesn't check: it is malformed LaTeX, or it shows letters or digits the PDF doesn't have in that box (or leaves out ones it has) | Look at the formula's image again and write only what it shows; imstudium formulas check &lt;file&gt; &lt;id&gt; --latex '…' says what differs |

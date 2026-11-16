@@ -52,7 +52,7 @@ export function registerSetup(program: Command): void {
         const summary = formatSetupSummary(setup);
         const text =
           before.installMode === "npx" && before.updateAvailable
-            ? `${summary}\nTip: npx -y @imstudium/cli@latest for newest CLI`
+            ? `${summary}\nTip: imstudium update brings the newest version`
             : `${upgradeNote}${summary}`.trim();
         output({ ...after, upgraded, setup, summary }, text);
       }),

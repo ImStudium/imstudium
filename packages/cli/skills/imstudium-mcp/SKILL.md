@@ -8,7 +8,7 @@ description: |
 
 # imstudium mcp
 
-MCP server: `@imstudium/mcp`
+MCP server: `imstudium-mcp`, in the `@imstudium/sdk` package
 
 ## Install
 

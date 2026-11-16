@@ -1,13 +1,21 @@
-import { defineConfig } from "tsup";
+import { defineConfig, type Options } from "tsup";
 
-export default defineConfig({
-  // program.ts is the command tree the MCP door parses with
-  // (@imstudium/cli/program). No code splitting: dist/cli.js must stay one
-  // self-contained bundle (entry.ts locates the running CLI by import.meta.url).
-  entry: ["src/cli.ts", "src/program.ts"],
+// dist/cli.js ships inside @imstudium/sdk (scripts/assemble-sdk.ts), where
+// `@imstudium/sdk` resolves to the package itself; @imstudium/contract is
+// private and bundled in.
+const shared: Options = {
   format: ["esm"],
-  dts: true,
-  clean: true,
-  splitting: false,
+  clean: false, // two builds share dist/; `bun run build` empties it first
+  noExternal: ["@imstudium/contract"],
+  external: ["zod"],
   banner: { js: "#!/usr/bin/env node" },
-});
+};
+
+export default defineConfig([
+  // The command. entry.ts locates the running CLI by import.meta.url, so it
+  // must stay in dist/cli.js: only dynamic imports split off, which keeps
+  // the contract and zod (`imstudium schema`) out of every start.
+  { ...shared, entry: ["src/cli.ts"], splitting: true },
+  // The command tree the MCP server parses with (@imstudium/cli/program).
+  { ...shared, entry: ["src/program.ts"], splitting: false, dts: true },
+]);

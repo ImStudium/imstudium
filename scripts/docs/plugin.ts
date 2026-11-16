@@ -131,7 +131,7 @@ function codexManifest() {
         "ImStudium mirrors your Stud.IP into a local study workspace and gives Codex one read-only door to it: " +
         "what's on today and this week, open Abgaben and Klausuren, new files and announcements, office hours, " +
         "and cited explanations, exam plans and quizzes built from your own lecture material. " +
-        "Needs the imstudium CLI (npm i -g @imstudium/cli @imstudium/mcp) and one `imstudium login`.",
+        "Needs the imstudium CLI (npm i -g @imstudium/sdk) and one `imstudium login`.",
       developerName: "ImStudium",
       category: "Education",
       capabilities: ["Interactive", "Read"],
@@ -149,7 +149,7 @@ function codexManifest() {
 
 /**
  * The read-only MCP door, shared by both harnesses. `imstudium-mcp` comes with
- * `npm i -g @imstudium/mcp` (the installer adds it next to the CLI). Codex runs
+ * `npm i -g @imstudium/sdk`, next to the `imstudium` command. Codex runs
  * shell commands in a sandbox without network; the MCP server runs outside it,
  * so it is how Codex reaches Stud.IP.
  */

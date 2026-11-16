@@ -3,7 +3,13 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: ["src/index.ts"],
   format: ["esm"],
-  dts: true,
+  // @imstudium/contract is a private workspace package: its error table is
+  // bundled in, and its types are inlined into index.d.ts.
+  dts: {
+    resolve: [/^@imstudium\/contract/],
+    compilerOptions: { rootDir: "..", paths: { "@imstudium/contract/errors": ["../contract/src/errors.ts"] } },
+  },
   clean: true,
-  external: ["keytar", "playwright", "@firecrawl/anydoc", "@firecrawl/pdf-inspector"],
+  noExternal: ["@imstudium/contract"],
+  external: ["keytar", "playwright", "@firecrawl/anydoc", "@firecrawl/pdf-inspector", "zod"],
 });

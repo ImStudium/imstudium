@@ -1,6 +1,7 @@
 {
   "name": "@imstudium/contract",
-  "version": "0.4.0",
+  "version": "0.4.1",
+  "private": true,
   "description": "ImStudium wire contract — zod schemas for every CLI --json output, the error table and the imstudium/source/v1 feed",
   "license": "MIT",
   "type": "module",
@@ -41,8 +42,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist",
-    "prepublishOnly": "bun run build && bun run typecheck"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "zod": "^4.6.7"
@@ -55,9 +55,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
   }
 }

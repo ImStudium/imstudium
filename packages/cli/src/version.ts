@@ -8,7 +8,9 @@ const require = createRequire(import.meta.url);
 
 export type InstallMode = "global" | "npx" | "development";
 
-const CLI_PACKAGES = ["@imstudium/cli", "@imstudium/mcp"] as const;
+/** The one published package: the CLI, the MCP server and the SDK ship together. */
+export const PACKAGE_NAME = "@imstudium/sdk";
+const CLI_PACKAGES = [PACKAGE_NAME] as const;
 
 export function getCliVersion(): string {
   try {
@@ -27,7 +29,7 @@ export function detectInstallMode(entryPath: string): InstallMode {
     }
     // Cheap answers first: `npm root -g` costs a process spawn.
     if (resolved.includes("_npx")) return "npx";
-    if (resolved.includes(join("lib", "node_modules", "@imstudium", "cli"))) return "global";
+    if (resolved.includes(join("lib", "node_modules", "@imstudium", "sdk"))) return "global";
     const globalRoot = execSync("npm root -g", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] }).trim();
     if (resolved.startsWith(globalRoot)) return "global";
   } catch {
@@ -83,10 +85,10 @@ export async function checkForUpdates(entryPath: string, timeoutMs = 10_000): Pr
   const latestByName = await Promise.all(CLI_PACKAGES.map((name) => fetchNpmLatest(name, timeoutMs)));
   for (const [i, name] of CLI_PACKAGES.entries()) {
     const latest = latestByName[i] ?? null;
-    if (name === "@imstudium/cli") latestMain = latest;
+    if (name === PACKAGE_NAME) latestMain = latest;
     packages.push({
       name,
-      current: name === "@imstudium/cli" ? current : current,
+      current,
       latest,
       updateAvailable: latest ? semverLt(current, latest) : false,
     });
@@ -108,7 +110,7 @@ export async function checkForUpdates(entryPath: string, timeoutMs = 10_000): Pr
 export async function runGlobalUpdate(): Promise<{ ok: boolean; output: string }> {
   try {
     // npm 11 skips install scripts unless allowed; keytar needs its own to reach the OS keychain.
-    const out = execSync("npm install -g @imstudium/cli@latest @imstudium/mcp@latest --allow-scripts=keytar", {
+    const out = execSync(`npm install -g ${PACKAGE_NAME}@latest --allow-scripts=keytar`, {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });

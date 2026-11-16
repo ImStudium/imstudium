@@ -27,3 +27,27 @@ jobs:
 
       - name: Generated docs are current
         run: bun run docs:check
+
+  # The one published package, as a student gets it: npm pack, a global
+  # install from the tarball, then both commands start.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build and assemble @imstudium/sdk
+        run: bun run build && bun scripts/assemble-sdk.ts
+
+      - name: Install the tarball globally and start both commands
+        run: bash scripts/package-smoke.sh

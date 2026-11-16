@@ -1,8 +1,10 @@
 name: Release
 
-# Tag vX.Y.Z on main → publish @imstudium/{contract,sdk,cli,mcp} with npm
-# trusted publishing (OIDC). There is no npm token anywhere: each package on
-# npmjs.com trusts this repository and this workflow file (release.yml).
+# Tag vX.Y.Z on main → publish @imstudium/sdk with npm trusted publishing
+# (OIDC) and provenance. It is the one public package: the imstudium CLI and
+# the imstudium-mcp server ship inside it (scripts/assemble-sdk.ts); contract,
+# cli and mcp are private workspace packages. There is no npm token anywhere:
+# @imstudium/sdk on npmjs.com trusts this repository and this workflow file.
 
 on:
   push:
@@ -56,16 +58,8 @@ jobs:
       - name: Generated docs are current
         run: bun run docs:check
 
-      # Order = topological order of the internal dependencies
-      # (scripts/release-order.test.ts keeps these steps in that order).
-      - name: Publish contract
-        run: bash scripts/release-publish.sh contract
+      - name: Assemble @imstudium/sdk
+        run: bun scripts/assemble-sdk.ts
 
-      - name: Publish sdk
-        run: bash scripts/release-publish.sh sdk
-
-      - name: Publish cli
-        run: bash scripts/release-publish.sh cli
-
-      - name: Publish mcp
-        run: bash scripts/release-publish.sh mcp
+      - name: Publish @imstudium/sdk
+        run: bash scripts/release-publish.sh

@@ -5,8 +5,7 @@ description: |
   Use when the user mentions ImStudium, Studium, Stud.IP, course materials, Klausur dates, or exam prep from university LMS.
 allowed-tools:
   - Bash(imstudium *)
-  - Bash(npx @imstudium/cli *)
-  - Bash(npx -y @imstudium/cli@latest *)
+  - Bash(npx -y -p @imstudium/sdk imstudium *)
 ---
 
 # imstudium cli
@@ -23,7 +22,7 @@ Command-line interface for ImStudium / Stud.IP. Sync materials, build agent work
 ## One-shot setup
 
 ```bash
-npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar
+npm install -g @imstudium/sdk --allow-scripts=keytar
 imstudium login                      # the student signs in, in their own browser window
 imstudium semester start --extract   # first sync of the running semester, files as markdown
 ```
@@ -92,4 +91,4 @@ Never handle the student's password. If a command reports an expired session and
 2. `imstudium update --json` — upgrade + refresh harness
 3. `imstudium --json studium` — local overview
 4. `imstudium sync` — refresh from API
-5. MCP tools — see `@imstudium/mcp` skill
+5. MCP tools — see the imstudium-mcp skill

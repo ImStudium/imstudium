@@ -4,11 +4,22 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-16
+
+One package: `npm install -g @imstudium/sdk --allow-scripts=keytar` installs the `imstudium` command, the `imstudium-mcp` server and the SDK, from npmjs.com with no login and with a provenance attestation. This is the first published release of everything in 0.4.0, which was tagged but never reached npm.
+
+### Changed
+
+- `@imstudium/sdk` is the only package on npm. contract, cli and mcp are private workspace packages, bundled into it by `scripts/assemble-sdk.ts`; `scripts/package-smoke.sh` (CI job `package`) installs the tarball and starts both commands.
+- `@imstudium/cli` and `@imstudium/mcp` 0.1.x are deprecated on npm and point here. They own the same command names, so remove them first: `npm uninstall -g @imstudium/cli @imstudium/mcp`. The installer does that by itself.
+- `imstudium update`, `doctor`, `setup mcp` (`npx -y -p @imstudium/sdk imstudium-mcp`) and every hint name the one package. `doctor` reports one version.
+- The release script waits for a new package's metadata instead of failing while npm still answers 404.
+
 ## [0.4.0] - 2026-11-16
 
-Written work: a citation registry per Hausarbeit, Seminararbeit or thesis that checks every source, formats in the Lehrstuhl's style and holds the manuscript against the Formvorgaben ([docs/ARBEITEN.md](docs/ARBEITEN.md)).
+Tagged, never published; its changes reach npm with 0.4.1.
 
-Back on npmjs.com: `npm install -g @imstudium/cli @imstudium/mcp --allow-scripts=keytar` needs no login again, and every package carries a provenance attestation. 0.3.0 and 0.3.1 stay on GitHub Packages.
+Written work: a citation registry per Hausarbeit, Seminararbeit or thesis that checks every source, formats in the Lehrstuhl's style and holds the manuscript against the Formvorgaben ([docs/ARBEITEN.md](docs/ARBEITEN.md)).
 
 ### Added
 

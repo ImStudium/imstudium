@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { buildProgram } from "@imstudium/cli/program";
 
@@ -176,6 +177,9 @@ export function checkArgs(args: string[]): string | null {
 function resolveCli(): { cmd: string; pre: string[] } {
   const explicit = process.env.IMSTUDIUM_CLI;
   if (explicit) return explicit.endsWith(".js") ? { cmd: process.execPath, pre: [explicit] } : { cmd: explicit, pre: [] };
+  // Published: dist/mcp.js sits next to dist/cli.js inside @imstudium/sdk.
+  const sibling = join(dirname(fileURLToPath(import.meta.url)), "cli.js");
+  if (existsSync(sibling)) return { cmd: process.execPath, pre: [sibling] };
   try {
     const require = createRequire(import.meta.url);
     const pkg = require.resolve("@imstudium/cli/package.json");
