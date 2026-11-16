@@ -4,6 +4,8 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-16
+
 Written work: a citation registry per Hausarbeit, Seminararbeit or thesis that checks every source, formats in the Lehrstuhl's style and holds the manuscript against the Formvorgaben ([docs/ARBEITEN.md](docs/ARBEITEN.md)).
 
 ### Added
