@@ -89,6 +89,11 @@ export async function makeFixture(): Promise<Fixture> {
       .map((c) => JSON.stringify(c))
       .join("\n") + "\n",
   );
+  // the files the change log names (context lists only changes whose file is still there)
+  for (const p of [`${sem}/statistik-i/files/Blatt 1.pdf`, `${sem}/datenbanken/files/SQL.pdf`]) {
+    await mkdir(join(workspace, p, ".."), { recursive: true });
+    await writeFile(join(workspace, p), "%PDF-1.4 synthetic\n");
+  }
   await writeFile(
     join(workspace, ".imstudium", "tasks.json"),
     JSON.stringify({

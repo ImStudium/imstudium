@@ -422,8 +422,12 @@ export async function resolveUrl(url: string, opts: MetadataOptions = {}): Promi
       if (!(e instanceof ImstudiumError) || e.code !== "METADATA_NOT_FOUND") throw e;
     }
   }
-  const site = one("og:site_name", "citation_publisher", "dc.publisher");
   const rawTitle = one("citation_title", "dc.title", "og:title", "twitter:title") ?? xmlText(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "");
+  // No site name tag (Wikipedia has none): a title suffix that names the host is the site.
+  const suffix = /\s+[-–—|·]\s+([^-–—|·]{2,40})\s*$/.exec(rawTitle)?.[1]?.trim();
+  const suffixWord = suffix?.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const titleSite = suffix && suffixWord && suffixWord.length > 2 && new URL(url).hostname.toLowerCase().includes(suffixWord) ? suffix : undefined;
+  const site = one("og:site_name", "citation_publisher", "dc.publisher") ?? titleSite;
   // "Zitat – Wikipedia" → "Zitat" when the suffix is the site's name
   const title = site ? rawTitle.replace(new RegExp(`\\s+[-–—|·:]\\s+${site.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`), "") : rawTitle;
   const authors = [...many("citation_author"), ...many("dc.creator")].filter(Boolean);

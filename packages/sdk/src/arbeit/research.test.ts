@@ -171,8 +171,10 @@ describe("CSL formatting", () => {
     const f = await CitationFormatter.create({ style: "ieee", items: [BOOK, ARTICLE], format: "markdown" });
     expect(f.cite([{ key: "schmidt2020lernen" }])).toBe("[2]");
     expect(f.bibliography().text).toMatch(/^\[1\] A\. Müller, \*Digitale Lehre: Ein Handbuch\*/);
-    const rtf = (await CitationFormatter.create({ style: "apa", items: [BOOK], format: "rtf" })).bibliography().text;
+    const rtf = (await CitationFormatter.create({ style: "apa", items: [BOOK, ARTICLE], format: "rtf" })).bibliography().text;
     expect(rtf.startsWith("{\\rtf1")).toBe(true);
+    // one hanging-indent paragraph per entry, so Word keeps them apart
+    expect(rtf.match(/\{\\pard\\ql\\fi-720\\li720[^ ]* .+?\\par\}/g)).toHaveLength(2);
   });
 
   it("reads locators the way German texts write them", () => {

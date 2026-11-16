@@ -40,6 +40,14 @@ Back on npmjs.com: `npm install -g @imstudium/cli @imstudium/mcp --allow-scripts
 
 - `@imstudium/sdk` depends on `citeproc` (citeproc-js, CPAL-1.0 or AGPL-3.0, unmodified, loaded only when formatting) and ships `csl/` (styles and locales, CC BY-SA 3.0).
 
+### Fixed
+
+- **Search no longer keeps a slide's old text after an agent read it.** Reading a file over MCP (`studium_read_material`) or with `view --course --file` put its text in a second folder that sync never refreshed, so once the lecturer replaced the file, search still found the old pages and `materials.json` could count the old copy. Both now use the folder sync uses. A folder an earlier version left behind stays until it is deleted from `extracted/`.
+- **Right after `semester start`, `context` and NEW.md no longer list last semester's files as new.** They list only changes whose file is still where it was; `changes` keeps the full log.
+- **Exam dates read as dates.** `klausuren.md` and `imstudium klausuren` say "Mo 15.02.2027, 09:00" (Berlin time) instead of an ISO timestamp.
+- `COURSE.md` no longer shows the course type as a bare number from Stud.IP.
+- **`setup --agent` with a name it does not know stops and lists the agents**, instead of doing nothing; `--agent claude` means Claude Code. When the `claude` CLI is not on PATH, setup says Claude Code's MCP server is not registered and prints the command to do it, instead of counting it as unchanged.
+
 ## [0.3.1] - 2026-11-14
 
 ### Fixed

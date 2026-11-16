@@ -116,7 +116,7 @@ export function parseRis(text: string): { items: CslItem[]; errors: string[] } {
     }
     if (!cur) continue;
     if (tag === "ER") {
-      items.push(risRecordToCsl(cur, items.length));
+      items.push(risRecordToCsl(cur));
       cur = null;
       last = null;
       continue;
@@ -125,13 +125,15 @@ export function parseRis(text: string): { items: CslItem[]; errors: string[] } {
     last = tag;
   }
   if (cur) errors.push("the last record has no ER line; it was read anyway");
-  if (cur) items.push(risRecordToCsl(cur, items.length));
+  if (cur) items.push(risRecordToCsl(cur));
   return { items, errors };
 }
 
-function risRecordToCsl(r: Record<string, string[]>, idx: number): CslItem {
+function risRecordToCsl(r: Record<string, string[]>): CslItem {
   const one = (...tags: string[]) => tags.map((t) => r[t]?.[0]).find((v) => v !== undefined && v !== "");
-  const item: CslItem = { id: one("ID") ?? `ris${idx + 1}`, type: RIS_TO_CSL[one("TY") ?? "GEN"] ?? "document" };
+  // No ID line (Citavi, EndNote and most exports): an empty id, so the registry
+  // gives the source an author-year key as it does for CSL-JSON without one.
+  const item: CslItem = { id: one("ID") ?? "", type: RIS_TO_CSL[one("TY") ?? "GEN"] ?? "document" };
   const authors = [...(r.AU ?? []), ...(r.A1 ?? [])];
   if (authors.length) item.author = authors.map(risName);
   const editors = [...(r.ED ?? []), ...(r.A2 && item.type !== "article-journal" ? r.A2 : []), ...(r.A3 ?? [])];

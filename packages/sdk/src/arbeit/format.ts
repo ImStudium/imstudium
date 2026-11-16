@@ -203,11 +203,18 @@ export class CitationFormatter {
     if (!result) return { entries: [], text: "", hangingIndent: false, lineSpacing: 1, entrySpacing: 1 };
     const [meta, strings] = result;
     const entries = strings.map((s, i) => ({ key: meta.entry_ids[i]?.[0] ?? ids[i]!, text: this.out(s).trim() }));
-    const sep = this.format === "rtf" ? "" : this.format === "html" ? "\n" : "\n\n";
+    const sep = this.format === "html" ? "\n" : "\n\n";
     const body = this.format === "markdown" || this.format === "text" ? entries.map((e) => e.text).join(sep) : strings.join(sep);
+    // RTF: one paragraph per entry, so Word keeps them apart, with the style's
+    // hanging indent (1.27 cm), line spacing and space between entries.
+    const rtfParagraph = (s: string) => {
+      const indent = meta.hangingindent ? "\\fi-720\\li720" : "";
+      const line = meta.linespacing && meta.linespacing !== 1 ? `\\sl${Math.round(240 * meta.linespacing)}\\slmult1` : "";
+      return `{\\pard\\ql${indent}${line}\\sa${Math.round(240 * (meta.entryspacing ?? 1))} ${s.trim()}\\par}`;
+    };
     return {
       entries,
-      text: this.format === "rtf" ? `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 ${"Times New Roman"};}}\\fs24\n${body}\n}` : body,
+      text: this.format === "rtf" ? `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 ${"Times New Roman"};}}\\fs24\n${strings.map(rtfParagraph).join("\n")}\n}` : body,
       hangingIndent: !!meta.hangingindent,
       lineSpacing: meta.linespacing ?? 1,
       entrySpacing: meta.entryspacing ?? 1,

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
@@ -366,10 +367,15 @@ export async function readChanges(out: string, sinceMs: number): Promise<ChangeE
   }
 }
 
+/** Changes whose file is still where the entry says: after a semester rollover the old semester's files sit in archive/ and are not new. */
+export async function readCurrentChanges(out: string, sinceMs: number): Promise<ChangeEntry[]> {
+  return (await readChanges(out, sinceMs)).filter((c) => existsSync(join(out, c.path)));
+}
+
 /** NEW.md — what arrived in the last 14 days, per course, newest first. */
 export async function writeNewMd(out: string, days = 14): Promise<void> {
   const since = Date.now() - days * 86_400_000;
-  const changes = (await readChanges(out, since)).reverse();
+  const changes = (await readCurrentChanges(out, since)).reverse();
   const byCourse = new Map<string, ChangeEntry[]>();
   const seen = new Set<string>();
   for (const c of changes) {
