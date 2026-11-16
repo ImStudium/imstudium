@@ -1,3 +1,4 @@
+import { apiPath } from "../client.js";
 import type { StudIpClient } from "../client.js";
 import type {
   CourseAttributes,
@@ -6,6 +7,7 @@ import type {
   UserAttributes,
 } from "../types.js";
 import { slugify } from "../config.js";
+import { ImstudiumError } from "../errors.js";
 import {
   filterCoursesForSemester,
   findCurrentSemester,
@@ -52,7 +54,7 @@ export class CoursesResource {
 
   async listMine(userId?: string, options: ListMineOptions = {}): Promise<CourseResource[]> {
     const user = userId ? { id: userId } : await this.getMe();
-    const all = await this.client.paginateAll<CourseResource>(`/users/${user.id}/courses`);
+    const all = await this.client.paginateAll<CourseResource>(apiPath`/users/${user.id}/courses`);
     if (options.allSemesters) return all;
 
     const allSemesters = await this.semesters.listAll();
@@ -77,9 +79,12 @@ export class CoursesResource {
     const calendarCurrent = findCurrentSemester(all);
     let target: SemesterResource | null = null;
     if (options?.semesterId) {
-      target = all.find((s) => s.id === options.semesterId) ?? null;
+      target = all.find((s) => s.id === options.semesterId) ?? (await this.semesterById(options.semesterId));
+      if (!target) throw new ImstudiumError(`No semester with id ${options.semesterId}`, "SEMESTER_NOT_FOUND", 404, "imstudium semesters lists them");
     } else if (options?.semesterLabel) {
+      // An unknown label used to fall back to "current" and file a whole semester there.
       target = this.semesters.resolveByLabel(all, options.semesterLabel);
+      if (!target) throw new ImstudiumError(`No semester matches "${options.semesterLabel}"`, "SEMESTER_NOT_FOUND", 404, 'imstudium semesters lists them, e.g. --semester "WS 2026/27"');
     } else {
       target = calendarCurrent;
     }
@@ -94,6 +99,17 @@ export class CoursesResource {
     };
   }
 
+  /** A semester the list does not hold (older than its window), or null when Stud.IP knows no such id. */
+  private async semesterById(id: string): Promise<SemesterResource | null> {
+    try {
+      return await this.semesters.get(id);
+    } catch (e) {
+      // 404, or 400 for an id Stud.IP cannot even parse: no such semester. Offline and signed out stay what they are.
+      if (e instanceof ImstudiumError && e.code !== "NOT_FOUND" && e.status !== 400) throw e;
+      return null;
+    }
+  }
+
   async listAll(filters?: { semester?: string; q?: string }): Promise<CourseResource[]> {
     const params: Record<string, string> = {};
     if (filters?.semester) params["filter[semester]"] = filters.semester;
@@ -102,14 +118,14 @@ export class CoursesResource {
   }
 
   async get(courseId: string): Promise<CourseResource> {
-    const doc = await this.client.get<CourseResource>(`/courses/${courseId}`);
+    const doc = await this.client.get<CourseResource>(apiPath`/courses/${courseId}`);
     if (!doc.data || Array.isArray(doc.data)) throw new Error("Course not found");
     return doc.data;
   }
 
   async getEvents(courseId: string): Promise<EventResource[]> {
     try {
-      return await this.client.paginateAll<EventResource>(`/courses/${courseId}/events`);
+      return await this.client.paginateAll<EventResource>(apiPath`/courses/${courseId}/events`);
     } catch {
       return [];
     }
@@ -136,7 +152,7 @@ export class ScheduleResource {
   async getSchedule(userId: string, options: { timestamp?: number } = {}): Promise<JsonApiResource[]> {
     try {
       const filter = options.timestamp ? { timestamp: Math.floor(options.timestamp) } : undefined;
-      const doc = await this.client.get(`/users/${userId}/schedule`, { filter });
+      const doc = await this.client.get(apiPath`/users/${userId}/schedule`, { filter });
       return Array.isArray(doc.data) ? doc.data : doc.data ? [doc.data] : [];
     } catch {
       return [];
@@ -144,7 +160,7 @@ export class ScheduleResource {
   }
 
   async exportCalendarIcs(userId: string): Promise<string> {
-    const res = await this.client.download(`/users/${userId}/events.ics`);
+    const res = await this.client.download(apiPath`/users/${userId}/events.ics`);
     return res.text();
   }
 }

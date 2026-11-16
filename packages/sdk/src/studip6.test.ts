@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { isPagingRejected, StudIpClient } from "./client.js";
 import { envConfigOverrides } from "./config.js";
 import { ImstudiumError, parseApiErrors, readResponseError } from "./errors.js";
+import { CoursesResource } from "./resources/courses.js";
 import { friendlyDownloadError, samePath } from "./sync.js";
 
 const ORIGIN = "https://studip.a.example";
@@ -90,6 +91,21 @@ describe("file sync", () => {
     await symlink(join(root, "real"), join(root, "link"));
     expect(await samePath(join(root, "real", "files", "a.pdf"), join(root, "link", "files", "a.pdf"))).toBe(true);
     expect(await samePath(join(root, "real", "files", "a.pdf"), join(root, "real", "files", "b.pdf"))).toBe(false);
+  });
+
+  it("an unknown --semester stops with SEMESTER_NOT_FOUND instead of filing the courses under current/", async () => {
+    const semester = (id: string, title: string, start: string, end: string) => ({ type: "semesters", id, attributes: { title, start, end } });
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith("/semesters")) {
+        return new Response(JSON.stringify({ data: [semester("ws26", "WS 2026/27", "2026-10-01T00:00:00+02:00", "2027-03-31T23:59:59+02:00")], meta: { page: { offset: 0, limit: 100, total: 1 } } }), { status: 200, headers: JSONAPI });
+      }
+      return new Response(JSON.stringify({ errors: [{ status: "404", title: "Not Found" }] }), { status: 404, headers: JSONAPI });
+    }) as typeof fetch;
+    const courses = new CoursesResource(client(fetchImpl));
+    expect((await courses.resolveSemesterContext({ semesterLabel: "WS 2026/27" }))?.slug).toBe("WS2026-27");
+    await expect(courses.resolveSemesterContext({ semesterLabel: "WS1999" })).rejects.toMatchObject({ code: "SEMESTER_NOT_FOUND" });
+    await expect(courses.resolveSemesterContext({ semesterId: "gone" })).rejects.toMatchObject({ code: "SEMESTER_NOT_FOUND" });
   });
 
   it("never shows Stud.IP's server paths as a download error", () => {

@@ -12,6 +12,7 @@
  * module never calls it. Roots come from the unit (include=structural-element),
  * everything below from /descendants, which has no side effects.
  */
+import { apiPath } from "../client.js";
 import type { JsonApiQuery, PageResult, StudIpClient } from "../client.js";
 import { ImstudiumError } from "../errors.js";
 import { attr, Included, relId, relIds } from "../jsonapi.js";
@@ -552,7 +553,7 @@ export class CoursewareResource {
   /** Units (Lernmaterialien) of a course the student can read, in shelf order. */
   async listCourseUnits(courseId: string): Promise<CwUnit[]> {
     try {
-      return await this.units(`/courses/${courseId}/courseware-units`);
+      return await this.units(apiPath`/courses/${courseId}/courseware-units`);
     } catch (e) {
       // Courseware tool not activated in this course.
       if (e instanceof ImstudiumError && (e.status === 404 || e.status === 403)) return [];
@@ -562,11 +563,11 @@ export class CoursewareResource {
 
   /** The student's own units (Arbeitsplatz / contents courseware). */
   async listUserUnits(userId: string): Promise<CwUnit[]> {
-    return this.units(`/users/${userId}/courseware-units`);
+    return this.units(apiPath`/users/${userId}/courseware-units`);
   }
 
   async getUnit(unitId: string): Promise<CwUnit> {
-    const { data, included } = await this.client.getOne(`/courseware-units/${unitId}`, {
+    const { data, included } = await this.client.getOne(apiPath`/courseware-units/${unitId}`, {
       include: "structural-element",
     });
     return normalizeUnit(data, included);
@@ -592,13 +593,13 @@ export class CoursewareResource {
         chdate: unit.chdate,
         mkdate: null,
       } satisfies CwElement);
-    const desc = await this.client.paginateAll(`/courseware-structural-elements/${unit.rootId}/descendants`);
+    const desc = await this.client.paginateAll(apiPath`/courseware-structural-elements/${unit.rootId}/descendants`);
     return buildElementTree(rootElement, desc.map(normalizeElement));
   }
 
   /** Containers of one page with their blocks, both in display order. */
   async loadContainers(elementId: string): Promise<{ containers: CwContainer[]; blocks: CwBlock[] }> {
-    const page = await this.paginateIncluding(`/courseware-structural-elements/${elementId}/containers`, {
+    const page = await this.paginateIncluding(apiPath`/courseware-structural-elements/${elementId}/containers`, {
       include: "blocks",
     });
     const containers = page.data.map(normalizeContainer).sort(byPosition);
@@ -606,7 +607,7 @@ export class CoursewareResource {
     const have = new Set(blocks.map((b) => b.id));
     const missing = containers.filter((c) => c.blockIds.some((id) => !have.has(id)));
     for (const c of missing) {
-      const more = await this.client.paginateAll(`/courseware-containers/${c.id}/blocks`);
+      const more = await this.client.paginateAll(apiPath`/courseware-containers/${c.id}/blocks`);
       blocks = blocks.concat(more.map(normalizeBlock).filter((b) => !have.has(b.id)));
     }
     return { containers, blocks: blocks.sort(byPosition) };
@@ -614,7 +615,7 @@ export class CoursewareResource {
 
   async fileMeta(fileRefId: string): Promise<CwFile | null> {
     try {
-      const { data } = await this.client.getOne(`/file-refs/${fileRefId}`);
+      const { data } = await this.client.getOne(apiPath`/file-refs/${fileRefId}`);
       return normalizeFileRef(data);
     } catch (e) {
       if (e instanceof ImstudiumError && (e.status === 403 || e.status === 404)) return null;
@@ -624,7 +625,7 @@ export class CoursewareResource {
 
   /** Files attached to one block (Stud.IP's own list for the block). */
   async listBlockFiles(blockId: string): Promise<CwFile[]> {
-    const doc = await this.client.get(`/courseware-blocks/${blockId}/file-refs`);
+    const doc = await this.client.get(apiPath`/courseware-blocks/${blockId}/file-refs`);
     const list = Array.isArray(doc.data) ? doc.data : doc.data ? [doc.data] : [];
     return list.map(normalizeFileRef);
   }
@@ -702,7 +703,7 @@ export class CoursewareResource {
   }
 
   async getTaskGroup(id: string): Promise<CwTaskGroup> {
-    const { data } = await this.client.getOne(`/courseware-task-groups/${id}`);
+    const { data } = await this.client.getOne(apiPath`/courseware-task-groups/${id}`);
     return normalizeTaskGroup(data);
   }
 }

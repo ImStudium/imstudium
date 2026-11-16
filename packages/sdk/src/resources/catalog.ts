@@ -6,6 +6,7 @@
  * details (lecturers, cycle text with rooms). `/courses`, `/modules` and
  * `/courses-of-study` need a session.
  */
+import { apiPath } from "../client.js";
 import type { StudIpClient } from "../client.js";
 import { ImstudiumError } from "../errors.js";
 import { attr, htmlToText, Included, relId } from "../jsonapi.js";
@@ -197,7 +198,7 @@ export class CatalogResource {
     const page =
       source === "tree"
         ? await this.client.paginate(
-            `/tree-node/${studyAreaNodeId(options.areaId)}/courses`,
+            apiPath`/tree-node/${studyAreaNodeId(options.areaId)}/courses`,
             { filter: { q, semester: options.semesterId, recursive: 1 }, include: "sem-type", page: { limit } },
             { max: limit },
           )
@@ -216,16 +217,16 @@ export class CatalogResource {
 
   /** Public course details: lecturers, cycle text with rooms, admission state. */
   async details(courseId: string): Promise<CatalogCourseDetails> {
-    return normalizeCatalogDetails(courseId, await this.client.get(`/tree-node/course/details/${courseId}`));
+    return normalizeCatalogDetails(courseId, await this.client.get(apiPath`/tree-node/course/details/${courseId}`));
   }
 
   /** Children of a study area (top level when no id). Not paginated. */
   async studyAreaChildren(id?: string): Promise<StudyAreaNode[]> {
-    return listOf(await this.client.get(`/tree-node/${studyAreaNodeId(id)}/children`)).map(normalizeStudyArea);
+    return listOf(await this.client.get(apiPath`/tree-node/${studyAreaNodeId(id)}/children`)).map(normalizeStudyArea);
   }
 
   async studyArea(id: string): Promise<StudyAreaNode> {
-    const { data } = await this.client.getOne(`/tree-node/${studyAreaNodeId(id)}`);
+    const { data } = await this.client.getOne(apiPath`/tree-node/${studyAreaNodeId(id)}`);
     return normalizeStudyArea(data);
   }
 
@@ -237,7 +238,7 @@ export class CatalogResource {
     const limit = Math.max(1, Math.min(options.limit ?? 50, 100));
     const q = options.q && options.q.trim().length >= 3 ? options.q.trim() : undefined;
     const page = await this.client.paginate(
-      `/tree-node/${studyAreaNodeId(id)}/courses`,
+      apiPath`/tree-node/${studyAreaNodeId(id)}/courses`,
       {
         filter: { semester: options.semesterId, q, recursive: options.recursive === false ? undefined : 1 },
         include: "sem-type",

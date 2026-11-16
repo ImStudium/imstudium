@@ -76,6 +76,19 @@ describe("CLI --json matches @imstudium/contract (offline, synthetic)", () => {
     expect(JSON.parse(r.stdout).title).toBe("imstudium today --json");
   });
 
+  it("search --course with a course nobody has names it instead of finding nothing", () => {
+    const r = runCli(fx, ["--json", "search", "Erwartungswert", "--course", "Quantenbiologie"]);
+    expect(r.status).toBe(5);
+    expect(JSON.parse(r.stderr).error.code).toBe("COURSE_NOT_FOUND");
+  });
+
+  it("a per-course command with every course failing reports why, not an empty list", () => {
+    const r = runCli(fx, ["--json", "news"]);
+    expect(r.stdout).toBe("");
+    expect(r.status).toBe(4);
+    expect(JSON.parse(r.stderr).error.code).toBe("AUTH_REQUIRED");
+  });
+
   it("errors are an ErrorBody on stderr with the table's exit code", () => {
     const r = runCli(fx, ["--json", "schema", "nope"]);
     expect(r.status).toBe(5);
@@ -103,6 +116,16 @@ describe("usage errors (Commander)", () => {
     expect(runCli(fx, ["--help"]).status).toBe(0);
     expect(runCli(fx, ["--version"]).status).toBe(0);
     expect(runCli(fx, ["today", "--help"]).status).toBe(0);
+  });
+
+  it("a mistyped path or value is a usage error, never an internal one", () => {
+    const code = (args: string[]) => {
+      const r = runCli(fx, ["--json", ...args]);
+      return [r.status, JSON.parse(r.stderr).error.code];
+    };
+    expect(code(["extract", "--file", "nope.pdf"])).toEqual([5, "NOT_FOUND"]);
+    expect(code(["holidays", "--year", "99x"])).toEqual([2, "BAD_ARGS"]);
+    expect(code(["courseware", "--unit", "-1"])).toEqual([2, "BAD_ARGS"]);
   });
 
   it("a missing workspace exits 8", () => {

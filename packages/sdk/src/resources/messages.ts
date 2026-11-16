@@ -1,3 +1,4 @@
+import { apiPath } from "../client.js";
 import type { StudIpClient } from "../client.js";
 import { htmlToText, Included } from "../jsonapi.js";
 import type { JsonApiResource } from "../types.js";
@@ -81,7 +82,7 @@ export class MessagesResource {
     // unless we still have to cut by date locally.
     const page = await fetchPages(
       this.client,
-      `/users/${userId}/inbox`,
+      apiPath`/users/${userId}/inbox`,
       { include: "sender", filter: options.unread ? { unread: 1 } : undefined },
       { max: options.since ? 500 : (options.limit ?? 50) },
     );
@@ -92,7 +93,7 @@ export class MessagesResource {
   async outbox(userId: string, options: Omit<MessageListOptions, "unread"> = {}): Promise<MessageItem[]> {
     const page = await fetchPages(
       this.client,
-      `/users/${userId}/outbox`,
+      apiPath`/users/${userId}/outbox`,
       { include: "recipients" },
       { max: options.since ? 500 : (options.limit ?? 50) },
     );
@@ -102,7 +103,7 @@ export class MessagesResource {
 
   /** One message with sender and every recipient. Does not mark it read. */
   async get(messageId: string): Promise<MessageItem> {
-    const { data, included } = await this.client.getOne(`/messages/${messageId}`, {
+    const { data, included } = await this.client.getOne(apiPath`/messages/${messageId}`, {
       include: "sender,recipients",
     });
     return normalizeMessage(data, new Included(included), "single");

@@ -38,7 +38,7 @@ export {
   type ErrorCode,
   type ErrorPayload,
 } from "./errors.js";
-export { isAuthError, isOfflineError } from "./resources/attrs.js";
+export { failureReason, isAuthError, isOfflineError } from "./resources/attrs.js";
 
 // ── Config and paths ─────────────────────────────────────────────────────────
 export { paths, getDefaultConfig, loadConfig, saveConfig, expandPath, slugify } from "./config.js";

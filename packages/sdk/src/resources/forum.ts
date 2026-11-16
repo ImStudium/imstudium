@@ -1,3 +1,4 @@
+import { apiPath } from "../client.js";
 import { join } from "node:path";
 import type { StudIpClient } from "../client.js";
 import { attr, htmlToText, Included, relId } from "../jsonapi.js";
@@ -379,17 +380,17 @@ export class ForumResource {
   constructor(private client: StudIpClient) {}
 
   async categories(courseId: string): Promise<ForumCategory[]> {
-    const page = await fetchPages(this.client, `/courses/${courseId}/forum-categories`);
+    const page = await fetchPages(this.client, apiPath`/courses/${courseId}/forum-categories`);
     return page.data.map(normalizeForumCategory).sort((a, b) => a.position - b.position);
   }
 
   async topics(courseId: string): Promise<ForumTopic[]> {
-    const page = await fetchPages(this.client, `/courses/${courseId}/forum-topics`, { include: "category" });
+    const page = await fetchPages(this.client, apiPath`/courses/${courseId}/forum-topics`, { include: "category" });
     return page.data.map(normalizeForumTopic).sort((a, b) => a.position - b.position);
   }
 
   async categoryTopics(categoryId: string): Promise<ForumTopic[]> {
-    const page = await fetchPages(this.client, `/forum-categories/${categoryId}/topics`);
+    const page = await fetchPages(this.client, apiPath`/forum-categories/${categoryId}/topics`);
     return page.data.map((t) => {
       const topic = normalizeForumTopic(t);
       return { ...topic, categoryId: topic.categoryId ?? categoryId };
@@ -398,12 +399,12 @@ export class ForumResource {
 
   /** Discussions of a course, newest activity first (no server filters — they are stored in your session). */
   async discussions(courseId: string, options: { since?: Date; limit?: number } = {}): Promise<ForumDiscussion[]> {
-    const page = await fetchPages(this.client, `/courses/${courseId}/forum-discussions`, { include: "topic,user" }, { max: 1000 });
+    const page = await fetchPages(this.client, apiPath`/courses/${courseId}/forum-discussions`, { include: "topic,user" }, { max: 1000 });
     return this.select(page.data, page.included, options);
   }
 
   async topicDiscussions(topicId: string, options: { since?: Date; limit?: number } = {}): Promise<ForumDiscussion[]> {
-    const page = await fetchPages(this.client, `/forum-topics/${topicId}/discussions`, { include: "topic,user" }, { max: 1000 });
+    const page = await fetchPages(this.client, apiPath`/forum-topics/${topicId}/discussions`, { include: "topic,user" }, { max: 1000 });
     return this.select(page.data, page.included, options);
   }
 
@@ -441,7 +442,7 @@ export class ForumResource {
 
   /** One discussion with every posting, oldest first. Does not mark it read. */
   async thread(discussionId: string): Promise<ForumThread> {
-    const { data, included } = await this.client.getOne(`/forum-discussions/${discussionId}`, {
+    const { data, included } = await this.client.getOne(apiPath`/forum-discussions/${discussionId}`, {
       include: "postings,postings.author,topic,user",
     });
     return normalizeForumThread(data, included);

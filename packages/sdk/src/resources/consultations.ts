@@ -2,6 +2,7 @@
  * Consultation hours (Sprechstunden) — READ-ONLY. ImStudium shows blocks and
  * free slots; booking stays in Stud.IP (`consultationBookingUrl`).
  */
+import { apiPath } from "../client.js";
 import type { StudIpClient } from "../client.js";
 import { Included, relIds } from "../jsonapi.js";
 import type { JsonApiResource } from "../types.js";
@@ -104,7 +105,7 @@ export class ConsultationsResource {
     range: { type: "users" | "courses" | "institutes"; id: string },
     options: { includeExpired?: boolean } = {},
   ): Promise<ConsultationBlockInfo[]> {
-    const page = await this.client.paginate(`/${range.type}/${range.id}/consultations`, {
+    const page = await this.client.paginate(apiPath`/${range.type}/${range.id}/consultations`, {
       filter: options.includeExpired ? undefined : { current: 1 },
       include: "slots",
       page: { limit: 100 },

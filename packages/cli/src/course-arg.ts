@@ -5,6 +5,7 @@ import {
   resolveCourseQuery,
   resolveWorkspaceCourse,
   slugify,
+  toImstudiumError,
   type StudiumWorkspace,
 } from "@imstudium/sdk";
 import type { Sdk } from "./runtime.js";
@@ -112,7 +113,9 @@ export function workspaceCourse(sdk: Pick<Sdk, "config">, ws: StudiumWorkspace, 
 /**
  * Run `fn` for each course in parallel. With `strict` (one course the
  * student named) errors surface; otherwise a course that fails (no access,
- * tool disabled) is noted on stderr and skipped.
+ * tool disabled) is noted on stderr and skipped. When every course fails
+ * (offline, signed out) there is nothing to show, so the first error
+ * surfaces instead of an empty list.
  */
 export async function perCourse<T>(
   courses: CourseRef[],
@@ -121,6 +124,8 @@ export async function perCourse<T>(
 ): Promise<Array<{ course: CourseRef; value: T }>> {
   if (options.strict) return Promise.all(courses.map(async (course) => ({ course, value: await fn(course) })));
   const settled = await Promise.allSettled(courses.map(async (course) => ({ course, value: await fn(course) })));
+  const firstFailure = settled.find((s): s is PromiseRejectedResult => s.status === "rejected");
+  if (firstFailure && settled.every((s) => s.status === "rejected")) throw toImstudiumError(firstFailure.reason);
   const out: Array<{ course: CourseRef; value: T }> = [];
   settled.forEach((s, i) => {
     if (s.status === "fulfilled") out.push(s.value);

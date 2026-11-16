@@ -129,6 +129,20 @@ describe("imstudium arbeit / quellen / zitieren / literatur (offline, synthetic)
     expect(exp.stdout).toContain("TY  - JOUR");
   });
 
+  it("refuses an import with no entries, a page below 1 and a full text that is not there", async () => {
+    const errorOf = (args: string[]) => {
+      const r = runCli(fx, ["--json", ...args]);
+      return [r.status, JSON.parse(r.stderr).error.code];
+    };
+    await writeFile(join(fx.root, "garbage.bib"), "this is not a bibliography\n");
+    expect(errorOf(["quellen", "import", join(fx.root, "garbage.bib")])).toEqual([2, "IMPORT_FAILED"]);
+    expect(errorOf(["zitieren", "schmidt2020lernen", "--seite=-1"])).toEqual([2, "BAD_ARGS"]);
+    expect(errorOf(["zitieren", "schmidt2020lernen@0"])).toEqual([2, "BAD_ARGS"]);
+    expect(errorOf(["quellen", "edit", "schmidt2020lernen", "--file", join(fx.root, "fehlt.pdf")])).toEqual([5, "NOT_FOUND"]);
+    const kept = json("quellen list", ["quellen", "list"]).quellen.find((q: { key: string }) => q.key === "schmidt2020lernen");
+    expect(kept.file).toBeUndefined();
+  });
+
   it("a subcommand's own --arbeit, --tag, --status and -o win over its parent's", async () => {
     const own = await makeFixture();
     const run = (args: string[]) => {

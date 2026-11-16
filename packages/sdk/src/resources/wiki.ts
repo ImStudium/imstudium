@@ -7,6 +7,7 @@
  *  - content is HTML for pages edited since 5.x, legacy wiki markup before
  *  - the hierarchy is the `parent` relationship; siblings sort by name
  */
+import { apiPath } from "../client.js";
 import { join } from "node:path";
 import type { StudIpClient } from "../client.js";
 import { ImstudiumError } from "../errors.js";
@@ -198,7 +199,7 @@ export class WikiResource {
   /** Raw JSON:API pages (kept for existing callers). */
   async listCoursePages(courseId: string): Promise<JsonApiResource<"wiki-pages">[]> {
     try {
-      return await this.client.paginateAll<JsonApiResource<"wiki-pages">>(`/courses/${courseId}/wiki-pages`);
+      return await this.client.paginateAll<JsonApiResource<"wiki-pages">>(apiPath`/courses/${courseId}/wiki-pages`);
     } catch (e) {
       // Stud.IP answers 404 for a course without wiki pages, 403 when the wiki is off.
       if (e instanceof ImstudiumError && (e.status === 404 || e.status === 403)) return [];

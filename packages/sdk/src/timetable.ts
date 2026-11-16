@@ -21,6 +21,7 @@ import {
 } from "./berlin.js";
 import { ImstudiumError } from "./errors.js";
 import { expandIcs, parseIcs, type IcsEvent } from "./ics.js";
+import { failureReason } from "./resources/attrs.js";
 import type { JsonApiResource } from "./types.js";
 import {
   classifyDateKind,
@@ -436,7 +437,7 @@ export async function buildTimetable(sources: TimetableSources, options: Timetab
     options.holidays === false
       ? Promise.resolve([])
       : sources.planning.holidays(options.from, options.to, { offline: options.offline }).catch(() => {
-          warnings.push("holidays unavailable");
+          warnings.push("Feiertage nicht abrufbar");
           return [];
         });
 
@@ -455,7 +456,7 @@ export async function buildTimetable(sources: TimetableSources, options: Timetab
           return await sources.planning.courseDates(c.id, c.title);
         } catch (err) {
           if (isOfflineError(err)) throw err;
-          warnings.push(`${c.title}: ${err instanceof Error ? err.message : String(err)}`);
+          warnings.push(`${c.title}: ${failureReason(err)}`);
           return [];
         }
       }),
@@ -479,12 +480,12 @@ export async function buildTimetable(sources: TimetableSources, options: Timetab
         }
       } catch (err) {
         if (isOfflineError(err)) throw err;
-        warnings.push("personal calendar unavailable");
+        warnings.push("eigener Kalender nicht abrufbar");
       }
     }
   } catch (err) {
     if (!isOfflineError(err)) throw err;
-    warnings.push(`live data unavailable (${err instanceof Error ? err.message : String(err)}) — using calendar.ics`);
+    warnings.push(`Live-Daten nicht erreichbar (${failureReason(err)}), Termine aus calendar.ics`);
     const tt = await icsTimetable(options, warnings);
     const holidays = await holidaysP;
     return { ...tt, days: groupByDay(tt.entries, options.from, options.to, holidays) };
@@ -565,7 +566,7 @@ export async function syncPlanning(
     slots = await deps.planning.weeklySchedule(deps.userId, { at, courseTitles: titles });
   } catch (err) {
     if (isOfflineError(err)) throw err;
-    warnings.push(`schedule: ${err instanceof Error ? err.message : String(err)}`);
+    warnings.push(`Stundenplan: ${failureReason(err)}`);
   }
 
   const datesByCourse = new Map<string, CourseDate[]>();
@@ -575,7 +576,7 @@ export async function syncPlanning(
         datesByCourse.set(c.id, await deps.planning.courseDates(c.id, c.title));
       } catch (err) {
         if (isOfflineError(err)) throw err;
-        warnings.push(`${c.title}: ${err instanceof Error ? err.message : String(err)}`);
+        warnings.push(`${c.title}: ${failureReason(err)}`);
         datesByCourse.set(c.id, []);
       }
     }),

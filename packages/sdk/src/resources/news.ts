@@ -1,3 +1,4 @@
+import { apiPath } from "../client.js";
 import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { StudIpClient } from "../client.js";
@@ -357,7 +358,7 @@ export class NewsResource {
 
   /** Raw JSON:API news of a course (kept for SDK consumers of 0.1.x). */
   async listCourseNews(courseId: string): Promise<JsonApiResource<"news">[]> {
-    return this.client.paginateAll<JsonApiResource<"news">>(`/courses/${courseId}/news`);
+    return this.client.paginateAll<JsonApiResource<"news">>(apiPath`/courses/${courseId}/news`);
   }
 
   /**
@@ -365,7 +366,7 @@ export class NewsResource {
    * news routes (unknown filters are rejected), so `since`/`limit` apply locally.
    */
   async course(courseId: string, options: NewsListOptions = {}): Promise<NewsItem[]> {
-    const page = await fetchPages(this.client, `/courses/${courseId}/news`, { include: "author" }, { max: MAX_NEWS });
+    const page = await fetchPages(this.client, apiPath`/courses/${courseId}/news`, { include: "author" }, { max: MAX_NEWS });
     const included = new Included(page.included);
     const items = page.data.map((r) => normalizeNews(r, included, { courseId, courseTitle: options.courseTitle }));
     return selectNews(items, options);
@@ -373,7 +374,7 @@ export class NewsResource {
 
   /** News the user authored (Stud.IP's /users/{id}/news — not a feed of their courses). */
   async byAuthor(userId: string, options: NewsListOptions = {}): Promise<NewsItem[]> {
-    const page = await fetchPages(this.client, `/users/${userId}/news`, { include: "author" }, { max: MAX_NEWS });
+    const page = await fetchPages(this.client, apiPath`/users/${userId}/news`, { include: "author" }, { max: MAX_NEWS });
     const included = new Included(page.included);
     return selectNews(page.data.map((r) => normalizeNews(r, included)), options);
   }
@@ -387,7 +388,7 @@ export class NewsResource {
 
   /** Comments under one announcement, oldest first. */
   async comments(newsId: string, options: { limit?: number } = {}): Promise<NewsComment[]> {
-    const page = await fetchPages(this.client, `/news/${newsId}/comments`, { include: "author" }, { max: options.limit });
+    const page = await fetchPages(this.client, apiPath`/news/${newsId}/comments`, { include: "author" }, { max: options.limit });
     const included = new Included(page.included);
     return page.data
       .map((r) => normalizeNewsComment(r, included, newsId))

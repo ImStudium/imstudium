@@ -182,6 +182,7 @@ describe("CSL formatting", () => {
     expect(parseLocator("Rn. 7")).toEqual({ locator: "7", label: "paragraph" });
     expect(parseLocator("Kap. 3")).toEqual({ locator: "3", label: "chapter" });
     expect(parseLocator("§ 823")).toEqual({ locator: "823", label: "section" });
+    for (const bad of ["-1", "0", "S. 0", "0-3"]) expect(() => parseLocator(bad), bad).toThrow(expect.objectContaining({ code: "BAD_ARGS" }));
     expect(htmlToMarkdown('<div class="csl-entry">A &#38; B, <i>T</i></div>')).toBe("A & B, *T*");
   });
 

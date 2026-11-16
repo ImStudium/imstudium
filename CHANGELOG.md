@@ -48,6 +48,18 @@ Back on npmjs.com: `npm install -g @imstudium/cli @imstudium/mcp --allow-scripts
 - `COURSE.md` no longer shows the course type as a bare number from Stud.IP.
 - **`setup --agent` with a name it does not know stops and lists the agents**, instead of doing nothing; `--agent claude` means Claude Code. When the `claude` CLI is not on PATH, setup says Claude Code's MCP server is not registered and prints the command to do it, instead of counting it as unchanged.
 - **A subcommand's own options count.** `quellen add --arbeit zweite`, `quellen add --tag methode`, `quellen list --status verified`, `arbeit formvorgaben set … --arbeit zweite`, `arbeit new … -o <dir>` and `semester start -o <dir>` were read by the parent command and ignored; on 27 subcommands they now reach the subcommand, and `--tag` on add and edit keeps every tag.
+- Offline or signed out, `news`, `forum`, `tasks`, `courseware`, `wiki` and `sprechstunden` say why and exit with that code, instead of "No announcements." and exit 0.
+- The offline "Hinweis" lines are German throughout, e.g. "Live-Daten nicht erreichbar (keine Verbindung), Termine aus calendar.ics".
+- A mistyped path (`extract --file`, `session import --file`, `-o`, `arbeit new --dir`) is reported as NOT_FOUND or a usage error with the path, not as an internal error asking for an issue.
+- `sync --course` with a name no course matches stops with COURSE_NOT_FOUND instead of downloading nothing.
+- `search --course` with an unknown course names it instead of saying there are no hits.
+- An unknown `--semester` stops with SEMESTER_NOT_FOUND; `sync --semester WS1999` filed the semester's files under `current/`.
+- `holidays --year` accepts only a year like 2027.
+- `quellen import` of a file with no entries fails with IMPORT_FAILED instead of reporting 0 imported.
+- `zitieren` refuses a page below 1; `--seite=-1` printed "S. 1".
+- `quellen add --file` and `quellen edit --file` check that the file exists before they store its path.
+- `courseware --unit` without a course is refused instead of ignored.
+- Ids in Stud.IP routes are encoded, so a message id with backslashes can no longer read another route.
 
 ## [0.3.1] - 2026-11-14
 
