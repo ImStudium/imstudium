@@ -129,6 +129,29 @@ describe("imstudium arbeit / quellen / zitieren / literatur (offline, synthetic)
     expect(exp.stdout).toContain("TY  - JOUR");
   });
 
+  it("a subcommand's own --arbeit, --tag, --status and -o win over its parent's", async () => {
+    const own = await makeFixture();
+    const run = (args: string[]) => {
+      const r = runCli(own, ["--json", ...args]);
+      expect(r.status, `${args.join(" ")}\n${r.stderr}`).toBe(0);
+      return r.json() as Record<string, any>;
+    };
+    run(["arbeit", "new", "Zweite", "Arbeit", "--slug", "zweite"]);
+    run(["arbeit", "new", "Erste", "Arbeit", "--slug", "erste"]);
+    const added = run(["quellen", "add", "--manual", "--title", "Methoden", "--author", "A, B", "--year", "2020", "--arbeit", "zweite", "--tag", "methode", "theorie"]);
+    expect(added).toMatchObject({ arbeit: "zweite", added: [{ tags: ["methode", "theorie"] }] });
+    expect(run(["quellen", "list"]).count).toBe(0);
+    expect(run(["quellen", "list", "--arbeit", "zweite", "--tag", "methode"]).count).toBe(1);
+    expect(run(["quellen", "list", "--arbeit", "zweite", "--status", "verified"]).count).toBe(0);
+    expect(run(["quellen", "--arbeit", "zweite", "list"]).count).toBe(1);
+    run(["arbeit", "formvorgaben", "set", "rand.oben=4", "--arbeit", "zweite"]);
+    expect(run(["arbeit", "show", "zweite"]).arbeit.formvorgaben.rand.oben).toBe(4);
+    expect(run(["arbeit", "show"]).arbeit.formvorgaben.rand.oben).not.toBe(4);
+    const elsewhere = join(own.root, "Anderswo");
+    run(["arbeit", "new", "Dritte", "-o", elsewhere]);
+    expect(existsSync(join(elsewhere, "arbeiten", "dritte", "ARBEIT.md"))).toBe(true);
+  });
+
   it("asks for an Arbeit when there is none", async () => {
     const empty = await makeFixture();
     const r = runCli(empty, ["--json", "quellen"]);

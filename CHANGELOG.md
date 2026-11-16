@@ -47,6 +47,7 @@ Back on npmjs.com: `npm install -g @imstudium/cli @imstudium/mcp --allow-scripts
 - **Exam dates read as dates.** `klausuren.md` and `imstudium klausuren` say "Mo 15.02.2027, 09:00" (Berlin time) instead of an ISO timestamp.
 - `COURSE.md` no longer shows the course type as a bare number from Stud.IP.
 - **`setup --agent` with a name it does not know stops and lists the agents**, instead of doing nothing; `--agent claude` means Claude Code. When the `claude` CLI is not on PATH, setup says Claude Code's MCP server is not registered and prints the command to do it, instead of counting it as unchanged.
+- **A subcommand's own options count.** `quellen add --arbeit zweite`, `quellen add --tag methode`, `quellen list --status verified`, `arbeit formvorgaben set … --arbeit zweite`, `arbeit new … -o <dir>` and `semester start -o <dir>` were read by the parent command and ignored; on 27 subcommands they now reach the subcommand, and `--tag` on add and edit keeps every tag.
 
 ## [0.3.1] - 2026-11-14
 
