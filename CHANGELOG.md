@@ -4,6 +4,11 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The formula check no longer refuses correct readings on pdflatex pages.** TeX's symbol fonts keep symbols at letter and digit codes, and a PDF without a Unicode table reports some of them as those characters: cmsy's slash of ≠ and ∉ as "6", the prime as "0", the bar of ↦ as "7", ∋ as "3", ⟨ ⟩ as "h" and "i", msam's ↷ as "y". The check counted them as letters and digits the reading lacked, so `formulas fix` refused every ≠, ′ and ↦ and `formulas list --needs-look` flagged formulas the model had read right. Digits and lower-case letters from cmsy, msbm and their relatives, and all letters and digits from msam, no longer count; the capitals stay, as they are the `\mathcal` and `\mathbb` letters. On a typed Linear Algebra script, all 52 readings that had been refused for this now match the PDF exactly.
+- **Umlauts count the same on both sides.** pdflatex sets "ü" as u and ¨, other PDFs as one glyph. Both the reading (`\text{für}`, `\"u`, `\ddot{u}`) and the PDF now count an accented letter as its base letter plus the accent, so `\text{für}` checks against either.
+
 ## [0.4.1] - 2026-11-16
 
 One package: `npm install -g @imstudium/sdk --allow-scripts=keytar` installs the `imstudium` command, the `imstudium-mcp` server and the SDK, from npmjs.com with no login and with a provenance attestation. This is the first published release of everything in 0.4.0, which was tagged but never reached npm.

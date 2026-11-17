@@ -647,13 +647,32 @@ export function latexGlyphs(latex: string): string[] {
       else if (NAMED.has(name)) out.push(...name);
       else if (name === "pmod" || name === "bmod" || name === "mod") out.push("m", "o", "d");
       else if (ACCENTS[name]) out.push(ACCENTS[name]!);
+      else if (TEXT_ACCENTS[name]) out.push(TEXT_ACCENTS[name]!);
       else if (!sized(toks, i) && BARS[name]) out.push(...BARS[name]!);
       continue;
     }
     if (t === "|" && !sized(toks, i)) out.push("|");
     else if (/^[a-zA-Z0-9]$/.test(t)) out.push(t);
+    else out.push(...(splitAccented(t) ?? []));
   }
   return out;
+}
+
+/** Combining marks kept as the spacing accent a TeX font sets as a glyph of its own. */
+const COMBINING: Record<string, string> = { "\u0308": "¨", "\u0302": "ˆ", "\u0303": "˜", "\u0304": "¯", "\u0307": "˙" };
+/** Text-mode accent commands: \"u is u with ¨. */
+const TEXT_ACCENTS: Record<string, string> = { '"': "¨", "^": "ˆ", "~": "˜", "=": "¯", ".": "˙" };
+
+/**
+ * An accented Latin letter as its base letter and the accent a TeX font sets
+ * apart: ü → u ¨, ñ → n ˜, é → e (no glyph kept for the acute). pdflatex sets
+ * "ü" as u and ¨, other PDFs as one glyph; both sides of the check split it the
+ * same way, so \text{für} matches either. Null when it is not such a letter.
+ */
+export function splitAccented(ch: string): string[] | null {
+  const d = [...ch.normalize("NFD")];
+  if (d.length < 2 || !/^[a-zA-Z]$/.test(d[0]!)) return null;
+  return [d[0]!, ...d.slice(1).flatMap((c) => (COMBINING[c] ? [COMBINING[c]!] : []))];
 }
 
 /** Accent glyphs a TeX font sets as characters of their own, as PDFium names them (˜ U+02DC, ¯ U+00AF, ˆ U+02C6). */
@@ -708,6 +727,8 @@ export function foldGlyph(ch: string): string | null {
   };
   if (marks[ch]) return marks[ch]!;
   if (/^[a-zA-Z0-9]$/.test(ch) || /^[\u0391-\u03a9\u03b1-\u03c9]$/.test(ch)) return ch;
+  const accented = splitAccented(ch);
+  if (accented) return accented.join("");
   // Ligatures from text fonts.
   const lig: Record<string, string> = { "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl" };
   return lig[ch] ?? null;
@@ -758,6 +779,27 @@ interface PageGlyph {
 const EXTENSION_FONT = /(^|\+)(cmex|euex|lmex|mathx|esint|stmary|txex|pxex|cmexb)/i;
 
 /**
+ * Letters and digits a TeX symbol font reports that are the codes of symbols.
+ * In cmsy and its relatives only the capitals are letters (\mathcal). The
+ * digit codes hold ′ ∞ ∈ ∋ △ ▽, the slash that makes ≠ and ∉ ("6"), the bar
+ * of ↦ ("7"), ∀ and ∃; the lower case holds ⊢ ⌊ ⌋ ⟨ ⟩ ("h", "i") ∇ ∫ and the
+ * like. msbm is the same with \mathbb capitals, and msam has neither letters
+ * nor digits (↷ is its "y"). PDFium names most of these through their glyph names,
+ * but not all, so a pdflatex page without a Unicode table reported a 6 inside
+ * every ≠ and a 0 for every prime, and a correct reading was refused for
+ * lacking them.
+ */
+const AMS_A_FONT = /(^|\+)(msam|txsya|pxsya)/i;
+const AMS_B_FONT = /(^|\+)(msbm|txsyb|pxsyb)/i;
+const SYMBOL_FONT = /(^|\+)(cmsy|cmbsy|lmsy|lmmathsymbols|txsy|pxsy)/i;
+
+/** A letter or digit the PDF reports from a TeX symbol font that is a symbol's code, not a letter or digit on the page. */
+export function isSymbolFontCode(font: string, ch: string): boolean {
+  if (AMS_A_FONT.test(font)) return /^[a-zA-Z0-9]$/.test(ch);
+  return /^[a-z0-9]$/.test(ch) && (AMS_B_FONT.test(font) || SYMBOL_FONT.test(font));
+}
+
+/**
  * Every letter and digit in the page's text layer with its centre, in the
  * same top-left point space as Formula.bbox. A character PDFium can't map
  * through the PDF's own Unicode table still counts, it was mapped by its
@@ -783,7 +825,7 @@ function pageGlyphs(page: PdfiumPage): PageGlyph[] {
       const font = len > 1 ? new TextDecoder().decode(new Uint8Array(m.HEAPU8.buffer, fontBuf, len - 1)) : "";
       if (m._FPDFText_HasUnicodeMapError(tp, i) && EXTENSION_FONT.test(font)) continue;
       const code = m._FPDFText_GetUnicode(tp, i);
-      if (!code) continue;
+      if (!code || isSymbolFontCode(font, String.fromCodePoint(code))) continue;
       const folded = foldGlyph(String.fromCodePoint(code));
       if (!folded) continue;
       if (!m._FPDFText_GetCharBox(tp, i, buf, buf + 8, buf + 16, buf + 24)) continue;

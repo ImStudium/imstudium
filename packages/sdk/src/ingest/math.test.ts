@@ -16,6 +16,8 @@ import {
   latexIssues,
   latexGlyphs,
   foldGlyph,
+  isSymbolFontCode,
+  splitAccented,
   compareGlyphs,
   judgeFormula,
   displayLikeInline,
@@ -356,6 +358,35 @@ describe("glyph check", () => {
     ["\\operatorname{sgn}(\\sigma)\\cdot\\infty", "sgnσ"],
   ])("latexGlyphs(%s)", (latex, glyphs) => {
     expect(latexGlyphs(latex).join("")).toBe(glyphs.replace(/ /g, ""));
+  });
+
+  it("isSymbolFontCode: digits of TeX's symbol fonts and the AMS symbols are codes, \\mathcal and \\mathbb capitals stay", () => {
+    expect(isSymbolFontCode("ABCDEF+CMSY10", "6")).toBe(true); // the slash of ≠
+    expect(isSymbolFontCode("ABCDEF+CMSY10", "0")).toBe(true); // ′
+    expect(isSymbolFontCode("CMBSY7", "7")).toBe(true);
+    expect(isSymbolFontCode("GHIJKL+LMMathSymbols10-Regular", "3")).toBe(true); // ∋
+    expect(isSymbolFontCode("ABCDEF+MSAM10", "y")).toBe(true); // ↷
+    expect(isSymbolFontCode("ABCDEF+MSBM10", "n")).toBe(true);
+    expect(isSymbolFontCode("ABCDEF+MSBM10", "R")).toBe(false); // ℝ
+    expect(isSymbolFontCode("ABCDEF+CMSY10", "h")).toBe(true); // ⟨
+    expect(isSymbolFontCode("ABCDEF+CMSY10", "A")).toBe(false); // \mathcal{A}
+    expect(isSymbolFontCode("ABCDEF+CMR10", "6")).toBe(false);
+    expect(isSymbolFontCode("ABCDEF+CMMI10", "y")).toBe(false);
+  });
+
+  it("splitAccented and the check: ü is u and ¨ on both sides, set as one glyph or two", () => {
+    expect(splitAccented("ü")).toEqual(["u", "¨"]);
+    expect(splitAccented("é")).toEqual(["e"]);
+    expect(splitAccented("u")).toBeNull();
+    expect(splitAccented("ß")).toBeNull();
+    expect(foldGlyph("ü")).toBe("u¨");
+    // The check counts glyphs as a multiset, so the order an accent comes in does not matter.
+    expect(latexGlyphs("\\text{für}").sort()).toEqual(["f", "r", "u", "¨"]);
+    expect(latexGlyphs('\\text{f\\"ur}').sort()).toEqual(["f", "r", "u", "¨"]);
+    expect(latexGlyphs("\\text{f}\\ddot{\\text{u}}\\text{r}").sort()).toEqual(["f", "r", "u", "¨"]);
+    // pdflatex: u and ¨ as two glyphs; other PDFs: one ü.
+    expect(compareGlyphs(latexGlyphs("\\text{für}"), ["f", "u", "¨", "r"])).toEqual({ missing: [], extra: [] });
+    expect(compareGlyphs(latexGlyphs("\\text{für}"), [..."f" + foldGlyph("ü")! + "r"])).toEqual({ missing: [], extra: [] });
   });
 
   it("foldGlyph: math alphabets, double-struck capitals, Greek variants; not operators", () => {
