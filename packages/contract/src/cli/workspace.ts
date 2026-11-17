@@ -135,6 +135,7 @@ export const ExtractOutput = z
     extracted: z.number().int(),
     skipped: z.number().int(),
     failed: z.number().int(),
+    migrated: z.number().int().describe("Extracted folders of long file names moved to their new name (a folder per file) before extraction; a folder whose new name was taken is kept and named in hints"),
     hints: z.array(z.string()),
     ocr: OcrSummary,
     results: z.array(ExtractResult),

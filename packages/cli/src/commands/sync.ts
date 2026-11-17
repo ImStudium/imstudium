@@ -140,6 +140,9 @@ export function registerSync(program: Command): void {
 
         const tools = await sdk.extractor.getTools();
         const results = [];
+        // Folders of long file names moved to their hashed name before extraction, and those left where they were.
+        let migrated = 0;
+        const kept: string[] = [];
         for (const course of courses) {
           const courseDir = courseDirFor(workspace, ws, course.slug);
           results.push(
@@ -147,6 +150,12 @@ export function registerSync(program: Command): void {
               ...extractOpts,
               course: { title: course.title, path: course.path! },
               workspaceRoot: ws,
+              onMigrate: (m) => {
+                migrated += m.moved.length;
+                for (const k of m.kept) {
+                  kept.push(`${course.path}/extracted/${k.from} holds files/${k.source}, whose folder is now extracted/${k.to}, which exists already. Both were kept, so search may show it twice: remove the one you don't need`);
+                }
+              },
             })),
           );
         }
@@ -157,13 +166,14 @@ export function registerSync(program: Command): void {
         const done = results.filter((r) => !r.error && !r.skipped).length;
         const skipped = results.filter((r) => r.skipped).length;
         const failed = results.filter((r) => r.error).length;
-        const hints = toolHints(tools);
+        const hints = [...toolHints(tools), ...kept];
         const ocr = summarizeOcr(results);
         const ocrLine = ocrSummaryLine(ocr);
-        const payload: ExtractOutput = { extracted: done, skipped, failed, hints, ocr, results, searchIndex };
+        const movedLine = migrated ? `\nMoved ${migrated} extracted folder(s) of long file names to their new name, so each file has its own` : "";
+        const payload: ExtractOutput = { extracted: done, skipped, failed, migrated, hints, ocr, results, searchIndex };
         output(
           payload,
-          `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}${ocrLine ? `\n${ocrLine}` : ""}${hints.length ? `\n${hints.join("\n")}` : ""}`,
+          `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}${movedLine}${ocrLine ? `\n${ocrLine}` : ""}${hints.length ? `\n${hints.join("\n")}` : ""}`,
         );
       }),
     );

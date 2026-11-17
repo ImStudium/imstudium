@@ -1,5 +1,6 @@
-import { cp, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
-import { basename, extname, join, relative } from "node:path";
+import { createHash } from "node:crypto";
+import { cp, lstat, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { ensureDir, slugify } from "./config.js";
 import { convertImage, convertLocalDocument, IMAGE_ONLY, NATIVE_RULE, OCR_MERGE, probeLocalIngest, type LocalConvertOk } from "./ingest/local-docs.js";
 import { imageToPdf } from "./ingest/image-pdf.js";
@@ -73,6 +74,8 @@ export class Extractor {
     if (!opts.force) {
       try {
         const prev = JSON.parse(await readFile(manifestPath, "utf-8")) as ExtractManifest;
+        // Another file's extraction (two long paths shared this folder before the hashed slug) is no previous extraction of this one.
+        if (!isSameSource(prev.source, src, outDir)) throw new Error("another file's extraction");
         const unchanged = prev.sourceMtimeMs === srcStat.mtimeMs && prev.sourceSize === srcStat.size;
         if (unchanged && !nativeOutdated(prev) && !(await this.ocrWouldAdd(prev, outDir, opts)) && !(await this.mathWouldAdd(prev, outDir, opts))) {
           return { source: src, outDir, kind, pages: prev.pages, skipped: true, tool: prev.tool };
@@ -227,9 +230,12 @@ export class Extractor {
       math?: boolean;
       course?: Pick<StudiumCourse, "title" | "path">;
       workspaceRoot?: string;
+      /** The folders moved to their file's current name before extraction (see migrateExtractFolders). */
+      onMigrate?: (migration: ExtractFolderMigration) => void;
     } = {},
   ): Promise<ExtractResult[]> {
     const files = await walkFiles(filesDir);
+    opts.onMigrate?.(await migrateExtractFolders(filesDir, outRoot, files));
     const results: ExtractResult[] = [];
     for (const f of files) {
       if (detectKind(f) === "unsupported") continue;
@@ -448,8 +454,126 @@ export function summarizeOcr(results: Array<Pick<ExtractResult, "ocrPages" | "oc
   };
 }
 
+/** Characters of a folder name under extracted/ before `-<ext>`. */
+const SLUG_STEM_MAX = 80;
+
+/**
+ * The folder under extracted/ for a file, from its path below files/: the
+ * slugified path, then `-<ext>` (`Ubungen-Blatt01-pdf`). A path whose slug is
+ * longer than 80 characters keeps its first 71, then `-` and the first 8 hex
+ * digits of the SHA-1 of the path (NFC, `/` separators): two long paths that
+ * start alike get a folder each. The same path always gives the same folder,
+ * so sync, extract, view, formulas and the MCP tools agree without a lookup.
+ */
 export function extractSlug(filename: string): string {
-  return slugify(filename.replace(/\.[^.]+$/, "")) + "-" + (extname(filename).slice(1).toLowerCase() || "file");
+  const ext = extname(filename).slice(1).toLowerCase() || "file";
+  const stem = slugify(filename.replace(/\.[^.]+$/, ""), Infinity);
+  if (stem.length <= SLUG_STEM_MAX) return `${stem}-${ext}`;
+  const hash = createHash("sha1").update(filename.split(sep).join("/").normalize("NFC")).digest("hex").slice(0, 8);
+  return `${stem.slice(0, SLUG_STEM_MAX - 9)}-${hash}-${ext}`;
+}
+
+/** A path as manifest.json compares: absolute, `/` separators, NFC. */
+function normalPath(p: string): string {
+  return resolve(p).split(sep).join("/").normalize("NFC");
+}
+
+/**
+ * Whether an extraction's manifest `source` is the file `src`. manifest.json
+ * keeps the path it was given; when the workspace has moved since (semester
+ * start, a copy), the file still counts as the same when its path below the
+ * course's files/ is. `outDir` (<course>/extracted/<slug>) places the course.
+ */
+export function isSameSource(source: string | undefined, src: string, outDir: string): boolean {
+  if (!source) return false;
+  const was = normalPath(source);
+  const now = normalPath(src);
+  if (was === now) return true;
+  if (basename(dirname(outDir)) !== "extracted") return false;
+  const filesRoot = `${normalPath(join(dirname(dirname(outDir)), "files"))}/`;
+  if (!now.startsWith(filesRoot) || was.startsWith(filesRoot)) return false;
+  return `/${was}`.endsWith(`/files/${now.slice(filesRoot.length)}`);
+}
+
+/** An extracted folder whose file now has another folder name. */
+export interface ExtractFolderMove {
+  /** The folder's name under extracted/. */
+  from: string;
+  /** Its file's folder name under the current rule (extractSlug). */
+  to: string;
+  /** The file, relative to files/. */
+  source: string;
+}
+
+/** What migrateExtractFolders did in one course. */
+export interface ExtractFolderMigration {
+  /** Renamed to their file's current folder name, with everything in them. */
+  moved: ExtractFolderMove[];
+  /** Left where they are because a folder of the new name exists already: both are kept. */
+  kept: ExtractFolderMove[];
+}
+
+/**
+ * Run before a course's files are extracted. Every folder under `outRoot`
+ * whose manifest.json names a file still in `filesDir`, and whose name is not
+ * that file's extractSlug (a long path, from before the hashed slug), is
+ * renamed to it with everything in it: pages/, math.json, formulas/,
+ * formulas.checked.json, transcripts. When that name is taken, both folders
+ * stay and the old one is reported in `kept`. Nothing is deleted, and a folder
+ * without a manifest is left alone.
+ */
+export async function migrateExtractFolders(filesDir: string, outRoot: string, files?: string[]): Promise<ExtractFolderMigration> {
+  const result: ExtractFolderMigration = { moved: [], kept: [] };
+  const names = await readdir(outRoot).catch(() => [] as string[]);
+  if (!names.length) return result;
+
+  const filesRoot = `${normalPath(filesDir)}/`;
+  const byPath = new Map<string, string>();
+  const byRel = new Map<string, string>();
+  for (const f of files ?? (await walkFiles(filesDir))) {
+    const rel = relative(filesDir, f);
+    byPath.set(normalPath(f), rel);
+    byRel.set(rel.split(sep).join("/").normalize("NFC"), rel);
+  }
+  // The file a manifest names: the same path, or after the workspace moved, the path below its files/.
+  const fileOf = (source: string): string | undefined => {
+    const was = normalPath(source);
+    if (byPath.has(was) || was.startsWith(filesRoot)) return byPath.get(was);
+    for (let i = was.indexOf("/files/"); i >= 0; i = was.indexOf("/files/", i + 1)) {
+      const rel = byRel.get(was.slice(i + "/files/".length));
+      if (rel !== undefined) return rel;
+    }
+    return undefined;
+  };
+
+  const pending: ExtractFolderMove[] = [];
+  for (const name of names) {
+    let source: unknown;
+    try {
+      source = (JSON.parse(await readFile(join(outRoot, name, "manifest.json"), "utf-8")) as Partial<ExtractManifest>).source;
+    } catch {
+      continue;
+    }
+    const rel = typeof source === "string" && source ? fileOf(source) : undefined;
+    if (rel === undefined) continue;
+    const to = extractSlug(rel);
+    if (to !== name) pending.push({ from: name, to, source: rel.split(sep).join("/") });
+  }
+
+  const taken = (name: string) => lstat(join(outRoot, name)).then(() => true, () => false);
+  // One rename can free the name another folder waits for: go round until nothing moves.
+  for (let moved = true; moved && pending.length; ) {
+    moved = false;
+    for (const m of [...pending]) {
+      if (await taken(m.to)) continue;
+      await rename(join(outRoot, m.from), join(outRoot, m.to));
+      pending.splice(pending.indexOf(m), 1);
+      result.moved.push(m);
+      moved = true;
+    }
+  }
+  result.kept.push(...pending);
+  return result;
 }
 
 /** Heading above the formulas a page got from on-device math recognition. */

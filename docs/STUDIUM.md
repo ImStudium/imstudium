@@ -77,6 +77,8 @@ Semester slugs look like `SS2026` and `WS2026-27`. A course folder is `slugify(t
 
 A course without courseware, forum or wiki gets no such folder. `sync --include` limits which parts run; the default is `calendar,wiki,news,forum,courseware,tasks`, and files always sync. Personal messages are **never** written into the workspace.
 
+The `<slug>` under `extracted/` is the file's path below `files/`, slugified, then `-` and the extension. A path whose slug is longer than 80 characters keeps its first 71, then `-` and the first 8 hex digits of the SHA-1 of the path (NFC, `/` separators), so two long paths that start alike each get a folder (`Gruppenordner-der-Ubung-4-…-3f9a1c2e-pdf`). The folder for a path never changes; read it from `extractSlug` in `search/materials.json` or `corpus.jsonl` rather than building it. `extract` and `sync --extract` move a folder named under the older rule (a long path cut at 80 characters, which several files could share) to its file's new name with everything in it; when that name is taken, both folders stay and `extract` names them in its hints.
+
 ## Root files
 
 | File | Contents |

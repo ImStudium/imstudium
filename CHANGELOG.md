@@ -4,6 +4,12 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Files with long paths that start alike get a folder each under `extracted/`.** The folder name was the path's slug cut at 80 characters, so files deep in one Stud.IP folder (the returned sheets of one Übung group, say) shared one: only the file extracted last kept its text, the others were missing from search, and every run extracted the whole group again. A slug longer than 80 characters now keeps its first 71, then `-` and the first 8 hex digits of the SHA-1 of the path; every shorter name keeps its folder. `extract` and `sync --extract` move a folder named under the old rule to its file's new name with everything in it (`pages/`, `math.json`, `formulas/`, `formulas.checked.json`, transcripts) and delete nothing; when the new name is taken, both folders stay and `extract` names them in its hints. `extract --json` adds `migrated`, the number of folders moved, and the human output says how many.
+- An earlier extraction counts as unchanged only when its `manifest.json` names the same file, not merely one of the same size and mtime. After the workspace moved (semester start, a copy) the file still counts as the same by its path below `files/`.
+- SDK: `slugify(text, max)` takes the length to cut at (80 by default).
+
 ## [0.4.1] - 2026-11-16
 
 One package: `npm install -g @imstudium/sdk --allow-scripts=keytar` installs the `imstudium` command, the `imstudium-mcp` server and the SDK, from npmjs.com with no login and with a provenance attestation. This is the first published release of everything in 0.4.0, which was tagged but never reached npm.
