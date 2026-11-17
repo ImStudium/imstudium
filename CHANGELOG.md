@@ -4,6 +4,23 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+Lecture recordings become searchable text: audio and video get a transcript in sections of about two minutes, each headed by its start time, so a search hit cites the minute.
+
+### Added
+
+- **`imstudium setup speech`** (`--force`, `--remove`): on-device transcripts for lecture video and audio. It downloads sherpa-onnx-node 2.0.1 with its native package for the platform (macOS arm64 and x64, Linux x64 and arm64, Windows x64), Parakeet TDT 0.6B v3 int8 and Silero VAD, about 650 MB once, each pinned and checked against its SHA-256, into `~/.local/share/imstudium/speech` (`IMSTUDIUM_SPEECH_DIR`). ffmpeg on `PATH` decodes the recordings. Nothing leaves the machine; `IMSTUDIUM_SPEECH=off` switches it off and `IMSTUDIUM_SPEECH_THREADS` sets the threads (default: half the cores, at most 8).
+- **Recordings in `extract` and `sync --extract`**: `.mp4 .mkv .webm .mov .m4v .mp3 .m4a .wav .ogg .oga .opus .flac .aac` are a new material kind, `media`. A `transcript.json` next to `content.md` whose source size and mtime match the recording is used as it is, whatever model wrote it (a runner outside ImStudium may leave one); otherwise the recording is transcribed on the machine when the runtime and ffmpeg are there, and the transcript is written to `transcript.json`. Without the runtime nothing is written and the summary counts the recordings left without a transcript, with the hint to run `imstudium setup speech`. Without ffmpeg the recording fails with the install hint.
+- `content.md` for a recording names the model, says whether it ran on this machine, notes the languages when a lecture mixes them, and marks the text as model output to check against the recording. Its `## hh:mm:ss` sections are the search unit: `corpus.jsonl` and `search` carry `at` (the start time), and the citation ends with it (`Statistik I · Vorlesung-03.mp4 · 00:42:10`).
+- `--no-transcribe` on `extract` and `sync`: no speech recognition for one run; a matching `transcript.json` is still rendered. `extract --force` transcribes recordings again when the runtime is installed.
+- `--json`: results of kind `media` carry `transcript` (`model`, `onDevice`, `duration`, `segments`, `sections`, `cached`, `transcribedAt`) or `pending`; `extract` and `sync --extract` add a `media` summary; search hits add `at`. Contract schema for `setup speech`; error codes `SPEECH_INSTALL_FAILED`, `SPEECH_UNSUPPORTED`, `FFMPEG_MISSING`.
+- `doctor` checks the speech runtime and warns when it is installed but ffmpeg is missing; `setup status` shows it.
+- SDK: `installSpeechRuntime`, `removeSpeechRuntime`, `speechRuntimeStatus`, `transcribeMedia`, `findFfmpeg`, `readTranscript`, `transcriptMatches`, `transcriptSections`, `renderTranscriptMd`, `formatTimestamp`, `summarizeMedia`, `MEDIA_EXT`, `SPEECH_MODEL`, `SPEECH_VAD`, `SPEECH_ENGINE`, `SPEECH_PLATFORMS`, `FFMPEG_HINT`.
+
+### Changed
+
+- The math runtime and the speech runtime share one installer for pinned downloads (`ingest/pinned.ts`): resumable, SHA-256-checked, recorded in `verified.json`.
+- The MCP tool `studium_read_material` never transcribes: it returns a recording's transcript when one exists, and its `page` selects a transcript section.
+
 ## [0.4.1] - 2026-11-16
 
 One package: `npm install -g @imstudium/sdk --allow-scripts=keytar` installs the `imstudium` command, the `imstudium-mcp` server and the SDK, from npmjs.com with no login and with a provenance attestation. This is the first published release of everything in 0.4.0, which was tagged but never reached npm.

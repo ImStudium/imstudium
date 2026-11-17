@@ -36,6 +36,7 @@ Every ImStudium failure has one stable `code`. The CLI exits with the code's exi
 | `BROWSER_LAUNCH_FAILED` | 1 | no | The sign-in browser (Playwright) could not start | Run: npx playwright install chromium |
 | `CLI_NOT_FOUND` | 1 | no | The MCP server could not find the imstudium CLI to run | npm i -g @imstudium/sdk, or set IMSTUDIUM_CLI to its path |
 | `OCR_INSTALL_FAILED` | 1 | yes | Downloading, verifying or starting the on-device OCR runtime failed (nothing half-installed is used) | Check the connection, then run: imstudium setup ocr --force |
+| `SPEECH_INSTALL_FAILED` | 1 | yes | Downloading, verifying or starting the on-device speech runtime failed (nothing half-installed is used) | Check the connection, then run: imstudium setup speech (it resumes; --force starts over) |
 | `BAD_ARGS` | 2 | no | An argument or flag is missing, unknown or malformed | See: imstudium &lt;command&gt; --help |
 | `FORMULA_MISMATCH` | 2 | no | The corrected formula doesn't check: it is malformed LaTeX, or it shows letters or digits the PDF doesn't have in that box (or leaves out ones it has) | Look at the formula's image again and write only what it shows; imstudium formulas check &lt;file&gt; &lt;id&gt; --latex '…' says what differs |
 | `NO_CLIENT_ID` | 2 | no | OAuth sign-in was requested without a client id | Set IMSTUDIUM_OAUTH_CLIENT_ID or oauth.clientId (docs/OAUTH.md), or run imstudium login without --oauth |
@@ -58,6 +59,8 @@ Every ImStudium failure has one stable `code`. The CLI exits with the code's exi
 | `COURSE_NOT_FOUND` | 5 | no | No course matches the name, shortcut or id | imstudium courses list shows your courses; pass a title fragment, slug or id |
 | `COURSE_AMBIGUOUS` | 5 | no | Several courses match; the CLI will not guess | Pass a longer title fragment or the course id (see details.candidates) |
 | `SEMESTER_NOT_FOUND` | 5 | no | No semester matches the label | imstudium semesters lists them, e.g. --semester "WS 2026/27" |
+| `SPEECH_UNSUPPORTED` | 5 | no | No pinned on-device speech runtime for this platform or JavaScript runtime | Recordings stay without transcripts; on-device transcripts run on macOS (arm64, x64), Linux x64/arm64 and Windows x64 under Node |
+| `FFMPEG_MISSING` | 5 | no | ffmpeg is not on PATH, and transcripts need it to decode audio and video | Install ffmpeg (macOS: brew install ffmpeg · Debian/Ubuntu: sudo apt install ffmpeg · Windows: winget install ffmpeg) |
 | `OCR_UNSUPPORTED` | 5 | no | No pinned on-device OCR runtime for this platform or JavaScript runtime | Extraction keeps the native text and marks image-only pages; OCR runs on macOS arm64, Linux x64/arm64 and Windows x64 under Node |
 | `FORMULA_NOT_FOUND` | 5 | no | No recognised formulas in that file, or none with that id | imstudium formulas list &lt;file&gt; shows the ids; formulas are read at extraction once imstudium setup ocr --math has run |
 | `NO_ENROLMENTS` | 5 | no | You are not enrolled in any course of that semester on Stud.IP | Enrol in Stud.IP first and keep working in your current semester folder (imstudium sync), or pass --allow-empty |

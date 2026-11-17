@@ -12,7 +12,7 @@ import {
   StileOutput,
   ZitierenOutput,
 } from "./cli/arbeit.js";
-import { SetupOcrOutput } from "./cli/setup.js";
+import { SetupOcrOutput, SetupSpeechOutput } from "./cli/setup.js";
 import { FormulasCheckOutput, FormulasFixOutput, FormulasListOutput } from "./cli/formulas.js";
 import { CoursewareOutput, TasksOutput } from "./cli/content.js";
 import { ForumOutput, MessagesOutput, NewsOutput } from "./cli/communication.js";
@@ -67,6 +67,7 @@ export const CLI_OUTPUTS = {
   literatur: LiteraturOutput,
   stile: StileOutput,
   "setup ocr": SetupOcrOutput,
+  "setup speech": SetupSpeechOutput,
   "formulas list": FormulasListOutput,
   "formulas check": FormulasCheckOutput,
   "formulas fix": FormulasFixOutput,

@@ -82,7 +82,8 @@ Commands:
                                                  (current semester by default)
   extract|ingest [options]                       Local ingest: pdf-inspector (PDF) + AnyDoc (Office)
                                                  → content.md, with on-device OCR for scans and
-                                                 photos once `setup ocr` ran
+                                                 photos once `setup ocr` ran, and transcripts of
+                                                 audio and video once `setup speech` ran
   formulas                                       Formulas read from a file: each with its check
                                                  against the PDF and its image; check or store a
                                                  correction
@@ -1186,13 +1187,15 @@ Options:
   --extract           Extract new/changed files to markdown and rebuild the search index
   --no-ocr            With --extract: native text only, even when on-device OCR is installed
   --no-math           With --extract: no formula recognition, even when installed (setup ocr --math)
+  --no-transcribe     With --extract: no speech recognition on this run, even when installed (setup
+                      speech); a recording's transcript.json is still rendered
   -h, --help          display help for command
 
 ### imstudium extract
 Usage: imstudium extract|ingest [options]
 
 Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and
-photos once `setup ocr` ran
+photos once `setup ocr` ran, and transcripts of audio and video once `setup speech` ran
 
 Options:
   --course <name>     Only one course (title fragment, shortcut, slug or id)
@@ -1201,7 +1204,10 @@ Options:
   --no-ocr            Native text only, even when on-device OCR is installed (also:
                       IMSTUDIUM_OCR=off)
   --no-math           No formula recognition, even when installed (also: IMSTUDIUM_MATH=off)
-  --force             Re-extract even if unchanged
+  --no-transcribe     No speech recognition, even when installed (also: IMSTUDIUM_SPEECH=off); a
+                      recording's transcript.json is still rendered
+  --force             Re-extract even if unchanged; with the speech runtime installed this also
+                      transcribes every recording again and replaces its transcript.json
   -o, --output <dir>  Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE)
   -h, --help          display help for command
 
@@ -1392,6 +1398,9 @@ Commands:
   mcp [options]        Register the imstudium MCP server with your agents (opt-in)
   ocr [options]        Install on-device OCR for scanned pages and photos: pinned, SHA-256-verified
                        PDFium + ONNX Runtime + PP-OCRv6 (~60 MB, once)
+  speech [options]     Install on-device transcripts for lecture video and audio: pinned,
+                       SHA-256-verified sherpa-onnx + Parakeet TDT 0.6B v3 + Silero VAD (~650 MB,
+                       once); needs ffmpeg on PATH
   migrate [options]    Migrate DigiCampus config/skills/MCP to ImStudium (idempotent)
   all [options]        Skills + workflows (idempotent — skips unchanged). MCP is opt-in: setup mcp
   help [command]       display help for command
@@ -1451,6 +1460,17 @@ Options:
               checked against the PDF and marked when it needs a look
   --force     Download and verify everything again, models included
   --remove    Delete the runtime and models (with --math: only the math part)
+  -h, --help  display help for command
+
+### imstudium setup speech
+Usage: imstudium setup speech [options]
+
+Install on-device transcripts for lecture video and audio: pinned, SHA-256-verified sherpa-onnx +
+Parakeet TDT 0.6B v3 + Silero VAD (~650 MB, once); needs ffmpeg on PATH
+
+Options:
+  --force     Download and verify everything again
+  --remove    Delete the speech runtime and its models (transcripts already written stay)
   -h, --help  display help for command
 
 ### imstudium setup migrate

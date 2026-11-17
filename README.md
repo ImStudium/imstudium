@@ -79,7 +79,17 @@ Formula recognition reads display formulas only, so math inside a sentence stays
 | Scanned or image-only pages | OCR text once `setup ocr` has run; otherwise marked `_(image-only page — no text layer)_` |
 | Photos (JPEG, PNG) | Copied to `pages/`, and read by OCR when it is installed |
 | Display formulas | `$$…$$` blocks plus `math.json` and one image per formula, once `setup ocr --math` has run |
+| Lecture video and audio | A transcript in `## hh:mm:ss` sections of about two minutes, once `setup speech` has run (or from a `transcript.json` already there) |
 | Text, code, CSV | Passed through |
+
+### Lecture recordings
+
+```bash
+imstudium setup speech          # on-device transcripts, about 650 MB once; needs ffmpeg
+imstudium setup speech --remove # delete the runtime again (transcripts stay)
+```
+
+Audio and video files in a course (`.mp4 .mkv .webm .mov .m4v .mp3 .m4a .wav .ogg .oga .opus .flac .aac`) are transcribed on your machine at the next `extract` or `sync --extract`: ffmpeg decodes them, Silero VAD finds the speech, and Parakeet TDT 0.6B v3 (25 European languages, German and English among them) writes it down. On 8 threads a lecture hour takes a few minutes, and no recording leaves the machine. The transcript is kept as `transcript.json` next to `content.md`; one whose source size and mtime match the file is reused, whatever model made it, and the header of `content.md` names that model and says whether it ran on your machine. `content.md` comes in sections of about two minutes headed by their start time, so `imstudium search` cites the minute (`Statistik I · Vorlesung-03.mp4 · 00:42:10`). A transcript is model output: check names, numbers and formulas against the recording. `--no-transcribe` skips speech recognition for one run, `IMSTUDIUM_SPEECH=off` for a whole environment, and `IMSTUDIUM_SPEECH_THREADS` sets the threads.
 
 ## Daily use
 
@@ -113,7 +123,7 @@ With the plugin, your agent does the rest from your own material and cites the p
 
 ## Privacy
 
-- **Nothing leaves your machine.** The workspace, your session and your messages stay on your laptop, and there is no ImStudium server and no telemetry. Requests go to your Stud.IP and its sign-in page; `setup ocr` downloads the models once, and `update` asks the npm registry for the latest version.
+- **Nothing leaves your machine.** The workspace, your session and your messages stay on your laptop, and there is no ImStudium server and no telemetry. Requests go to your Stud.IP and its sign-in page; `setup ocr` and `setup speech` download the models once, and `update` asks the npm registry for the latest version.
 - **Your session is yours.** You sign in through a browser window with ImStudium's own profile, so ImStudium never sees your password and keeps only the Stud.IP session cookie. It stores the cookie in ImSicheren when that's installed, otherwise in the OS keychain, otherwise in `~/.config/imstudium/session.json` (mode 0600), and never sends it to any site but the Stud.IP that issued it. When the session runs out, ImStudium tries once to renew it without a window; after a failed attempt it waits 30 minutes, and being offline never logs you out.
 - **Reading leaves no traces.** Every command only reads: messages stay unread, forum threads are not marked read, and courseware doesn't move your "last visited" page. The only way to write is `imstudium api -X <METHOD> … --write`, and the MCP server refuses it.
 - **DSGVO.** Messages, grades and classmates' names are personal data. Messages are never written into the workspace, and the `imstudium-datenschutz` skill keeps agents from copying messages, grades or names anywhere else. Whatever your agent reads goes to that agent's model provider, and choosing that provider is up to you. `snapshots/studium.json` holds counts and dates only, so a personal dashboard can read it safely.
@@ -138,6 +148,7 @@ Start with `imstudium doctor`. It checks the install, the session, the workspace
 | A course is missing after sync | Sync prints `⚠ <course>: …` and carries on with the rest. Retry with `imstudium sync --course <name>` |
 | Scanned pages still say "image-only" | Run `imstudium setup ocr`, then `imstudium sync --extract`. OCR needs Node, not Bun |
 | Extraction fails | pdf-inspector and AnyDoc are native modules, so reinstall the CLI. Login, sync and MCP don't need them |
+| Recordings have no transcript | Run `imstudium setup speech`, install ffmpeg (`brew install ffmpeg`, `sudo apt install ffmpeg`, `winget install ffmpeg`), then `imstudium extract`. Transcripts need Node, not Bun |
 | The MCP tool doesn't show up | Run `imstudium setup mcp`, restart the harness, then check `imstudium setup status` |
 | Every skill shows up twice | Use the plugin or `imstudium setup all` for a harness, not both. Running `imstudium setup` again removes the standalone copies where the plugin is installed |
 | Coming from the old DigiCampus tool | Run `imstudium setup migrate -y` |
@@ -206,7 +217,7 @@ Every command takes `--json` (stable keys for scripts and agents), `--quiet` and
 | **Any Stud.IP route** | `routes [topic]` | Every JSON:API route your Stud.IP offers |
 | | `api <path> [--flat] [--all]` | Call any route, e.g. `imstudium api /users/me/courses --flat` |
 | **Setup & health** | `login` · `logout` · `doctor [--offline]` · `update` | Sign in and out · check install, session, workspace, engines, agents and MCP (each with a fix) · upgrade |
-| | `setup all · mcp · ocr · status` · `onboard` · `config set` | Agent skills · opt-in MCP · on-device OCR and math · what's wired · first-time setup · settings |
+| | `setup all · mcp · ocr · speech · status` · `onboard` · `config set` | Agent skills · opt-in MCP · on-device OCR and math · on-device transcripts · what's wired · first-time setup · settings |
 
 ## Your workspace
 

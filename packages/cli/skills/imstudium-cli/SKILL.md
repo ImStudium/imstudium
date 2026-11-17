@@ -73,9 +73,9 @@ Global flags: `--json` (stable keys for agents), `--quiet`, `--instance <url>` (
 
 ## Reading slides
 
-After `extract`, each file has `extracted/<file>/content.md` (pages as `## Page N` sections); photos are copied to `pages/`.
+After `extract`, each file has `extracted/<file>/content.md` (pages as `## Page N` sections); photos are copied to `pages/`. A lecture recording's `content.md` is its transcript in `## hh:mm:ss` sections of about two minutes, and a search hit on it cites the section's start time.
 
-**Limits:** one local pipeline: pdf-inspector (PDF) and AnyDoc (Office), plus on-device OCR for scanned pages after `imstudium setup ocr` and `$$…$$` LaTeX for display formulas after `imstudium setup ocr --math` (`math.json` has page and box). Without OCR, image-only pages have no text. OCR text and formulas are model output: check formulas and diagrams against the original. See `imstudium-visual`.
+**Limits:** one local pipeline: pdf-inspector (PDF) and AnyDoc (Office), plus on-device OCR for scanned pages after `imstudium setup ocr` and `$$…$$` LaTeX for display formulas after `imstudium setup ocr --math` (`math.json` has page and box). Without OCR, image-only pages have no text. OCR text and formulas are model output: check formulas and diagrams against the original. Audio and video are transcribed on the machine after `imstudium setup speech` (needs ffmpeg), or read from a `transcript.json` another runner left; the header names the model and says whether it ran on this machine. Transcripts are model output too: check names, numbers and formulas against the recording at the cited minute. See `imstudium-visual`.
 
 ## Auth
 

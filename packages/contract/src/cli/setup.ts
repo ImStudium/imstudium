@@ -46,6 +46,37 @@ export const SetupOcrOutput = z
   .describe("Install, verify and warm the on-device OCR runtime, or remove it");
 export type SetupOcrOutput = z.infer<typeof SetupOcrOutput>;
 
+/** The on-device speech runtime as `setup speech` and `doctor` see it. */
+export const SpeechRuntime = z.object({
+  supported: z.boolean().describe("This platform has a pinned sherpa-onnx build (macOS arm64/x64, Linux x64/arm64, Windows x64)"),
+  ready: z.boolean().describe("Installed for the pinned versions; extraction transcribes audio and video (ffmpeg must be on PATH too)"),
+  disabled: z.boolean().describe("Switched off with IMSTUDIUM_SPEECH=off"),
+  platform: z.string(),
+  dir: z.string().describe("Where the runtime lives (IMSTUDIUM_SPEECH_DIR or ~/.local/share/imstudium/speech)"),
+  model: z.string().describe("The model string every transcript.json carries"),
+  vad: z.string(),
+  engine: z.string(),
+  downloadBytes: z.number().int().describe("What setup speech downloads on this platform"),
+  ffmpeg: z.string().nullable().describe("ffmpeg on PATH, which decodes the recordings; null when missing"),
+  threads: z.number().int().describe("Recognizer threads (IMSTUDIUM_SPEECH_THREADS, else half the cores, at most 8)"),
+  reason: z.string().nullable().describe("Why recordings will not be transcribed, when they won't"),
+});
+export type SpeechRuntime = z.infer<typeof SpeechRuntime>;
+
+/** `imstudium setup speech --json` (also with --force, --remove) */
+export const SetupSpeechOutput = z
+  .object({
+    action: z.enum(["installed", "unchanged", "removed", "absent"]).describe("installed: something was fetched · unchanged: all in place · removed / absent: --remove"),
+    runtime: SpeechRuntime,
+    installed: z.array(z.string()).describe("Pieces fetched in this run: the sherpa-onnx binding and native library, the Parakeet encoder, decoder, joiner and tokens, the voice activity model"),
+    skipped: z.array(z.string()).describe("Pieces already in place"),
+    downloadedBytes: z.number().int(),
+    diskBytes: z.number().int().describe("Size on disk after the run (freed bytes with --remove)"),
+    durationMs: z.number().int(),
+  })
+  .describe("Install, verify and start the on-device speech runtime for lecture recordings, or remove it");
+export type SetupSpeechOutput = z.infer<typeof SetupSpeechOutput>;
+
 /** OCR totals for `sync --extract` and `extract`. */
 export const OcrSummary = z.object({
   files: z.number().int().describe("Files with at least one page read by on-device OCR"),

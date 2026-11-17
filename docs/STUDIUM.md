@@ -59,11 +59,12 @@ Semester slugs look like `SS2026` and `WS2026-27`. A course folder is `slugify(t
 |---|---|---|
 | `COURSE.md` | Brief: type, ECTS, files synced, description, Leistungsnachweis, exams, navigation, `## Student notes` | every sync |
 | `files/` | Originals. With the default `--layout tree` this mirrors the course's Stud.IP folder tree (`files/Übungen/Blatt01.pdf`); `--layout flat` puts everything directly in `files/` | `sync` |
-| `extracted/<slug>/content.md` | Extracted markdown, one `## Page N` (or `## Slide N`) section per page. `<slug>` is the folder-qualified file path, e.g. `Ubungen-Blatt01-pdf` | `sync --extract`, `extract` |
-| `extracted/<slug>/manifest.json` | Source path, size and mtime, engine, page count, error | same |
+| `extracted/<slug>/content.md` | Extracted markdown, one `## Page N` (or `## Slide N`) section per page. `<slug>` is the folder-qualified file path, e.g. `Ubungen-Blatt01-pdf`. For a lecture recording, the transcript in sections of about two minutes, each headed by its start time (`## 00:42:10`) | `sync --extract`, `extract` |
+| `extracted/<slug>/manifest.json` | Source path, size and mtime, engine, page count (for a recording: sections, plus `transcript` with model, duration, segment count and whether it was read from `transcript.json`), error | same |
+| `extracted/<slug>/transcript.json` | A recording's transcript: `model`, `onDevice`, `source` (`file`, `size`, `mtimeMs`), `duration`, `transcribedAt` and `segments` (`start`, `end`, `text`, optional `language`). Written by `imstudium setup speech`'s on-device runtime, or by a runner outside ImStudium in the same schema; one whose source size and mtime match is read instead of transcribing again, whatever its model | `extract` with `setup speech` (or another runner) |
 | `extracted/<slug>/pages/` | Only for photos (copied as they are; their text is read by OCR when `imstudium setup ocr` has run) | same |
 | `extracted/<slug>/math.json` | Display formulas as LaTeX with page and box (pt, top-left), when `imstudium setup ocr --math` has run | same |
-| `search/corpus.jsonl` | Page index, one JSON line per page: `ref`, `citation`, `coursePath`, `courseTitle`, `sourceFile`, `extractSlug`, `page`, `pageLabel`, `kind`, `text` | `sync --extract`, `index` |
+| `search/corpus.jsonl` | Page index, one JSON line per page: `ref`, `citation`, `coursePath`, `courseTitle`, `sourceFile`, `extractSlug`, `page`, `pageLabel`, `kind`, `text`. A recording's sections are its pages, with `at` (the start time, `hh:mm:ss`) and a citation that ends with it | `sync --extract`, `index` |
 | `search/materials.json` | Every file with kind, page count, extraction state and `extractSlug` | same |
 | `search/index.json` | Course corpus stats | same |
 | `news/<YYYY-MM-DD>-<title>.md` | One announcement with frontmatter (`id`, `title`, `date`, `author`, `course`, `updated`, `expires`). Expired announcements stay as a local archive | `sync` (`news`), `news --save` |
@@ -197,13 +198,14 @@ imstudium search "Normalform" --course datenbank --archive
 rg -i "keyword" ~/Studium/WS2026-27/*/search/corpus.jsonl
 ```
 
-Cite with `ref` (e.g. `WS2026-27/Statistik-I#Folien-03.pdf:12`) and read the page section in `extracted/<slug>/content.md`.
+Cite with `ref` (e.g. `WS2026-27/Statistik-I#Folien-03.pdf:12`) and read the page section in `extracted/<slug>/content.md`. For a lecture recording, cite the minute: the hit's `citation` ends with the section's start time (`Statistik I · Vorlesung-03.mp4 · 00:42:10`, also in `at`), and `ref` numbers the section.
 
 ### Extraction limits
 
-There's one local pipeline: pdf-inspector for PDFs and AnyDoc for Office, plus an optional on-device OCR and formula runtime (`imstudium setup ocr [--math]`, pinned and SHA-256-checked). No API key, no Tesseract, no poppler, no LibreOffice, and no page leaves the machine.
+There's one local pipeline: pdf-inspector for PDFs and AnyDoc for Office, plus an optional on-device OCR and formula runtime (`imstudium setup ocr [--math]`) and an optional on-device speech runtime for lecture recordings (`imstudium setup speech`), all pinned and SHA-256-checked. No API key, no Tesseract, no poppler, no LibreOffice, and no page or recording leaves the machine.
 
 - `content.md` prose is markdown. Inline math keeps garbled sub- and superscripts.
 - With OCR installed, scanned pages are read on the machine; poorly read pages carry `_(read by OCR with low confidence — check the original)_`. Without it, image-only pages are marked `_(image-only page — no text layer)_`.
 - With math installed, display formulas follow their page as `$$…$$` blocks under `_Formulas on this page, read on this machine as LaTeX …_`. They are model output: check them against the original in `files/`. Accuracy is in [BENCHMARKS.md](BENCHMARKS.md).
+- Audio and video (`.mp4 .mkv .webm .mov .m4v .mp3 .m4a .wav .ogg .oga .opus .flac .aac`) are transcribed once `imstudium setup speech` has run: ffmpeg (on `PATH`) decodes them, Silero VAD cuts the speech, Parakeet TDT 0.6B v3 reads it. A `transcript.json` already next to `content.md` whose source size and mtime match is used instead, whatever model made it; the header line names that model and says whether it ran on this machine (`on-device transcript by …`, or `transcript by …, not made on this machine`). Transcripts are model output: check names, numbers and formulas against the recording at the cited time. Without the runtime, recordings stay without a transcript, and `extract` says how many. `--no-transcribe` (or `IMSTUDIUM_SPEECH=off`) runs no speech recognition but still renders a matching `transcript.json`; `--force` transcribes again when the runtime is installed.
 - `corpus.jsonl` is for finding content, not for answering from image-only pages.

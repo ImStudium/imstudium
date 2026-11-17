@@ -28,6 +28,8 @@ Everything is extracted on the student's machine. The header line says what ran 
 | Display formulas, math installed (`imstudium setup ocr --math`) | `$$…$$` blocks after the page text, under `_Formulas on this page, read on this machine as LaTeX …_`; a note under each one that needs a look; `math.json` and `formulas/<id>.png` (each formula's image) |
 | PPTX / DOCX | AnyDoc native conversion |
 | `.tex` source files | LaTeX passthrough as-is |
+| Lecture recording (audio, video) | a transcript in `## hh:mm:ss` sections of about two minutes: on-device after `imstudium setup speech`, or from a `transcript.json` another runner left. The header names the model and says `on-device` or `not made on this machine`. Cite the section's start time; check names, numbers and formulas against the recording, and take formulas from the slides, never from the transcript |
+| Lecture recording, no transcript | no `content.md`: `imstudium extract` counts it under "without a transcript" |
 
 The `$$…$$` blocks are model output. On the benchmark's synthetic Beamer slides nearly all come back exactly right, and real slides are harder. A wrong reading can draw a bar over the whole formula from a Beamer block's frame, misread an index (`\sum_{n}` for `\sum_{x}`), or, on a scan, invent a whole line. Bold or another font for a letter (`\mathbf{x}` for x) is a difference in look and is not marked: set it as the image shows. Every reading is checked on the machine, and the note under a formula says what the check found:
 

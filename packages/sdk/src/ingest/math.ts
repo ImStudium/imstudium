@@ -23,31 +23,22 @@
  * pdf-inspector's native text.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
 import { basename, join } from "node:path";
 import { ImstudiumError } from "../errors.js";
-import { buildPdf, dirBytes, downloadToFile, ocrPlatformKey, ocrRoot, OCR_RUNTIMES } from "./ocr-runtime.js";
+import { buildPdf, dirBytes, ocrPlatformKey, ocrRoot, OCR_RUNTIMES } from "./ocr-runtime.js";
+import { installPinnedAssets, pinnedAssetsPresent, pinnedModelsDir, pinnedModulesDir, type PinnedAsset } from "./pinned.js";
 import { encodePng } from "./png.js";
+
+export { assetUpToDate } from "./pinned.js";
 
 export const MATH_MODEL = "unirec-0.1b (topdu/unirec_0_1b_onnx e8f55f7)";
 export const LAYOUT_MODEL = "pp-doclayoutv2 (oar-ocr v0.3.0)";
 const OAR = "https://github.com/GreatV/oar-ocr/releases/download/v0.3.0";
 const UNIREC = "https://huggingface.co/topdu/unirec_0_1b_onnx/resolve/e8f55f72013d544cbd6c27c576946ac63da247ed";
 const NPM = "https://registry.npmjs.org";
-
-interface MathAsset {
-  label: string;
-  url: string;
-  sha256: string;
-  bytes: number;
-  /** npm: a package tarball unpacked to node_modules/<name>; file: saved as models/<name>. */
-  kind: "npm" | "file";
-  name: string;
-  /** npm only: members to unpack (relative to package/); the platform's binary folder for the binding. */
-  members?: (platformKey: string) => string[];
-}
 
 const ORT_PLATFORM_DIR: Record<string, string> = {
   "darwin-arm64": "darwin/arm64",
@@ -56,7 +47,7 @@ const ORT_PLATFORM_DIR: Record<string, string> = {
   "win32-x64": "win32/x64",
 };
 
-export const MATH_ASSETS: MathAsset[] = [
+export const MATH_ASSETS: PinnedAsset[] = [
   {
     label: "ONNX Runtime binding",
     kind: "npm",
@@ -125,17 +116,9 @@ const DECODER_FILE = "unirec_decoder.onnx";
 const TOKENS_FILE = "unirec_tokenizer_mapping.json";
 
 export const mathDir = () => join(ocrRoot(), "math");
-const modulesDir = () => join(mathDir(), "node_modules");
-const modelsDir = () => join(mathDir(), "models");
+const modulesDir = () => pinnedModulesDir(mathDir());
+const modelsDir = () => pinnedModelsDir(mathDir());
 const mathMarker = () => join(mathDir(), "math.json");
-/** Each asset's SHA-256 once it was verified and put in place, written as the install goes (a broken run keeps what it finished). */
-const verifiedFile = () => join(mathDir(), "verified.json");
-/** Partial downloads, kept across runs so the next one resumes. */
-const downloadsDir = () => join(mathDir(), "downloads");
-
-function assetPath(a: MathAsset): string {
-  return a.kind === "npm" ? join(modulesDir(), a.name, "package.json") : join(modelsDir(), a.name);
-}
 
 export function mathDisabledByEnv(env: NodeJS.ProcessEnv = process.env): boolean {
   return /^(0|off|false|no)$/i.test((env.IMSTUDIUM_MATH ?? "").trim());
@@ -167,7 +150,7 @@ export function mathRuntimeStatus(): MathRuntimeStatus {
   const key = ocrPlatformKey();
   const supported = !!OCR_RUNTIMES[key] && !!ORT_PLATFORM_DIR[key];
   const marker = readMathMarker();
-  const complete = MATH_ASSETS.every((a) => existsSync(assetPath(a)));
+  const complete = pinnedAssetsPresent(mathDir(), MATH_ASSETS);
   const current = marker?.model === MATH_MODEL && marker?.layoutModel === LAYOUT_MODEL;
   const disabled = mathDisabledByEnv() || /^(0|off|false|no)$/i.test((process.env.IMSTUDIUM_OCR ?? "").trim());
   const bun = typeof (process.versions as Record<string, string | undefined>).bun === "string";
@@ -195,44 +178,11 @@ export function mathRuntimeStatus(): MathRuntimeStatus {
   };
 }
 
-async function unpackMembers(archive: string, into: string, members: string[]): Promise<void> {
-  const { execFile } = await import("node:child_process");
-  await mkdir(into, { recursive: true });
-  await new Promise<void>((resolve, reject) =>
-    execFile(
-      "tar",
-      ["--no-same-owner", "-xzf", archive, "-C", into, "--strip-components=1", ...members.map((m) => `package/${m}`)],
-      { maxBuffer: 16 * 1024 * 1024 },
-      (err, _out, stderr) => (err ? reject(new ImstudiumError(`Unpacking ${archive} failed: ${stderr || err.message}`, "OCR_INSTALL_FAILED")) : resolve()),
-    ),
-  );
-}
-
 export interface MathInstallResult {
   installed: string[];
   skipped: string[];
   downloadedBytes: number;
   diskBytes: number;
-}
-
-async function readVerified(): Promise<Record<string, string>> {
-  try {
-    return JSON.parse(await readFile(verifiedFile(), "utf-8")) as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
-
-/**
- * Whether `a` is in place as pinned: its SHA-256 was recorded when it was
- * verified. An install from before the record existed only put a file in place
- * after verifying it, so a file without a record counts when the old marker
- * names the same SHA-256 or names none (a run that broke off before the marker).
- */
-export function assetUpToDate(a: Pick<MathAsset, "name" | "sha256">, present: boolean, verified: Record<string, string>, legacy: Record<string, string> | undefined): boolean {
-  if (!present) return false;
-  if (verified[a.name]) return verified[a.name] === a.sha256;
-  return !legacy?.[a.name] || legacy[a.name] === a.sha256;
 }
 
 /**
@@ -246,43 +196,15 @@ export async function installMathRuntime(options: { force?: boolean; onProgress?
   if (!OCR_RUNTIMES[key] || !ORT_PLATFORM_DIR[key]) {
     throw new ImstudiumError(`No local math runtime for ${key}`, "OCR_UNSUPPORTED", undefined, undefined, { platform: key });
   }
-  const installed: string[] = [];
-  const skipped: string[] = [];
-  let downloadedBytes = 0;
-  if (options.force) await rm(mathDir(), { recursive: true, force: true });
-  await mkdir(modelsDir(), { recursive: true });
-  const verified = await readVerified();
   const legacy = (readMathMarker() as { sha256?: Record<string, string> } | null)?.sha256;
-  for (const a of MATH_ASSETS) {
-    if (assetUpToDate(a, existsSync(assetPath(a)), verified, legacy)) {
-      skipped.push(a.label);
-      continue;
-    }
-    options.onProgress?.(`downloading ${a.url.split("/").pop()} (${Math.round(a.bytes / 1e6)} MB)`);
-    const target = a.kind === "file" ? assetPath(a) : join(downloadsDir(), basename(a.url));
-    if (a.kind === "file") await rm(target, { force: true });
-    downloadedBytes += await downloadToFile(a.url, a.sha256, target, { onProgress: options.onProgress, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl, waitMs: 0 } : {}) });
-    options.onProgress?.(`verified ${a.url.split("/").pop()} (sha256 ${a.sha256.slice(0, 12)}…)`);
-    if (a.kind === "npm") {
-      const dest = join(modulesDir(), a.name);
-      const staging = `${dest}.staging`;
-      await rm(staging, { recursive: true, force: true });
-      await unpackMembers(target, staging, a.members!(key));
-      await rm(dest, { recursive: true, force: true });
-      await mkdir(join(dest, ".."), { recursive: true });
-      await rename(staging, dest);
-      await rm(target, { force: true });
-    }
-    verified[a.name] = a.sha256;
-    await writeFile(verifiedFile(), `${JSON.stringify(verified, null, 2)}\n`);
-    installed.push(a.label);
-  }
-  await rm(downloadsDir(), { recursive: true, force: true });
-  // Models an earlier version pinned (e.g. the small ones before 0.3) are no longer used: free their space.
-  const pinned = new Set(MATH_ASSETS.filter((a) => a.kind === "file").map((a) => a.name));
-  for (const name of await readdir(modelsDir()).catch(() => [] as string[])) {
-    if (!pinned.has(name) && /\.(onnx|json)$/.test(name)) await unlink(join(modelsDir(), name)).catch(() => {});
-  }
+  const { installed, skipped, downloadedBytes } = await installPinnedAssets(mathDir(), MATH_ASSETS, {
+    platformKey: key,
+    errorCode: "OCR_INSTALL_FAILED",
+    force: options.force,
+    onProgress: options.onProgress,
+    fetchImpl: options.fetchImpl,
+    legacy,
+  });
   // One synthetic formula proves the binding, the renderer and both models load and agree.
   options.onProgress?.("checking a formula read on this machine");
   resetMathEngine();

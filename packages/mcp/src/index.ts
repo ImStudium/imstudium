@@ -152,6 +152,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const courseArg = String((args as { course?: string })?.course || "");
         const fileArg = String((args as { file: string }).file).trim().toLowerCase();
         const page = (args as { page?: number | null }).page ?? undefined;
+        let at: string | undefined;
 
         const course = resolveWorkspaceCourse(ws, courseArg, sdk.config.courseAliases);
 
@@ -171,9 +172,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // The folder sync uses (folder-qualified, extract.ts), so no second copy goes stale in search.
         const outDir = join(courseDir, "extracted", extractSlug(relative(filesDir, src)));
-        const result = await sdk.extractor.extractFile(src, outDir);
+        // Never a transcription from here (minutes per lecture hour): a recording's transcript.json is rendered, nothing more.
+        const result = await sdk.extractor.extractFile(src, outDir, { transcribe: false });
         if (result.error) {
           throw new ImstudiumError(result.error, "UNKNOWN", undefined, result.hint, { source: src });
+        }
+        if (result.pending) {
+          throw new ImstudiumError(`${basename(src)} is a recording without a transcript yet`, "NOT_FOUND", 404, "In a terminal: imstudium setup speech, then imstudium extract (transcripts are made on this machine)", { source: src });
         }
 
         let content = "";
@@ -187,7 +192,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (result.pages && page > result.pages) {
             throw new ImstudiumError(`${basename(src)} has ${result.pages} page(s), not page ${page}`, "BAD_ARGS", undefined, "Pass a page between 1 and the file's page count, or leave page out", { pages: result.pages });
           }
-          if (content) {
+          if (content && result.transcript) {
+            // A recording: page is the transcript section's number, headed by its start time.
+            const match = content.split(/^(?=## \d{2,}:\d{2}:\d{2}\s*$)/m).slice(1)[page - 1];
+            if (!match) throw new ImstudiumError(`No section ${page} in the transcript of ${basename(src)}`, "BAD_ARGS", undefined, "Leave page out to read the whole transcript", { pages: result.pages ?? null });
+            content = match.trim();
+            at = /^## (\S+)/.exec(content)?.[1];
+          } else if (content) {
             const sections = content.split(/^## (?:Page|Slide) /m);
             const match = sections.find((s) => s.startsWith(`${page}\n`) || s.startsWith(`${page}\r`));
             if (!match) throw new ImstudiumError(`No page ${page} in the extracted text of ${basename(src)}`, "BAD_ARGS", undefined, "Leave page out to read the whole file", { pages: result.pages ?? null });
@@ -208,7 +219,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           kind: result.kind,
           pages: result.pages,
           ref: page ? pageRef(course.path || course.slug, basename(src), page) : undefined,
-          citation: page ? `${course.title} · ${basename(src)} · p.${page}` : undefined,
+          citation: page ? `${course.title} · ${basename(src)} · ${at ?? `p.${page}`}` : undefined,
           content,
           pageImages,
           viewerHtml,

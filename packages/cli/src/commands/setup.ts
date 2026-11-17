@@ -3,20 +3,25 @@ import {
   archiveLegacyConfigDir,
   ensureMigrated,
   ImstudiumError,
+  FFMPEG_HINT,
   installMathRuntime,
   installOcrRuntime,
+  installSpeechRuntime,
   mathRuntimeStatus,
   ocrRuntimeStatus,
   removeMathRuntime,
   removeOcrRuntime,
+  removeSpeechRuntime,
+  speechRuntimeStatus,
 } from "@imstudium/sdk";
-import type { SetupOcrOutput } from "@imstudium/contract";
+import type { SetupOcrOutput, SetupSpeechOutput } from "@imstudium/contract";
 import { formatSetupSummary, getSetupStatus, runSetup, type AgentId } from "../setup.js";
 import { checkForUpdates, runGlobalUpdate } from "../version.js";
 import { act, getSdk, note, output } from "../runtime.js";
 import { outputOption } from "../kit/args.js";
 import { CLI_ENTRY } from "../entry.js";
 import { formatBytes, ocrDiskBytes, ocrRuntimeView } from "../ocr.js";
+import { speechRuntimeView } from "../speech.js";
 
 const AGENT_HELP = "cursor | claude-code | claude-desktop | codex | windsurf | opencode | all";
 
@@ -84,7 +89,11 @@ export function registerSetup(program: Command): void {
         }
         const ocr = ocrRuntimeView();
         lines.push("", `On-device OCR: ${ocr.ready ? `ready (${ocr.model})` : ocr.reason ?? "not ready"}${!ocr.ready && ocr.supported && !ocr.disabled ? " · imstudium setup ocr" : ""}`);
-        output({ ...status, ocr }, lines.join("\n"));
+        const speech = speechRuntimeView();
+        lines.push(
+          `On-device transcripts: ${speech.ready && !speech.reason ? `ready (${speech.model})` : speech.reason ?? "not ready"}${!speech.ready && speech.supported && !speech.disabled ? " · imstudium setup speech" : ""}`,
+        );
+        output({ ...status, ocr, speech }, lines.join("\n"));
       }),
     );
 
@@ -198,6 +207,59 @@ export function registerSetup(program: Command): void {
           runtime.disabled
             ? "  Switched off by IMSTUDIUM_OCR=off: unset it to use OCR"
             : "  Pages without a text layer and JPEG/PNG photos are read on this machine at the next extract (imstudium extract, or sync --extract)",
+        ];
+        output(payload, lines.join("\n"));
+      }),
+    );
+
+  setup
+    .command("speech")
+    .description("Install on-device transcripts for lecture video and audio: pinned, SHA-256-verified sherpa-onnx + Parakeet TDT 0.6B v3 + Silero VAD (~650 MB, once); needs ffmpeg on PATH")
+    .option("--force", "Download and verify everything again")
+    .option("--remove", "Delete the speech runtime and its models (transcripts already written stay)")
+    .action(
+      act(async (opts: { force?: boolean; remove?: boolean }) => {
+        if (opts.force && opts.remove) throw new ImstudiumError("--force and --remove exclude each other", "BAD_ARGS");
+        const started = Date.now();
+        if (opts.remove) {
+          const removed = await removeSpeechRuntime();
+          const payload: SetupSpeechOutput = {
+            action: removed.removed ? "removed" : "absent",
+            runtime: speechRuntimeView(),
+            installed: [],
+            skipped: [],
+            downloadedBytes: 0,
+            diskBytes: removed.freedBytes,
+            durationMs: Date.now() - started,
+          };
+          output(payload, removed.removed ? `Removed on-device transcripts (${formatBytes(removed.freedBytes)} freed) from ${removed.dir}` : `Nothing to remove in ${removed.dir}`);
+          return;
+        }
+        const before = speechRuntimeStatus();
+        if (!before.supported) {
+          throw new ImstudiumError(`No on-device speech runtime for ${before.platform}`, "SPEECH_UNSUPPORTED", undefined, undefined, { platform: before.platform });
+        }
+        if (!before.ready || opts.force) note(`speech: up to ${formatBytes(before.downloadBytes)} to download, once`);
+        const result = await installSpeechRuntime({ force: opts.force, onProgress: note });
+        const runtime = speechRuntimeView(result.status);
+        const payload: SetupSpeechOutput = {
+          action: result.installed.length ? "installed" : "unchanged",
+          runtime,
+          installed: result.installed,
+          skipped: result.skipped,
+          downloadedBytes: result.downloadedBytes,
+          diskBytes: result.diskBytes,
+          durationMs: Date.now() - started,
+        };
+        const lines = [
+          result.installed.length
+            ? `On-device transcripts ready: ${result.installed.join(", ")} installed${result.downloadedBytes ? ` (${formatBytes(result.downloadedBytes)} downloaded, SHA-256 verified)` : ""}`
+            : "On-device transcripts already installed and verified",
+          `  ${runtime.model} · ${runtime.engine} · ${runtime.threads} thread${runtime.threads === 1 ? "" : "s"} · ${formatBytes(payload.diskBytes)} in ${runtime.dir}`,
+          runtime.ffmpeg ? `  ffmpeg: ${runtime.ffmpeg}` : `  ffmpeg is not on PATH, and transcripts need it to decode the recordings. ${FFMPEG_HINT}`,
+          runtime.disabled
+            ? "  Switched off by IMSTUDIUM_SPEECH=off: unset it to transcribe"
+            : "  Audio and video (.mp4 .mkv .webm .mov .m4v .mp3 .m4a .wav .ogg .oga .opus .flac .aac) get a transcript at the next extract (imstudium extract, or sync --extract), in sections of about two minutes headed by their start time. A lecture hour takes a few minutes on 8 threads. Transcripts are model output: check names, numbers and formulas against the recording",
         ];
         output(payload, lines.join("\n"));
       }),

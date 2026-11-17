@@ -2,6 +2,7 @@ import { access, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 import { ensureDir } from "./config.js";
 import { EXTRACTION_LIMITS_FOR_AGENTS } from "./extraction-guidance.js";
+import { isTranscriptMd } from "./ingest/transcript.js";
 import type { MaterialKind, StudiumCourse, StudiumWorkspace } from "./types.js";
 
 /** Slim search record — text lives here for keyword search; full page also in content.md. */
@@ -18,6 +19,8 @@ export interface SearchChunk {
   text: string;
   /** Relative to extractDir, e.g. pages/page-15.png */
   pageImage?: string;
+  /** Recordings: where the section starts in the recording (hh:mm:ss); `page` is the section's number. */
+  at?: string;
 }
 
 export interface MaterialEntry {
@@ -59,11 +62,26 @@ export interface WorkspaceSearchIndex {
 }
 
 const PAGE_HEADING = /^## (Page|Slide) (\d+)\s*$/m;
-const PLACEHOLDER = /(?:^|[_(]) *(no extractable text|image-only page|OCR — verify)/i;
+/** A recording's section heading: its start time. */
+const TIME_HEADING = /^## (\d{2,}:\d{2}:\d{2})\s*$/m;
+const PLACEHOLDER = /(?:^|[_(]) *(no extractable text|image-only page|OCR — verify|no speech recognised)/i;
 const MIN_TEXT = 24;
 
-/** Split content.md into page/slide sections. */
-export function parseContentMdSections(content: string): Array<{ page: number; label: string; text: string }> {
+/**
+ * Split content.md into page/slide sections. A recording's transcript splits
+ * at its `## hh:mm:ss` headings instead: `page` is the section's number and
+ * `at` its start time, the citation's unit.
+ */
+export function parseContentMdSections(content: string): Array<{ page: number; label: string; text: string; at?: string }> {
+  if (isTranscriptMd(content)) {
+    const parts = content.split(TIME_HEADING);
+    const sections: Array<{ page: number; label: string; text: string; at?: string }> = [];
+    for (let i = 1; i < parts.length; i += 2) {
+      const text = (parts[i + 1] || "").trim();
+      if (text) sections.push({ page: (i + 1) / 2, label: "Section", text, at: parts[i] });
+    }
+    return sections;
+  }
   const parts = content.split(PAGE_HEADING);
   if (parts.length <= 1) {
     const body = content.replace(/^#[^\n]*\n+/m, "").replace(/^>[^\n]*\n+/gm, "").trim();
@@ -169,9 +187,10 @@ export async function parseExtractionChunks(
     const pageImage = await pageImageRel(extractDir, section.page, section.label);
     if (!isIndexableSection(section.text, !!pageImage)) continue;
 
+    const where = section.at ?? `${section.label === "Slide" ? "slide" : "p."}${section.page}`;
     chunks.push({
       ref: pageRef(ctx.coursePath, sourceFile, section.page),
-      citation: `${ctx.courseTitle} · ${sourceFile} · ${section.label === "Slide" ? "slide" : "p."}${section.page}`,
+      citation: `${ctx.courseTitle} · ${sourceFile} · ${where}`,
       coursePath: ctx.coursePath,
       courseTitle: ctx.courseTitle,
       sourceFile,
@@ -181,6 +200,7 @@ export async function parseExtractionChunks(
       kind: (manifest.kind as MaterialKind) || kind,
       text: section.text,
       ...(pageImage ? { pageImage } : {}),
+      ...(section.at ? { at: section.at } : {}),
     });
   }
   return chunks;
@@ -422,7 +442,7 @@ export interface AgentSearchGuidance {
   useNativeSearch: true;
   llmsTxt: string;
   corpusGlob: string;
-  corpusFields: Array<"ref" | "citation" | "text" | "pageImage" | "extractSlug" | "sourceFile" | "page" | "coursePath">;
+  corpusFields: Array<"ref" | "citation" | "text" | "pageImage" | "extractSlug" | "sourceFile" | "page" | "coursePath" | "at">;
   grepExample: string;
   citeWith: string;
   resolveHit: {
@@ -447,12 +467,12 @@ export function agentSearchGuidance(
     useNativeSearch: true,
     llmsTxt: join(workspacePath, "llms.txt"),
     corpusGlob,
-    corpusFields: ["ref", "citation", "text", "pageImage", "extractSlug", "sourceFile", "page", "coursePath"],
+    corpusFields: ["ref", "citation", "text", "pageImage", "extractSlug", "sourceFile", "page", "coursePath", "at"],
     grepExample: `rg -i "your terms" "${join(workspacePath, semSlug, "*", "search", "corpus.jsonl")}"`,
-    citeWith: "ref field in each JSONL line (e.g. SS2026/Course#file.pdf:5)",
+    citeWith: "ref field in each JSONL line (e.g. SS2026/Course#file.pdf:5); for a recording cite the citation, which ends in the section's start time (hh:mm:ss)",
     resolveHit: {
       materialsIndex: "search/materials.json",
-      pageText: "extracted/<extractSlug>/content.md (## Page N section)",
+      pageText: "extracted/<extractSlug>/content.md (## Page N section; recordings: ## hh:mm:ss, the at field)",
       pageImage: "only for copied photos (extracted/<extractSlug>/pages/); for slides and formulas open the original in files/",
     },
     chunkCount: workspace.search?.chunkCount,

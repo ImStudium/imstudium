@@ -259,7 +259,24 @@ export interface SessionData {
   expiresAt?: string;
 }
 
-export type MaterialKind = "pdf" | "office" | "image" | "text" | "unsupported";
+export type MaterialKind = "pdf" | "office" | "image" | "text" | "media" | "unsupported";
+
+/** A recording's transcript, as the extraction result and manifest.json report it. */
+export interface ExtractTranscriptInfo {
+  /** The model that wrote it: SPEECH_MODEL for a transcript made here, or whatever a runner outside ImStudium used. */
+  model: string;
+  /** true: transcribed on the student's machine; false: transcript.json came from a service elsewhere. */
+  onDevice: boolean;
+  /** Seconds of audio. */
+  duration: number;
+  /** Speech segments the VAD cut and the model read. */
+  segments: number;
+  /** content.md sections of about two minutes (the search unit, like pages). */
+  sections: number;
+  /** true: read from a transcript.json already next to content.md (a runner's, or an earlier run's); false: transcribed in this run. */
+  cached: boolean;
+  transcribedAt: string;
+}
 
 export interface ExtractResult {
   source: string;
@@ -283,6 +300,10 @@ export interface ExtractResult {
   mathFormulas?: number;
   /** Those formulas by their check (corrections count as they checked): against the PDF's text, needing a look, or not fully checkable (scans, pictures, partly pictures). */
   mathChecks?: { checked: number; needLook: number; unchecked: number };
+  /** Audio and video: the transcript content.md was rendered from. */
+  transcript?: ExtractTranscriptInfo;
+  /** Audio or video left without a transcript and without anything written: no speech runtime (`imstudium setup speech`), switched off, or `--no-transcribe`. */
+  pending?: boolean;
 }
 
 export interface ExtractMathInfo {
@@ -328,6 +349,8 @@ export interface ExtractManifest {
   math?: ExtractMathInfo;
   /** Math was available but failed; the text was kept. */
   mathError?: string;
+  /** Audio and video: the transcript content.md was rendered from (transcript.json). */
+  transcript?: ExtractTranscriptInfo;
 }
 
 export interface FileTreeNode {

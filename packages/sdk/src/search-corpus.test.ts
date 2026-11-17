@@ -22,6 +22,29 @@ describe("parseContentMdSections", () => {
   });
 });
 
+describe("parseContentMdSections on a recording", () => {
+  const header = "> video · 5 min · 2 section(s) · on-device transcript by parakeet-tdt-0.6b-v3-int8 (synthetic) · model output: check names, numbers and formulas against the recording";
+
+  it("splits at the start times: page is the section's number, at its start", () => {
+    const md = `# v.mp4\n\n${header}\n\n## 00:00:02\n\nErster Abschnitt über Regression.\n\n## 00:02:04\n\nZweiter Abschnitt über Residuen.\n`;
+    expect(parseContentMdSections(md)).toEqual([
+      { page: 1, label: "Section", text: "Erster Abschnitt über Regression.", at: "00:00:02" },
+      { page: 2, label: "Section", text: "Zweiter Abschnitt über Residuen.", at: "00:02:04" },
+    ]);
+  });
+
+  it("a time heading in any other content.md is just text", () => {
+    expect(parseContentMdSections("# plan.md\n\n> text · 1 page(s)\n\n## 10:15:00\n\nTutorium").map((s) => s.at)).toEqual([undefined]);
+  });
+
+  it("a recording without speech is not indexed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "is-chunk-"));
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ source: "/tmp/leer.wav", kind: "media" }));
+    writeFileSync(join(dir, "content.md"), `# leer.wav\n\n${header.replace("video", "audio")}\n\n_(no speech recognised in this recording)_\n`);
+    expect(await parseExtractionChunks(dir, { workspaceRoot: "/Studium", courseTitle: "Test", coursePath: "SS2026/Test" })).toEqual([]);
+  });
+});
+
 describe("isIndexableSection", () => {
   it("skips empty placeholder pages without images", () => {
     expect(isIndexableSection("_(image-only page — no text layer)_", false)).toBe(false);

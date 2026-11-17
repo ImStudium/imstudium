@@ -97,6 +97,16 @@ export const SemesterStartOutput = z.union([
 ]);
 export type SemesterStartOutput = z.infer<typeof SemesterStartOutput>;
 
+/** Transcript totals for `sync --extract` and `extract`. */
+export const MediaSummary = z.object({
+  transcripts: z.number().int().describe("Recordings whose content.md was rendered from a transcript in this run"),
+  transcribed: z.number().int().describe("Of those, transcribed on this machine in this run"),
+  cached: z.number().int().describe("Of those, read from a transcript.json that was already there"),
+  seconds: z.number().int().describe("Seconds of audio transcribed in this run"),
+  pending: z.number().int().describe("Recordings left without a transcript (no runtime, switched off, --no-transcribe)"),
+});
+export type MediaSummary = z.infer<typeof MediaSummary>;
+
 /** `imstudium sync --json` */
 export const SyncOutput = SyncReport.extend({
   semesters: z.array(
@@ -111,15 +121,28 @@ export const SyncOutput = SyncReport.extend({
   changes: z.array(ChangeEntry),
   extracted: z.number().int().optional().describe("Only with --extract"),
   ocr: OcrSummary.optional().describe("Only with --extract: pages read by on-device OCR"),
+  media: MediaSummary.optional().describe("Only with --extract: lecture recordings transcribed or read from transcript.json"),
 }).describe("Sync report: downloads, per-semester folders and the files that changed");
 export type SyncOutput = z.infer<typeof SyncOutput>;
+
+const ExtractTranscript = z
+  .object({
+    model: z.string().describe("The model that wrote it: parakeet-tdt-0.6b-v3-int8 (…) when made here, or what a runner outside ImStudium used"),
+    onDevice: z.boolean().describe("true: transcribed on the student's machine · false: the transcript.json came from a service elsewhere"),
+    duration: z.number().describe("Seconds of audio"),
+    segments: z.number().int().describe("Speech segments the voice activity detector cut and the model read"),
+    sections: z.number().int().describe("content.md sections of about two minutes, each headed by its start time (hh:mm:ss); the search unit, like pages"),
+    cached: z.boolean().describe("true: read from a transcript.json already next to content.md (any model; its source size and mtime match) · false: transcribed on this machine in this run"),
+    transcribedAt: z.string(),
+  })
+  .describe("Audio and video: the transcript content.md was rendered from");
 
 const ExtractResult = z.object({
   source: z.string(),
   outDir: z.string(),
-  kind: z.enum(["pdf", "office", "image", "text", "unsupported"]),
-  pages: z.number().int(),
-  tool: z.string().optional().describe("pdf-inspector · pdf-inspector+ocr · anydoc · passthrough · copy"),
+  kind: z.enum(["pdf", "office", "image", "text", "media", "unsupported"]).describe("media: audio and video (.mp4 .mkv .webm .mov .m4v .mp3 .m4a .wav .ogg .oga .opus .flac .aac)"),
+  pages: z.number().int().describe("Pages, slides, or for a recording its transcript sections"),
+  tool: z.string().optional().describe("pdf-inspector · pdf-inspector+ocr · anydoc · passthrough · copy · sherpa-onnx (transcribed here) · transcript.json (read from it)"),
   skipped: z.boolean().optional().describe("Unchanged since the last extraction"),
   error: z.string().optional(),
   hint: z.string().optional(),
@@ -127,6 +150,8 @@ const ExtractResult = z.object({
   ocrLowConfidencePages: z.array(z.number().int()).optional(),
   imageOnlyPages: z.array(z.number().int()).optional().describe("0-based pages still without text"),
   mathFormulas: z.number().int().optional().describe("Display formulas read into LaTeX (set when math recognition ran)"),
+  transcript: ExtractTranscript.optional(),
+  pending: z.boolean().optional().describe("A recording left without a transcript and nothing written: no speech runtime (imstudium setup speech), switched off, or --no-transcribe; hint says which"),
 });
 
 /** `imstudium extract --json` (workspace mode; `--file` returns one result) */
@@ -137,10 +162,11 @@ export const ExtractOutput = z
     failed: z.number().int(),
     hints: z.array(z.string()),
     ocr: OcrSummary,
+    media: MediaSummary.optional().describe("Audio and video: transcripts rendered, transcribed, read from transcript.json, and left pending"),
     results: z.array(ExtractResult),
     searchIndex: z.unknown().nullable().optional(),
   })
-  .describe("Local extraction to content.md: counts, OCR totals and one result per file");
+  .describe("Local extraction to content.md: counts, OCR and transcript totals and one result per file");
 export type ExtractOutput = z.infer<typeof ExtractOutput>;
 
 export const ExamDate = z.object({

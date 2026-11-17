@@ -19,6 +19,7 @@ ERROR_CODES
 EXIT_CODES
 EXTRACTION_LIMITS_FOR_AGENTS
 Extractor
+FFMPEG_HINT
 FORMULAS_HEADING
 FORMULA_FIXES_FILE
 FORMVORGABEN_FIELDS
@@ -30,6 +31,7 @@ ImstudiumError
 LAYOUT_MODEL
 MATH_DECISION
 MATH_MODEL
+MEDIA_EXT
 MessagesResource
 NewsResource
 OCR_MODEL
@@ -41,6 +43,10 @@ PeopleResource
 PlanningResource
 READING_FACTORS
 SDK_VERSION
+SPEECH_ENGINE
+SPEECH_MODEL
+SPEECH_PLATFORMS
+SPEECH_VAD
 ScheduleResource
 SemestersResource
 StudIpClient
@@ -106,6 +112,7 @@ fetchRouteCatalog
 fetchStyle
 findCurrentSemester
 findDois
+findFfmpeg
 findFormula
 findIsbns
 findLeitfaden
@@ -114,6 +121,7 @@ flatten
 flattenAll
 formatBytes
 formatFileTree
+formatTimestamp
 formulaNote
 formvorgabenLines
 formvorgabenPreset
@@ -127,6 +135,7 @@ imageToPdf
 imagesToPdf
 installMathRuntime
 installOcrRuntime
+installSpeechRuntime
 isAuthError
 isChromeRunning
 isDateKey
@@ -181,14 +190,17 @@ readArbeit
 readFormulaFixes
 readRouteCatalog
 readSavedNews
+readTranscript
 readingFeatures
 rebuildSearchIndexes
 recognizeMath
 removeMathRuntime
 removeOcrRuntime
 removeQuelle
+removeSpeechRuntime
 renameQuelle
 renderPdfPages
+renderTranscriptMd
 renderWiki
 replaceFormulaInContent
 resolveArbeit
@@ -217,7 +229,9 @@ shouldRedoForMath
 shouldRedoForOcr
 slugify
 sortTasks
+speechRuntimeStatus
 startOfDay
+summarizeMedia
 summarizeOcr
 syncCommunication
 syncContent
@@ -226,6 +240,9 @@ toImstudiumError
 toMs
 toZonedIso
 toolHints
+transcribeMedia
+transcriptMatches
+transcriptSections
 upgradeLegacyNews
 verifyQuelle
 weekRange

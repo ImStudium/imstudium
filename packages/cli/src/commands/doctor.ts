@@ -5,6 +5,7 @@ import { isAbsolute, join } from "node:path";
 import type { Command } from "commander";
 import {
   detectTools,
+  FFMPEG_HINT,
   findCurrentSemester,
   mathRuntimeStatus,
   ocrRuntimeStatus,
@@ -12,6 +13,7 @@ import {
   readRouteCatalog,
   SDK_VERSION,
   semesterSlug,
+  speechRuntimeStatus,
   toImstudiumError,
   toolHints,
   type StudiumWorkspace,
@@ -298,6 +300,21 @@ export const DOCTOR_CHECKS: CheckDef[] = [
         : " · math not installed (opt-in: imstudium setup ocr --math)";
       if (s.ready) return ok(`${s.model} · PDFium ${s.installed?.pdfium} · ONNX Runtime ${s.installed?.onnxruntime} (offline, on this machine)${math}`, data);
       return warn(`${s.reason ?? "not ready"}: scanned pages and photos stay unread`, s.reason?.startsWith("runs under Node") ? "Run imstudium with Node: npm i -g @imstudium/sdk" : "imstudium setup ocr", data);
+    },
+  },
+  {
+    id: "speech",
+    title: "On-device transcripts",
+    run: async () => {
+      const s = speechRuntimeStatus();
+      const data = { platform: s.platform, ready: s.ready, disabled: s.disabled, dir: s.dir, model: s.model, ffmpeg: s.ffmpeg, threads: s.threads };
+      if (!s.supported) return skip(`no pinned speech runtime for ${s.platform}; recordings stay without transcripts`);
+      if (s.ready && s.disabled) return skip("installed, switched off by IMSTUDIUM_SPEECH=off");
+      if (s.ready && !s.ffmpeg) return warn("installed, but ffmpeg is not on PATH: recordings can't be decoded, so they stay without transcripts", FFMPEG_HINT, data);
+      if (s.ready) return ok(`${s.model} · ${s.engine} · ${s.threads} threads · ffmpeg ${s.ffmpeg} (offline, on this machine)`, data);
+      if (s.reason === "runs under Node only") return warn("installed, but transcripts run under Node only", "Run imstudium with Node: npm i -g @imstudium/sdk", data);
+      if (s.reason === "not installed") return ok(`not installed (opt-in: imstudium setup speech transcribes lecture video and audio, ~${Math.round(s.downloadBytes / 1024 / 1024)} MB once)${s.ffmpeg ? "" : "; it also needs ffmpeg, which is not on PATH"}`, data);
+      return warn(`${s.reason ?? "not ready"}: recordings stay without transcripts`, "imstudium setup speech", data);
     },
   },
   {
