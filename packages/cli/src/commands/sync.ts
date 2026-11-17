@@ -154,6 +154,9 @@ export function registerSync(program: Command): void {
 
         const tools = await sdk.extractor.getTools();
         const results = [];
+        // Folders of long file names moved to their hashed name before extraction, and those left where they were.
+        let migrated = 0;
+        const kept: string[] = [];
         for (const course of courses) {
           const courseDir = courseDirFor(workspace, ws, course.slug);
           results.push(
@@ -161,6 +164,12 @@ export function registerSync(program: Command): void {
               ...extractOpts,
               course: { title: course.title, path: course.path! },
               workspaceRoot: ws,
+              onMigrate: (m) => {
+                migrated += m.moved.length;
+                for (const k of m.kept) {
+                  kept.push(`${course.path}/extracted/${k.from} holds files/${k.source}, whose folder is now extracted/${k.to}, which exists already. Both were kept, so search may show it twice: remove the one you don't need`);
+                }
+              },
             })),
           );
         }
@@ -173,7 +182,7 @@ export function registerSync(program: Command): void {
         const failed = results.filter((r) => r.error).length;
         const media = summarizeMedia(results);
         const speech = speechRuntimeStatus();
-        const toolLines = toolHints(tools);
+        const toolLines = [...toolHints(tools), ...kept];
         const speechHint = media.pending && !speech.ready && speech.supported && opts.transcribe !== false ? [`${media.pending} recording(s) without a transcript: imstudium setup speech transcribes audio and video on this machine`] : [];
         const noFfmpeg = results.filter((r) => r.kind === "media" && r.error && r.hint === FFMPEG_HINT).length;
         const ffmpegHint = noFfmpeg ? [`${noFfmpeg} recording(s) not transcribed: ffmpeg is not on PATH. ${FFMPEG_HINT}`] : [];
@@ -181,11 +190,12 @@ export function registerSync(program: Command): void {
           .filter((r) => r.kind === "media" && r.error && r.hint !== FFMPEG_HINT)
           .map((r) => `  ✗ ${basename(r.source)}: ${r.error}`);
         const ocr = summarizeOcr(results);
-        const payload: ExtractOutput = { extracted: done, skipped, failed, hints: [...toolLines, ...speechHint, ...ffmpegHint], ocr, media, results, searchIndex };
+        const payload: ExtractOutput = { extracted: done, skipped, failed, migrated, hints: [...toolLines, ...speechHint, ...ffmpegHint], ocr, media, results, searchIndex };
         output(
           payload,
           [
             `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}`,
+            migrated ? `Moved ${migrated} extracted folder(s) of long file names to their new name, so each file has its own` : "",
             ocrSummaryLine(ocr),
             mediaSummaryLine(media, speech, opts),
             ...mediaFailures,

@@ -67,13 +67,14 @@ export async function saveConfig(config: Partial<ImstudiumConfig>): Promise<Imst
   return { ...getDefaultConfig(), ...onDisk, ...envConfigOverrides() };
 }
 
-export function slugify(text: string): string {
+/** ASCII slug: diacritics folded, anything else `-`, cut at `max` characters (80; extractSlug asks for the whole). */
+export function slugify(text: string, max = 80): string {
   return text
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "course";
+    .slice(0, max) || "course";
 }
 
 export function expandPath(p: string): string {

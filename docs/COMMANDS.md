@@ -1637,6 +1637,7 @@ Alias: `ingest`
 | `extracted` | integer |  |
 | `skipped` | integer |  |
 | `failed` | integer |  |
+| `migrated` | integer | Extracted folders of long file names moved to their new name (a folder per file) before extraction; a folder whose new name was taken is kept and named in hints |
 | `hints` | string[] |  |
 | `ocr` | object |  |
 | `media`? | object | Audio and video: transcripts rendered, transcribed, read from transcript.json, and left pending |
