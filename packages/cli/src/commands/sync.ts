@@ -8,11 +8,14 @@ import {
   buildSlideViewer,
   expandPath,
   extractSlug,
+  FFMPEG_HINT,
   findCurrentSemester,
   ImstudiumError,
   rebuildSearchIndexes,
   resolveCourseDir,
   semesterSlug,
+  speechRuntimeStatus,
+  summarizeMedia,
   summarizeOcr,
   toImstudiumError,
   toolHints,
@@ -27,6 +30,7 @@ import { courseOption, outputOption, parseDuration, workspaceDir } from "../kit/
 import { nowStamp } from "../kit/format.js";
 import { requireWorkspace, workspaceSyncOptions } from "./workspace.js";
 import { ocrSummaryLine } from "../ocr.js";
+import { mediaSummaryLine } from "../speech.js";
 
 const SYNC_PARTS: SyncPart[] = ["calendar", "wiki", "news", "forum", "courseware", "tasks"];
 
@@ -62,8 +66,9 @@ export function registerSync(program: Command): void {
     .option("--extract", "Extract new/changed files to markdown and rebuild the search index")
     .option("--no-ocr", "With --extract: native text only, even when on-device OCR is installed")
     .option("--no-math", "With --extract: no formula recognition, even when installed (setup ocr --math)")
+    .option("--no-transcribe", "With --extract: no speech recognition on this run, even when installed (setup speech); a recording's transcript.json is still rendered")
     .action(
-      act(async (opts: { output?: string; course?: string; semester?: string; layout?: string; dryRun?: boolean; include?: string; extract?: boolean; ocr?: boolean; math?: boolean; allSemesters?: boolean }) => {
+      act(async (opts: { output?: string; course?: string; semester?: string; layout?: string; dryRun?: boolean; include?: string; extract?: boolean; ocr?: boolean; math?: boolean; transcribe?: boolean; allSemesters?: boolean }) => {
         const sdk = await getSdk();
         const out = workspaceDir(sdk, opts);
         if (opts.layout && opts.layout !== "tree" && opts.layout !== "flat") {
@@ -80,6 +85,7 @@ export function registerSync(program: Command): void {
           extract: opts.extract,
           ocr: opts.ocr,
           math: opts.math,
+          transcribe: opts.transcribe,
           onProgress: note,
         });
         const { report } = result;
@@ -90,6 +96,7 @@ export function registerSync(program: Command): void {
           `Sync: ${report.downloaded} downloaded (${fresh} new, ${updated} updated), ${report.skipped} unchanged, ${report.failed} failed${opts.extract ? `, ${result.extracted} extracted` : ""}`,
           where ? `      ${where}` : "",
           opts.extract && ocrSummaryLine(result.ocr) ? `      ${ocrSummaryLine(result.ocr)}` : "",
+          opts.extract && mediaSummaryLine(result.media, undefined, opts) ? `      ${mediaSummaryLine(result.media, undefined, opts)}` : "",
           await newerSemesterHint(sdk, result.workspace?.activeSemester?.slug),
           ...(report.courseErrors ?? []).map((e) => `      ⚠ ${e.courseTitle}: ${e.message}`),
           ...failedFiles(report).map((f) => `      ✗ ${f.courseTitle ?? ""} · ${f.name ?? f.path}: ${f.message}`),
@@ -102,6 +109,7 @@ export function registerSync(program: Command): void {
           changes: result.changes,
           extracted: opts.extract ? result.extracted : undefined,
           ocr: opts.extract ? result.ocr : undefined,
+          media: opts.extract ? result.media : undefined,
         };
         output(payload, lines.filter(Boolean).join("\n"));
       }),
@@ -110,25 +118,31 @@ export function registerSync(program: Command): void {
   program
     .command("extract")
     .alias("ingest")
-    .description("Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and photos once `setup ocr` ran")
+    .description("Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and photos once `setup ocr` ran, and transcripts of audio and video once `setup speech` ran")
     .addOption(courseOption("Only one course (title fragment, shortcut, slug or id)"))
     .option("--file <path>", "Extract a single file to <file>-extracted/")
     .option("--no-images", "Don't copy photos into pages/")
     .option("--no-ocr", "Native text only, even when on-device OCR is installed (also: IMSTUDIUM_OCR=off)")
     .option("--no-math", "No formula recognition, even when installed (also: IMSTUDIUM_MATH=off)")
-    .option("--force", "Re-extract even if unchanged")
+    .option("--no-transcribe", "No speech recognition, even when installed (also: IMSTUDIUM_SPEECH=off); a recording's transcript.json is still rendered")
+    .option("--force", "Re-extract even if unchanged; with the speech runtime installed this also transcribes every recording again and replaces its transcript.json")
     .addOption(outputOption())
     .action(
-      act(async (opts: { course?: string; file?: string; images?: boolean; ocr?: boolean; math?: boolean; force?: boolean; output?: string }) => {
+      act(async (opts: { course?: string; file?: string; images?: boolean; ocr?: boolean; math?: boolean; transcribe?: boolean; force?: boolean; output?: string }) => {
         const sdk = await getSdk();
-        const extractOpts = { images: opts.images, force: opts.force, ocr: opts.ocr, math: opts.math };
+        const extractOpts = { images: opts.images, force: opts.force, ocr: opts.ocr, math: opts.math, transcribe: opts.transcribe, onProgress: note };
 
         if (opts.file) {
           const src = expandPath(opts.file);
           const outDir = src.replace(/\.[^.]+$/, "") + "-extracted";
           const result = await sdk.extractor.extractFile(src, outDir, extractOpts);
           const ocr = ocrSummaryLine(summarizeOcr([result]));
-          output(result, `Extracted ${result.pages} page(s) → ${result.outDir}${ocr ? `\n${ocr}` : ""}${result.error ? `\nError: ${result.error}` : ""}${result.hint ? `\nHint: ${result.hint}` : ""}`);
+          const what = result.kind === "media" && !result.transcript
+            ? `Not extracted: ${basename(src)} has no transcript`
+            : result.transcript
+              ? `Transcript of ${basename(src)}${result.skipped ? " (unchanged)" : result.transcript.cached ? " (from transcript.json)" : ""}: ${result.pages} section(s) → ${result.outDir}`
+              : `Extracted ${result.pages} page(s) → ${result.outDir}`;
+          output(result, `${what}${ocr ? `\n${ocr}` : ""}${result.error ? `\nError: ${result.error}` : ""}${result.hint ? `\nHint: ${result.hint}` : ""}`);
           return;
         }
 
@@ -154,16 +168,32 @@ export function registerSync(program: Command): void {
         const searchIndex = await rebuildSearchIndexes(ws, workspace);
         if (searchIndex) await sdk.studium.refreshSearchArtifacts(ws, workspace);
 
-        const done = results.filter((r) => !r.error && !r.skipped).length;
+        const done = results.filter((r) => !r.error && !r.skipped && !r.pending).length;
         const skipped = results.filter((r) => r.skipped).length;
         const failed = results.filter((r) => r.error).length;
-        const hints = toolHints(tools);
+        const media = summarizeMedia(results);
+        const speech = speechRuntimeStatus();
+        const toolLines = toolHints(tools);
+        const speechHint = media.pending && !speech.ready && speech.supported && opts.transcribe !== false ? [`${media.pending} recording(s) without a transcript: imstudium setup speech transcribes audio and video on this machine`] : [];
+        const noFfmpeg = results.filter((r) => r.kind === "media" && r.error && r.hint === FFMPEG_HINT).length;
+        const ffmpegHint = noFfmpeg ? [`${noFfmpeg} recording(s) not transcribed: ffmpeg is not on PATH. ${FFMPEG_HINT}`] : [];
+        const mediaFailures = results
+          .filter((r) => r.kind === "media" && r.error && r.hint !== FFMPEG_HINT)
+          .map((r) => `  ✗ ${basename(r.source)}: ${r.error}`);
         const ocr = summarizeOcr(results);
-        const ocrLine = ocrSummaryLine(ocr);
-        const payload: ExtractOutput = { extracted: done, skipped, failed, hints, ocr, results, searchIndex };
+        const payload: ExtractOutput = { extracted: done, skipped, failed, hints: [...toolLines, ...speechHint, ...ffmpegHint], ocr, media, results, searchIndex };
         output(
           payload,
-          `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}${ocrLine ? `\n${ocrLine}` : ""}${hints.length ? `\n${hints.join("\n")}` : ""}`,
+          [
+            `Extracted ${done}, skipped ${skipped} (unchanged), failed ${failed}${searchIndex ? ` · ${searchIndex.chunkCount} search chunks` : ""}`,
+            ocrSummaryLine(ocr),
+            mediaSummaryLine(media, speech, opts),
+            ...mediaFailures,
+            ...ffmpegHint,
+            ...toolLines,
+          ]
+            .filter(Boolean)
+            .join("\n"),
         );
       }),
     );
@@ -233,7 +263,7 @@ export function registerSync(program: Command): void {
           title = basename(src);
           // The folder sync uses (folder-qualified, extract.ts), so no second copy goes stale in search.
           outDir = join(courseDir, "extracted", extractSlug(relative(join(courseDir, "files"), src)));
-          await sdk.extractor.extractFile(src, outDir);
+          await sdk.extractor.extractFile(src, outDir, { transcribe: false });
         }
 
         const { viewerHtml, pageImages } = await buildSlideViewer(outDir, title);

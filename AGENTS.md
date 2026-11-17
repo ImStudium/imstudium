@@ -61,6 +61,7 @@ Some limits on extracted text:
   - `imstudium formulas check <file> <id> --latex '…'`
   - and, when the student wants corrected notes, `imstudium formulas fix`, which refuses a correction that doesn't check
 - For diagrams, open the original in `files/`. Never invent math from the markdown, from memory or from what a formula usually looks like.
+- Lecture recordings (audio and video) get a transcript in `## hh:mm:ss` sections of about two minutes: on-device after `imstudium setup speech` (Parakeet TDT 0.6B v3, ffmpeg on `PATH`), or read from a `transcript.json` another runner left, whatever its model. The header names the model and says whether it ran on this machine. A search hit's citation ends with the section's start time: cite the minute, and treat the text as model output (names, numbers and formulas especially).
 
 ### MCP (opt-in)
 
@@ -139,7 +140,7 @@ Bun workspaces, four packages. Only `@imstudium/sdk` is published, with the CLI 
 - `studium.ts`: `studium.json`, `STUDIUM.md`, `klausuren.md`, `COURSE.md`, `llms.txt`.
 - `rollover.ts`: semester start and the archive.
 - `timetable.ts`, `ics.ts`, `berlin.ts`: dates in Europe/Berlin, the weekly plan, `stundenplan.md`.
-- `extract.ts` + `ingest/local-docs.ts`: one ingest pipeline (pdf-inspector for PDF, AnyDoc for the rest, both lazy-loaded).
+- `extract.ts` + `ingest/local-docs.ts`: one ingest pipeline (pdf-inspector for PDF, AnyDoc for the rest, both lazy-loaded). Recordings go through `ingest/transcript.ts` (the `transcript.json` cache, sections, `content.md`) and `ingest/speech.ts` (the on-device runtime and engine).
 - `search-corpus.ts`: `corpus.jsonl` and `materials.json`. `search.ts`: offline BM25 over the corpus and the content markdown.
 - `arbeit/`: written work and its citation registry. `store.ts` (Arbeit folders, `quellen.json`, regenerated `quellen.bib` and `ARBEIT.md`), `identifiers.ts` and `citekey.ts`, `resolve.ts` (doi.org, Crossref incl. retractions, DNB SRU, Open Library, web meta tags; `fetch` injectable), `bibtex.ts` and `interchange.ts` (BibTeX/BibLaTeX, RIS, CSL-JSON), `styles.ts` and `format.ts` (CSL through citeproc-js, loaded lazily; bundled styles and locales in `packages/sdk/csl/`), `formvorgaben.ts`, `manuscript.ts` (md, tex, typ, docx), `check.ts`, `vorlage.ts` (docx, LaTeX, Typst, Pandoc), `course.ts` (literature and the Leitfaden in course files). Tests use synthetic sources (DOI prefix 10.5555) and a fake fetch.
 
@@ -182,7 +183,7 @@ Bun workspaces, four packages. Only `@imstudium/sdk` is published, with the CLI 
   - `GET /courseware-structural-elements/{id}` stores the last-visited page
 - Workspace writers are idempotent (content hash in frontmatter) and keep a `## Student notes` section across rebuilds. Resolve folders from `course.path`.
 - Exam dates parsed from course text stay `confirmed: false`.
-- Extraction stays on the student's machine with pinned artifacts: pdf-inspector and AnyDoc, plus the optional runtime from `imstudium setup ocr` (PDFium, ONNX Runtime and the PP-OCR models through pdf-inspector; PP-DocLayoutV2 and UniRec-0.1B for `--math`), every download checked against its SHA-256 in `ocr-runtime.ts` and `math.ts`. Don't reintroduce poppler, Tesseract, LibreOffice or cloud parsing, and never send a page to a remote model. Formula LaTeX goes only in `$$…$$` blocks under `FORMULAS_HEADING` and in `math.json`; the prose stays markdown. A change to OCR or math runs `bun run bench` (docs/BENCHMARKS.md) before and after.
+- Extraction stays on the student's machine with pinned artifacts: pdf-inspector and AnyDoc, plus the optional runtime from `imstudium setup ocr` (PDFium, ONNX Runtime and the PP-OCR models through pdf-inspector; PP-DocLayoutV2 and UniRec-0.1B for `--math`) and from `imstudium setup speech` (sherpa-onnx-node, Parakeet TDT 0.6B v3 int8, Silero VAD; ffmpeg from `PATH` decodes), every download checked against its SHA-256 in `ocr-runtime.ts`, `math.ts` and `ingest/speech.ts` through one installer (`ingest/pinned.ts`). ImStudium never sends a recording anywhere; it only reads a `transcript.json` that a runner outside it wrote (`ingest/transcript.ts`). Don't reintroduce poppler, Tesseract, LibreOffice or cloud parsing, and never send a page to a remote model. Formula LaTeX goes only in `$$…$$` blocks under `FORMULAS_HEADING` and in `math.json`; the prose stays markdown. A change to OCR or math runs `bun run bench` (docs/BENCHMARKS.md) before and after.
 - Messages are never written into the workspace. `people` counts students and never names them. `snapshots/studium.json` holds counts and dates only.
 
 ### Tests and validation

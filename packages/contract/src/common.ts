@@ -205,7 +205,8 @@ export const SearchHit = z.object({
   kind: SearchKind,
   course: z.string().optional(),
   path: z.string(),
-  page: z.number().int().optional(),
+  page: z.number().int().optional().describe("Page or slide; for a recording, the transcript section's number"),
+  at: z.string().optional().describe("Recordings: where the section starts in the recording (hh:mm:ss); the citation ends with it"),
   score: z.number(),
   snippet: z.string(),
 });

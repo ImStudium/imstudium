@@ -64,7 +64,7 @@ export function registerSearch(program: Command): void {
           ? hits.flatMap((h, i) => [
               `${String(i + 1).padStart(2)}. ${h.citation}  [${h.kind}]`,
               `    ${h.snippet}`,
-              `    ${h.path}${h.page ? `  (page ${h.page})` : ""}`,
+              `    ${h.path}${h.at ? `  (at ${h.at})` : h.page ? `  (page ${h.page})` : ""}`,
             ])
           : [`No hits for "${query}". Try fewer words, --archive, or imstudium sync --extract to index new files.`];
         const payload: SearchOutput = { query, count: hits.length, hits: hits.map(({ text: _text, ...h }) => ({ ...h, score: Math.round(h.score * 100) / 100 })) };

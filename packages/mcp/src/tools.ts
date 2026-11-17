@@ -56,13 +56,13 @@ export const MCP_TOOLS = [
   {
     name: "studium_read_material",
     description:
-      "Extract one course file via the local AnyDoc + pdf-inspector pipeline. Returns markdown content. Not LaTeX; open the original file for formulas/diagrams. Photos copy into pageImages.",
+      "Extract one course file via the local AnyDoc + pdf-inspector pipeline. Returns markdown content. Not LaTeX; open the original file for formulas/diagrams. Photos copy into pageImages. A lecture recording returns its on-device transcript (## hh:mm:ss sections) once one exists; this tool never transcribes.",
     inputSchema: {
       type: "object",
       properties: {
         course: { type: "string", description: "Course title substring" },
         file: { type: "string", minLength: 1, description: "Filename substring (e.g. 'vorlesung 3', 'klausur')" },
-        page: { type: "integer", minimum: 1, description: "Optional: only this page/slide (1-based)" },
+        page: { type: "integer", minimum: 1, description: "Optional: only this page/slide (1-based); for a recording, the transcript section" },
       },
       required: ["course", "file"],
     },

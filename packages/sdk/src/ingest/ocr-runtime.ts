@@ -224,9 +224,10 @@ export async function downloadToFile(
   url: string,
   sha256: string,
   dest: string,
-  options: { fetchImpl?: typeof fetch; retries?: number; onProgress?: (msg: string) => void; waitMs?: number; startedOver?: boolean } = {},
+  options: { fetchImpl?: typeof fetch; retries?: number; onProgress?: (msg: string) => void; waitMs?: number; startedOver?: boolean; errorCode?: "OCR_INSTALL_FAILED" | "SPEECH_INSTALL_FAILED" } = {},
 ): Promise<number> {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const code = options.errorCode ?? "OCR_INSTALL_FAILED";
   const retries = options.retries ?? 5;
   const name = url.split("/").pop()!;
   const part = `${dest}.part`;
@@ -242,7 +243,7 @@ export async function downloadToFile(
       const res = await fetchImpl(url, { redirect: "follow", ...(have ? { headers: { Range: `bytes=${have}-` } } : {}) });
       if (res.status === 416 && have) break; // the partial file is already whole: verify it below
       if (!res.ok) {
-        if (res.status < 500) throw new ImstudiumError(`Download failed (${res.status}): ${url}`, "OCR_INSTALL_FAILED", res.status, undefined, { url });
+        if (res.status < 500) throw new ImstudiumError(`Download failed (${res.status}): ${url}`, code, res.status, undefined, { url });
         throw new Error(`HTTP ${res.status}`);
       }
       const append = have > 0 && res.status === 206;
@@ -266,7 +267,7 @@ export async function downloadToFile(
     }
     const why = failure instanceof Error ? failure.message : String(failure);
     if (attempt >= retries) {
-      throw new ImstudiumError(`Could not download ${name}: ${why}`, "OCR_INSTALL_FAILED", undefined, `Run the same command again: it resumes at ${Math.round((await size()) / 1e6)} MB`, { url });
+      throw new ImstudiumError(`Could not download ${name}: ${why}`, code, undefined, `Run the same command again: it resumes at ${Math.round((await size()) / 1e6)} MB`, { url });
     }
     options.onProgress?.(`${name}: connection broke off at ${Math.round((await size()) / 1e6)} MB (${why}), retrying`);
     await new Promise((r) => setTimeout(r, (options.waitMs ?? 2000) * (attempt + 1)));
@@ -279,7 +280,7 @@ export async function downloadToFile(
   }
   if (got !== sha256) {
     await rm(part, { force: true });
-    throw new ImstudiumError(`Checksum mismatch for ${name}; nothing was installed`, "OCR_INSTALL_FAILED", undefined, "The download was not the pinned file. Try again later; if it persists, open an issue", {
+    throw new ImstudiumError(`Checksum mismatch for ${name}; nothing was installed`, code, undefined, "The download was not the pinned file. Try again later; if it persists, open an issue", {
       url,
       expected: sha256,
       got,

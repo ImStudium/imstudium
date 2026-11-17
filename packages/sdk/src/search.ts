@@ -19,6 +19,8 @@ export interface SearchDoc {
   /** Workspace-relative file to open. */
   path: string;
   page?: number;
+  /** Recordings: the section's start time in the recording (hh:mm:ss). */
+  at?: string;
   text: string;
 }
 
@@ -141,6 +143,7 @@ export async function loadSearchDocs(workspacePath: string, options: SearchOptio
           courseTitle?: string;
           extractSlug?: string;
           page?: number;
+          at?: string;
           text?: string;
         };
         if (!c.text) continue;
@@ -151,6 +154,7 @@ export async function loadSearchDocs(workspacePath: string, options: SearchOptio
           course: c.courseTitle,
           path: c.coursePath && c.extractSlug ? `${c.coursePath}/extracted/${c.extractSlug}/content.md` : rel,
           page: c.page,
+          ...(c.at ? { at: c.at } : {}),
           text: c.text,
         });
       } catch {

@@ -82,7 +82,7 @@
         "page": {
           "type": "integer",
           "minimum": 1,
-          "description": "Optional: only this page/slide (1-based)"
+          "description": "Optional: only this page/slide (1-based); for a recording, the transcript section"
         }
       },
       "required": [

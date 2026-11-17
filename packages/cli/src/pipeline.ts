@@ -8,6 +8,7 @@ import {
   rebuildSearchIndexes,
   semesterIdFromRelationships,
   semesterSlug,
+  summarizeMedia,
   summarizeOcr,
   syncCommunication,
   syncContent,
@@ -15,6 +16,7 @@ import {
   contentDeps,
   type ContentPart,
   type CwTask,
+  type MediaSummary,
   type OcrSummary,
   type SyncPart,
   type CourseWithSemester,
@@ -40,6 +42,8 @@ export interface RunSyncOptions {
   ocr?: boolean;
   /** false: no formula recognition (sync --no-math). */
   math?: boolean;
+  /** false: no speech recognition (sync --no-transcribe); a recording's transcript.json is still rendered. */
+  transcribe?: boolean;
   include?: SyncPart[];
   onProgress?: (message: string) => void;
 }
@@ -73,6 +77,8 @@ export interface RunSyncResult {
   extracted: number;
   /** OCR totals of this run's extraction. */
   ocr: OcrSummary;
+  /** Transcript totals of this run's extraction. */
+  media: MediaSummary;
   changes: ChangeEntry[];
 }
 
@@ -132,7 +138,7 @@ export function groupCoursesBySemester(
  */
 export async function runSync(sdk: Sdk, opts: RunSyncOptions): Promise<RunSyncResult> {
   const progress = opts.onProgress ?? (() => undefined);
-  const result: RunSyncResult = { report: emptyReport(), semesters: [], extracted: 0, ocr: summarizeOcr([]), changes: [], tasks: [] };
+  const result: RunSyncResult = { report: emptyReport(), semesters: [], extracted: 0, ocr: summarizeOcr([]), media: summarizeMedia([]), changes: [], tasks: [] };
   const include = opts.include ?? DEFAULT_INCLUDE;
   const layout = opts.layout ?? "tree";
   const origin = sdk.config.instanceOrigin;
@@ -330,8 +336,18 @@ async function extractAndIndex(
       workspaceRoot: opts.out,
       ocr: opts.ocr,
       math: opts.math,
+      transcribe: opts.transcribe,
+      onProgress: opts.onProgress,
     });
-    result.extracted += results.filter((r) => !r.error && !r.skipped).length;
+    result.extracted += results.filter((r) => !r.error && !r.skipped && !r.pending).length;
+    const media = summarizeMedia(results);
+    result.media = {
+      transcripts: result.media.transcripts + media.transcripts,
+      transcribed: result.media.transcribed + media.transcribed,
+      cached: result.media.cached + media.cached,
+      seconds: result.media.seconds + media.seconds,
+      pending: result.media.pending + media.pending,
+    };
     const ocr = summarizeOcr(results);
     result.ocr = {
       files: result.ocr.files + ocr.files,

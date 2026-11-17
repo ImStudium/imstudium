@@ -50,6 +50,7 @@ export const ERROR_CODES = {
   BROWSER_LAUNCH_FAILED: spec("internal", "The sign-in browser (Playwright) could not start", "Run: npx playwright install chromium"),
   CLI_NOT_FOUND: spec("internal", "The MCP server could not find the imstudium CLI to run", "npm i -g @imstudium/sdk, or set IMSTUDIUM_CLI to its path"),
   OCR_INSTALL_FAILED: spec("internal", "Downloading, verifying or starting the on-device OCR runtime failed (nothing half-installed is used)", "Check the connection, then run: imstudium setup ocr --force", { retryable: true }),
+  SPEECH_INSTALL_FAILED: spec("internal", "Downloading, verifying or starting the on-device speech runtime failed (nothing half-installed is used)", "Check the connection, then run: imstudium setup speech (it resumes; --force starts over)", { retryable: true }),
   // ── 2 usage ────────────────────────────────────────────────────────────────
   BAD_ARGS: spec("usage", "An argument or flag is missing, unknown or malformed", "See: imstudium <command> --help", {
     aliases: ["MISSING_ARG", "INVALID_KEY"],
@@ -82,6 +83,8 @@ export const ERROR_CODES = {
   SEMESTER_NOT_FOUND: spec("not_found", "No semester matches the label", "imstudium semesters lists them, e.g. --semester \"WS 2026/27\"", {
     aliases: ["NO_SEMESTER"],
   }),
+  SPEECH_UNSUPPORTED: spec("not_found", "No pinned on-device speech runtime for this platform or JavaScript runtime", "Recordings stay without transcripts; on-device transcripts run on macOS (arm64, x64), Linux x64/arm64 and Windows x64 under Node"),
+  FFMPEG_MISSING: spec("not_found", "ffmpeg is not on PATH, and transcripts need it to decode audio and video", "Install ffmpeg (macOS: brew install ffmpeg · Debian/Ubuntu: sudo apt install ffmpeg · Windows: winget install ffmpeg)"),
   OCR_UNSUPPORTED: spec("not_found", "No pinned on-device OCR runtime for this platform or JavaScript runtime", "Extraction keeps the native text and marks image-only pages; OCR runs on macOS arm64, Linux x64/arm64 and Windows x64 under Node"),
   FORMULA_NOT_FOUND: spec("not_found", "No recognised formulas in that file, or none with that id", "imstudium formulas list <file> shows the ids; formulas are read at extraction once imstudium setup ocr --math has run", {
     aliases: ["NO_FORMULAS"],

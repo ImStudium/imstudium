@@ -5,9 +5,11 @@ import { convertImage, convertLocalDocument, IMAGE_ONLY, NATIVE_RULE, OCR_MERGE,
 import { imageToPdf } from "./ingest/image-pdf.js";
 import { isMathCandidate, LAYOUT_MODEL, MATH_DECISION, MATH_MODEL, mathRuntimeStatus, recognizeMath, type Formula, type MathRuntimeStatus } from "./ingest/math.js";
 import { ocrRuntimeStatus, type OcrRuntimeStatus } from "./ingest/ocr-runtime.js";
+import { FFMPEG_HINT, resetSpeechEngine, SPEECH_ENGINE, SPEECH_MODEL, SPEECH_VAD, speechRuntimeStatus, transcribeMedia, type SpeechRuntimeStatus } from "./ingest/speech.js";
+import { MEDIA_EXT, readTranscript, renderTranscriptMd, transcriptSections, writeTranscript, type TranscriptDoc } from "./ingest/transcript.js";
 import { applyFormulaFixes, formulaNote, readFormulaFixes, type FormulaEntry } from "./formulas.js";
 import { buildCourseSearchIndex } from "./search-corpus.js";
-import type { ExtractManifest, ExtractMathInfo, ExtractOcrInfo, ExtractResult, MaterialKind, StudiumCourse } from "./types.js";
+import type { ExtractManifest, ExtractMathInfo, ExtractOcrInfo, ExtractResult, ExtractTranscriptInfo, MaterialKind, StudiumCourse } from "./types.js";
 
 const PDF_EXT = new Set([".pdf"]);
 const OFFICE_EXT = new Set([
@@ -28,7 +30,23 @@ export function detectKind(filename: string): MaterialKind {
   if (OFFICE_EXT.has(ext)) return "office";
   if (IMAGE_EXT.has(ext)) return "image";
   if (TEXT_EXT.has(ext)) return "text";
+  if (MEDIA_EXT.has(ext)) return "media";
   return "unsupported";
+}
+
+/** Options every extraction takes (one file or a course folder). */
+export interface ExtractOptions {
+  images?: boolean;
+  dpi?: number;
+  force?: boolean;
+  /** false: native text only, even with the OCR runtime installed (no math either). */
+  ocr?: boolean;
+  /** false: no formula recognition, even with the math runtime installed. */
+  math?: boolean;
+  /** false: no speech recognition, even with the speech runtime installed; a matching transcript.json is still rendered. */
+  transcribe?: boolean;
+  /** Progress of long steps (a recording being transcribed). */
+  onProgress?: (message: string) => void;
 }
 
 export interface ExtractTools {
@@ -60,11 +78,7 @@ export class Extractor {
     return this.tools;
   }
 
-  async extractFile(
-    src: string,
-    outDir: string,
-    opts: { images?: boolean; dpi?: number; force?: boolean; ocr?: boolean; math?: boolean } = {},
-  ): Promise<ExtractResult> {
+  async extractFile(src: string, outDir: string, opts: ExtractOptions = {}): Promise<ExtractResult> {
     const name = basename(src);
     const kind = detectKind(name);
 
@@ -74,27 +88,40 @@ export class Extractor {
       try {
         const prev = JSON.parse(await readFile(manifestPath, "utf-8")) as ExtractManifest;
         const unchanged = prev.sourceMtimeMs === srcStat.mtimeMs && prev.sourceSize === srcStat.size;
-        if (unchanged && !nativeOutdated(prev) && !(await this.ocrWouldAdd(prev, outDir, opts)) && !(await this.mathWouldAdd(prev, outDir, opts))) {
-          return { source: src, outDir, kind, pages: prev.pages, skipped: true, tool: prev.tool };
+        if (
+          unchanged &&
+          !nativeOutdated(prev) &&
+          !(await this.ocrWouldAdd(prev, outDir, opts)) &&
+          !(await this.mathWouldAdd(prev, outDir, opts)) &&
+          !(await this.transcriptWouldAdd(prev, outDir, srcStat, opts))
+        ) {
+          return { source: src, outDir, kind, pages: prev.pages, skipped: true, tool: prev.tool, ...(prev.transcript ? { transcript: prev.transcript } : {}) };
         }
       } catch {
         // no previous extraction
       }
     }
 
-    await ensureDir(outDir);
-
     let result: ExtractResult;
-    if (kind === "image") {
+    if (kind === "media") {
+      const media = await this.extractMedia(src, outDir, srcStat, opts);
+      // Nothing is written for a recording left without a transcript: the next run looks again.
+      if (!media.write) return media.result;
+      result = media.result;
+    } else if (kind === "image") {
+      await ensureDir(outDir);
       result = await this.extractImage(src, outDir, opts);
     } else if (kind === "text") {
+      await ensureDir(outDir);
       result = await this.extractText(src, outDir);
     } else if (kind === "unsupported") {
+      await ensureDir(outDir);
       result = {
         source: src, outDir, kind, pages: 0,
         error: `Unsupported file type: ${extname(name)}`,
       };
     } else {
+      await ensureDir(outDir);
       result = await this.extractDocument(src, outDir, kind, opts);
     }
 
@@ -114,6 +141,7 @@ export class Extractor {
       ...(this.lastOcrError ? { ocrError: this.lastOcrError } : {}),
       ...(this.lastMath ? { math: this.lastMath } : {}),
       ...(this.lastMathError ? { mathError: this.lastMathError } : {}),
+      ...(result.transcript ? { transcript: result.transcript } : {}),
     };
     this.lastOcr = undefined;
     this.lastOcrError = undefined;
@@ -127,6 +155,78 @@ export class Extractor {
   private lastOcrError: string | undefined;
   private lastMath: ExtractMathInfo | undefined;
   private lastMathError: string | undefined;
+
+  /**
+   * An unchanged recording is extracted again when there is more to show: a
+   * transcript.json written or replaced since (by a runner outside ImStudium,
+   * whatever its model), or none yet and now a runtime to make one.
+   */
+  private async transcriptWouldAdd(prev: ExtractManifest, outDir: string, srcStat: { size: number; mtimeMs: number }, opts: ExtractOptions): Promise<boolean> {
+    if (prev.kind !== "media") return false;
+    const cached = await readTranscript(outDir, srcStat);
+    if (cached) return !prev.transcript || prev.transcript.model !== cached.model || prev.transcript.transcribedAt !== cached.transcribedAt;
+    // A transcription that failed is not retried by itself (extract --force tries again).
+    if (prev.error) return false;
+    return canTranscribe(speechRuntimeStatus(), opts);
+  }
+
+  /**
+   * A recording: its matching transcript.json, whatever model wrote it, else a
+   * transcription on this machine when the runtime and ffmpeg are here, else
+   * nothing (pending). `force` transcribes again even over a matching
+   * transcript.json, when it can. `write: false`: nothing went to disk, not
+   * even manifest.json.
+   */
+  private async extractMedia(src: string, outDir: string, srcStat: { size: number; mtimeMs: number }, opts: ExtractOptions): Promise<{ result: ExtractResult; write: boolean }> {
+    const base = { source: src, outDir, kind: "media" as const };
+    const status = speechRuntimeStatus();
+    let doc = await readTranscript(outDir, srcStat);
+    const redo = !!opts.force && !!doc && canTranscribe(status, opts) && !!status.ffmpeg;
+    const cached = !!doc && !redo;
+    if (!doc || redo) {
+      if (!canTranscribe(status, opts)) return { result: { ...base, pages: 0, pending: true, hint: pendingHint(status, opts) }, write: false };
+      if (!status.ffmpeg) {
+        return { result: { ...base, pages: 0, error: "ffmpeg not found on PATH: it decodes audio and video for the transcript", hint: FFMPEG_HINT }, write: false };
+      }
+      try {
+        opts.onProgress?.(`transcribing ${basename(src)} on this machine (${status.threads} threads)`);
+        const t = await transcribeMedia(src, { threads: status.threads, ffmpeg: status.ffmpeg, onProgress: opts.onProgress });
+        doc = {
+          schemaVersion: "1",
+          model: SPEECH_MODEL,
+          vad: SPEECH_VAD,
+          engine: SPEECH_ENGINE,
+          onDevice: true,
+          source: { file: basename(src), size: srcStat.size, mtimeMs: srcStat.mtimeMs },
+          duration: t.duration,
+          transcribedAt: new Date().toISOString(),
+          segments: t.segments,
+        } satisfies TranscriptDoc;
+        await ensureDir(outDir);
+        await writeTranscript(outDir, doc);
+        this.transcribed = true;
+      } catch (err) {
+        await ensureDir(outDir);
+        return { result: { ...base, pages: 0, tool: "sherpa-onnx", error: `Transcription failed: ${err instanceof Error ? err.message : String(err)}`, hint: "Check that the recording plays; imstudium extract --force tries again" }, write: true };
+      }
+    }
+    await ensureDir(outDir);
+    const sections = transcriptSections(doc.segments).length;
+    await writeFile(join(outDir, "content.md"), renderTranscriptMd(basename(src), doc));
+    const transcript: ExtractTranscriptInfo = {
+      model: doc.model,
+      onDevice: doc.onDevice === true,
+      duration: doc.duration,
+      segments: doc.segments.length,
+      sections,
+      cached,
+      transcribedAt: doc.transcribedAt,
+    };
+    return { result: { ...base, pages: sections, tool: cached ? "transcript.json" : "sherpa-onnx", transcript }, write: true };
+  }
+
+  /** Set once a recording was transcribed, so extractDir can let go of the loaded model. */
+  private transcribed = false;
 
   /** See {@link shouldRedoForOcr}. */
   private async ocrWouldAdd(prev: ExtractManifest, outDir: string, opts: { ocr?: boolean }): Promise<boolean> {
@@ -217,25 +317,24 @@ export class Extractor {
   async extractDir(
     filesDir: string,
     outRoot: string,
-    opts: {
-      images?: boolean;
-      dpi?: number;
-      force?: boolean;
-      /** false: native text only, even with the OCR runtime installed (no math either). */
-      ocr?: boolean;
-      /** false: no formula recognition, even with the math runtime installed. */
-      math?: boolean;
+    opts: ExtractOptions & {
       course?: Pick<StudiumCourse, "title" | "path">;
       workspaceRoot?: string;
     } = {},
   ): Promise<ExtractResult[]> {
     const files = await walkFiles(filesDir);
     const results: ExtractResult[] = [];
-    for (const f of files) {
-      if (detectKind(f) === "unsupported") continue;
-      // Folder-qualified slug: Übungen/Blatt01.pdf and Lösungen/Blatt01.pdf stay apart.
-      const outDir = join(outRoot, extractSlug(relative(filesDir, f)));
-      results.push(await this.extractFile(f, outDir, opts));
+    try {
+      for (const f of files) {
+        if (detectKind(f) === "unsupported") continue;
+        // Folder-qualified slug: Übungen/Blatt01.pdf and Lösungen/Blatt01.pdf stay apart.
+        const outDir = join(outRoot, extractSlug(relative(filesDir, f)));
+        results.push(await this.extractFile(f, outDir, opts));
+      }
+    } finally {
+      // The speech model holds about 1 GB: let it go between courses (and between rounds of watch).
+      if (this.transcribed) resetSpeechEngine();
+      this.transcribed = false;
     }
 
     if (opts.course) {
@@ -340,6 +439,46 @@ export class Extractor {
     await writeFile(join(outDir, "content.md"), renderContentMd(basename(src), "text", [raw], false));
     return { source: src, outDir, kind: "text", pages: 1, tool: "passthrough" };
   }
+}
+
+/** Whether a recording without a matching transcript.json may be transcribed now (ffmpeg is checked separately, so a missing one is an error, not silence). */
+export function canTranscribe(status: Pick<SpeechRuntimeStatus, "ready" | "disabled">, opts: { transcribe?: boolean } = {}): boolean {
+  return opts.transcribe !== false && status.ready && !status.disabled;
+}
+
+/** Why a recording was left without a transcript, and what would make one. */
+export function pendingHint(status: Pick<SpeechRuntimeStatus, "ready" | "supported" | "disabled" | "reason">, opts: { transcribe?: boolean } = {}): string {
+  if (opts.transcribe === false) return "Not transcribed (--no-transcribe)";
+  if (status.ready && status.disabled) return "Not transcribed: switched off by IMSTUDIUM_SPEECH=off";
+  if (!status.supported) return `Not transcribed: ${status.reason ?? "no on-device speech runtime for this platform"}`;
+  if (status.reason === "runs under Node only") return "Not transcribed: on-device transcripts run under Node (npm i -g @imstudium/sdk)";
+  return "Not transcribed yet: imstudium setup speech installs on-device transcripts for audio and video";
+}
+
+/** Transcript totals over extraction results, for sync and extract summaries. */
+export interface MediaSummary {
+  /** Recordings whose content.md was rendered from a transcript in this run. */
+  transcripts: number;
+  /** Of those, transcribed on this machine in this run. */
+  transcribed: number;
+  /** Of those, read from a transcript.json that was already there. */
+  cached: number;
+  /** Seconds of audio transcribed in this run. */
+  seconds: number;
+  /** Recordings left without a transcript (no runtime, switched off, --no-transcribe). */
+  pending: number;
+}
+
+export function summarizeMedia(results: Array<Pick<ExtractResult, "kind" | "transcript" | "pending" | "skipped" | "error">>): MediaSummary {
+  const done = results.filter((r) => r.kind === "media" && r.transcript && !r.skipped && !r.error);
+  const fresh = done.filter((r) => !r.transcript!.cached);
+  return {
+    transcripts: done.length,
+    transcribed: fresh.length,
+    cached: done.length - fresh.length,
+    seconds: Math.round(fresh.reduce((n, r) => n + r.transcript!.duration, 0)),
+    pending: results.filter((r) => r.pending).length,
+  };
 }
 
 /**

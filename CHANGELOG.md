@@ -4,6 +4,23 @@ All notable changes to ImStudium.
 
 ## [Unreleased]
 
+Lecture recordings become searchable text: audio and video get a transcript in sections of about two minutes, each headed by its start time, so a search hit cites the minute.
+
+### Added
+
+- **`imstudium setup speech`** (`--force`, `--remove`): on-device transcripts for lecture video and audio. It downloads sherpa-onnx-node 2.0.1 with its native package for the platform (macOS arm64 and x64, Linux x64 and arm64, Windows x64), Parakeet TDT 0.6B v3 int8 and Silero VAD, about 650 MB once, each pinned and checked against its SHA-256, into `~/.local/share/imstudium/speech` (`IMSTUDIUM_SPEECH_DIR`). ffmpeg on `PATH` decodes the recordings. Nothing leaves the machine; `IMSTUDIUM_SPEECH=off` switches it off and `IMSTUDIUM_SPEECH_THREADS` sets the threads (default: half the cores, at most 8).
+- **Recordings in `extract` and `sync --extract`**: `.mp4 .mkv .webm .mov .m4v .mp3 .m4a .wav .ogg .oga .opus .flac .aac` are a new material kind, `media`. A `transcript.json` next to `content.md` whose source size and mtime match the recording is used as it is, whatever model wrote it (a runner outside ImStudium may leave one); otherwise the recording is transcribed on the machine when the runtime and ffmpeg are there, and the transcript is written to `transcript.json`. Without the runtime nothing is written and the summary counts the recordings left without a transcript, with the hint to run `imstudium setup speech`. Without ffmpeg the recording fails with the install hint.
+- `content.md` for a recording names the model, says whether it ran on this machine, notes the languages when a lecture mixes them, and marks the text as model output to check against the recording. Its `## hh:mm:ss` sections are the search unit: `corpus.jsonl` and `search` carry `at` (the start time), and the citation ends with it (`Statistik I · Vorlesung-03.mp4 · 00:42:10`).
+- `--no-transcribe` on `extract` and `sync`: no speech recognition for one run; a matching `transcript.json` is still rendered. `extract --force` transcribes recordings again when the runtime is installed.
+- `--json`: results of kind `media` carry `transcript` (`model`, `onDevice`, `duration`, `segments`, `sections`, `cached`, `transcribedAt`) or `pending`; `extract` and `sync --extract` add a `media` summary; search hits add `at`. Contract schema for `setup speech`; error codes `SPEECH_INSTALL_FAILED`, `SPEECH_UNSUPPORTED`, `FFMPEG_MISSING`.
+- `doctor` checks the speech runtime and warns when it is installed but ffmpeg is missing; `setup status` shows it.
+- SDK: `installSpeechRuntime`, `removeSpeechRuntime`, `speechRuntimeStatus`, `transcribeMedia`, `findFfmpeg`, `readTranscript`, `transcriptMatches`, `transcriptSections`, `renderTranscriptMd`, `formatTimestamp`, `summarizeMedia`, `MEDIA_EXT`, `SPEECH_MODEL`, `SPEECH_VAD`, `SPEECH_ENGINE`, `SPEECH_PLATFORMS`, `FFMPEG_HINT`.
+
+### Changed
+
+- The math runtime and the speech runtime share one installer for pinned downloads (`ingest/pinned.ts`): resumable, SHA-256-checked, recorded in `verified.json`.
+- The MCP tool `studium_read_material` never transcribes: it returns a recording's transcript when one exists, and its `page` selects a transcript section.
+
 ### Fixed
 
 - **The formula check no longer refuses correct readings on pdflatex pages.** TeX's symbol fonts keep symbols at letter and digit codes, and a PDF without a Unicode table reports some of them as those characters: cmsy's slash of ≠ and ∉ as "6", the prime as "0", the bar of ↦ as "7", ∋ as "3", ⟨ ⟩ as "h" and "i", msam's ↷ as "y". The check counted them as letters and digits the reading lacked, so `formulas fix` refused every ≠, ′ and ↦ and `formulas list --needs-look` flagged formulas the model had read right. Digits and lower-case letters from cmsy, msbm and their relatives, and all letters and digits from msam, no longer count; the capitals stay, as they are the `\mathcal` and `\mathbb` letters. On a typed Linear Algebra script, all 52 readings that had been refused for this now match the PDF exactly.

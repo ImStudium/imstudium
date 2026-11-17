@@ -1590,6 +1590,7 @@ imstudium sync [options]
 | `--extract` | Extract new/changed files to markdown and rebuild the search index |
 | `--no-ocr` | With --extract: native text only, even when on-device OCR is installed |
 | `--no-math` | With --extract: no formula recognition, even when installed (setup ocr --math) |
+| `--no-transcribe` | With --extract: no speech recognition on this run, even when installed (setup speech); a recording's transcript.json is still rendered |
 
 **`--json`** — full JSON Schema: `imstudium schema sync`
 
@@ -1605,11 +1606,12 @@ imstudium sync [options]
 | `changes` | object[] |  |
 | `extracted`? | integer | Only with --extract |
 | `ocr`? | object | Only with --extract: pages read by on-device OCR |
+| `media`? | object | Only with --extract: lecture recordings transcribed or read from transcript.json |
 | `schemaVersion` | "1" |  |
 
 ### `imstudium extract`
 
-Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and photos once `setup ocr` ran
+Local ingest: pdf-inspector (PDF) + AnyDoc (Office) → content.md, with on-device OCR for scans and photos once `setup ocr` ran, and transcripts of audio and video once `setup speech` ran
 
 ```
 imstudium extract [options]
@@ -1624,7 +1626,8 @@ Alias: `ingest`
 | `--no-images` | Don't copy photos into pages/ |
 | `--no-ocr` | Native text only, even when on-device OCR is installed (also: IMSTUDIUM_OCR=off) |
 | `--no-math` | No formula recognition, even when installed (also: IMSTUDIUM_MATH=off) |
-| `--force` | Re-extract even if unchanged |
+| `--no-transcribe` | No speech recognition, even when installed (also: IMSTUDIUM_SPEECH=off); a recording's transcript.json is still rendered |
+| `--force` | Re-extract even if unchanged; with the speech runtime installed this also transcribes every recording again and replaces its transcript.json |
 | `-o, --output <dir>` | Workspace directory (default: ~/Studium or IMSTUDIUM_WORKSPACE) |
 
 **`--json`** — full JSON Schema: `imstudium schema extract`
@@ -1636,6 +1639,7 @@ Alias: `ingest`
 | `failed` | integer |  |
 | `hints` | string[] |  |
 | `ocr` | object |  |
+| `media`? | object | Audio and video: transcripts rendered, transcribed, read from transcript.json, and left pending |
 | `results` | object[] |  |
 | `searchIndex`? | any \| null |  |
 | `schemaVersion` | "1" |  |
@@ -1944,6 +1948,32 @@ imstudium setup ocr [options]
 | `action` | "installed" \| "unchanged" \| "removed" \| "absent" | installed: something was fetched · unchanged: all in place · removed / absent: --remove |
 | `runtime` | object |  |
 | `installed` | string[] | Pieces fetched in this run: PDFium, ONNX Runtime, models, and with --math the binding, renderer and math models |
+| `skipped` | string[] | Pieces already in place |
+| `downloadedBytes` | integer |  |
+| `diskBytes` | integer | Size on disk after the run (freed bytes with --remove) |
+| `durationMs` | integer |  |
+| `schemaVersion` | "1" |  |
+
+#### `imstudium setup speech`
+
+Install on-device transcripts for lecture video and audio: pinned, SHA-256-verified sherpa-onnx + Parakeet TDT 0.6B v3 + Silero VAD (~650 MB, once); needs ffmpeg on PATH
+
+```
+imstudium setup speech [options]
+```
+
+| Option | |
+|---|---|
+| `--force` | Download and verify everything again |
+| `--remove` | Delete the speech runtime and its models (transcripts already written stay) |
+
+**`--json`** — full JSON Schema: `imstudium schema setup speech`
+
+| Key | Type | |
+|---|---|---|
+| `action` | "installed" \| "unchanged" \| "removed" \| "absent" | installed: something was fetched · unchanged: all in place · removed / absent: --remove |
+| `runtime` | object |  |
+| `installed` | string[] | Pieces fetched in this run: the sherpa-onnx binding and native library, the Parakeet encoder, decoder, joiner and tokens, the voice activity model |
 | `skipped` | string[] | Pieces already in place |
 | `downloadedBytes` | integer |  |
 | `diskBytes` | integer | Size on disk after the run (freed bytes with --remove) |
